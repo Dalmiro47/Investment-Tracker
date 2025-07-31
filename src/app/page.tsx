@@ -7,8 +7,10 @@ import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAuth } from '@/hooks/use-auth';
 
 export default function DashboardPage() {
+  const { user, loading } = useAuth();
   const [investments] = useState<Investment[]>(mockInvestments);
   const [isTaxView, setIsTaxView] = useState(false);
   const [typeFilter, setTypeFilter] = useState<InvestmentType | 'All'>('All');
@@ -42,6 +44,10 @@ export default function DashboardPage() {
       }
     });
   }, [investments, typeFilter, statusFilter, sortKey]);
+
+  if (loading || !user) {
+    return null; // The AuthProvider will handle rendering a loading state or redirecting
+  }
 
   return (
     <div className="min-h-screen w-full bg-background">
