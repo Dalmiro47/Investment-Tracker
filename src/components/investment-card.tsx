@@ -2,7 +2,7 @@ import type { Investment } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, ArrowRight } from 'lucide-react';
+import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, ArrowRight, Wallet, Briefcase } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
 
@@ -16,6 +16,8 @@ const typeIcons: Record<Investment['type'], React.ReactNode> = {
   Bond: <Landmark className="h-6 w-6" />,
   Crypto: <Bitcoin className="h-6 w-6" />,
   'Real Estate': <Home className="h-6 w-6" />,
+  ETF: <Briefcase className="h-6 w-6" />,
+  Savings: <Wallet className="h-6 w-6" />,
 };
 
 const formatCurrency = (value: number) => {

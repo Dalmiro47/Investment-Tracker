@@ -1,4 +1,4 @@
-export type InvestmentType = 'Stock' | 'Bond' | 'Crypto' | 'Real Estate';
+export type InvestmentType = 'Stock' | 'Bond' | 'Crypto' | 'Real Estate' | 'ETF' | 'Savings';
 
 export type InvestmentStatus = 'Active' | 'Sold';
 
