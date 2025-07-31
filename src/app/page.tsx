@@ -2,14 +2,14 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues } from '@/lib/types';
-import { mockInvestments } from '@/lib/data';
+import { addInvestment, deleteInvestment, getInvestments, updateInvestment } from '@/lib/firestore';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
 import { InvestmentForm } from '@/components/investment-form';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, SlidersHorizontal } from 'lucide-react';
+import { PlusCircle, SlidersHorizontal, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import {
   AlertDialog,
@@ -23,8 +23,9 @@ import {
 } from "@/components/ui/alert-dialog"
 
 export default function DashboardPage() {
-  const { user, loading } = useAuth();
+  const { user } = useAuth();
   const [investments, setInvestments] = useState<Investment[]>([]);
+  const [loading, setLoading] = useState(true);
   const [isTaxView, setIsTaxView] = useState(false);
   const [typeFilter, setTypeFilter] = useState<InvestmentType | 'All'>('All');
   const [statusFilter, setStatusFilter] = useState<InvestmentStatus | 'All'>('All');
@@ -37,10 +38,16 @@ export default function DashboardPage() {
   const [deletingInvestmentId, setDeletingInvestmentId] = useState<string | null>(null);
 
   useEffect(() => {
-    // In a real app, you'd fetch this from a database.
-    // For now, we'll use the mock data and store it in local state.
-    setInvestments(mockInvestments);
-  }, []);
+    if (user) {
+      const fetchInvestments = async () => {
+        setLoading(true);
+        const userInvestments = await getInvestments(user.uid);
+        setInvestments(userInvestments);
+        setLoading(false);
+      };
+      fetchInvestments();
+    }
+  }, [user]);
 
   const filteredAndSortedInvestments = useMemo(() => {
     let filtered = [...investments];
@@ -60,9 +67,7 @@ export default function DashboardPage() {
           const performanceB = (b.currentValue - b.initialValue) / b.initialValue;
           return performanceB - performanceA;
         case 'totalAmount':
-          const totalA = a.currentValue * a.quantity;
-          const totalB = b.currentValue * b.quantity;
-          return totalB - totalA;
+          return b.currentValue - a.currentValue;
         case 'purchaseDate':
         default:
           return new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime();
@@ -85,8 +90,9 @@ export default function DashboardPage() {
     setIsDeleteDialogOpen(true);
   }
 
-  const confirmDelete = () => {
-    if (deletingInvestmentId) {
+  const confirmDelete = async () => {
+    if (deletingInvestmentId && user) {
+      await deleteInvestment(user.uid, deletingInvestmentId);
       setInvestments(investments.filter(inv => inv.id !== deletingInvestmentId));
     }
     setIsDeleteDialogOpen(false);
@@ -94,25 +100,22 @@ export default function DashboardPage() {
   }
 
 
-  const handleFormSubmit = (values: InvestmentFormValues) => {
+  const handleFormSubmit = async (values: InvestmentFormValues) => {
+    if (!user) return;
+    
     if (editingInvestment) {
-      // Edit existing investment
-      setInvestments(investments.map(inv => inv.id === editingInvestment.id ? { ...inv, ...values, purchaseDate: values.purchaseDate.toISOString() } : inv));
+      const updatedInvestment = await updateInvestment(user.uid, editingInvestment.id, values);
+      setInvestments(investments.map(inv => inv.id === editingInvestment.id ? updatedInvestment : inv));
     } else {
-      // Add new investment
-      const newInvestment: Investment = {
-        ...values,
-        id: new Date().toISOString(), // simple unique id
-        purchaseDate: values.purchaseDate.toISOString(),
-      };
+      const newInvestment = await addInvestment(user.uid, values);
       setInvestments([newInvestment, ...investments]);
     }
     setIsFormOpen(false);
     setEditingInvestment(undefined);
   };
   
-  if (loading || !user) {
-    return null; // The AuthProvider will handle rendering a loading state or redirecting
+  if (!user) {
+    return null; // AuthProvider handles redirects
   }
 
   return (
@@ -137,7 +140,7 @@ export default function DashboardPage() {
             <div className="flex flex-col sm:flex-row items-center gap-4 mt-4">
               <div className="w-full sm:w-auto">
                 <Tabs value={typeFilter} onValueChange={(value) => setTypeFilter(value as InvestmentType | 'All')}>
-                  <TabsList>
+                  <TabsList className="flex-wrap h-auto">
                     <TabsTrigger value="All">All Types</TabsTrigger>
                     <TabsTrigger value="Stock">Stocks</TabsTrigger>
                     <TabsTrigger value="Crypto">Crypto</TabsTrigger>
@@ -174,7 +177,11 @@ export default function DashboardPage() {
             </div>
           </div>
           
-          {filteredAndSortedInvestments.length > 0 ? (
+          {loading ? (
+             <div className="flex justify-center items-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : filteredAndSortedInvestments.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {filteredAndSortedInvestments.map(investment => (
                 <InvestmentCard 
@@ -189,7 +196,7 @@ export default function DashboardPage() {
           ) : (
             <div className="text-center py-16">
               <h3 className="text-xl font-semibold text-foreground">No Investments Found</h3>
-              <p className="text-muted-foreground mt-2">Adjust your filters or add a new investment to get started.</p>
+              <p className="text-muted-foreground mt-2">Add a new investment to get started.</p>
                <Button onClick={handleAddClick} className="mt-4">
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add First Investment
@@ -209,7 +216,7 @@ export default function DashboardPage() {
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure you want to delete this investment?</AlertDialogTitle>
             <AlertDialogDescription>
-              This action cannot be undone. This will permanently remove the investment data from our servers.
+              This action cannot be undone. This will permanently remove the investment data.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

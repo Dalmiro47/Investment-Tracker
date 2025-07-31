@@ -44,10 +44,11 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
   // Simplified annualized return
   const purchase = new Date(purchaseDate);
   const yearsHeld = (new Date().getTime() - purchase.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-  const annualizedReturn = yearsHeld > 0 ? (Math.pow(currentTotal / initialTotal, 1 / yearsHeld) - 1) * 100 : gainLossPercent;
+  const annualizedReturn = yearsHeld > 0 && initialTotal > 0 ? (Math.pow(currentTotal / initialTotal, 1 / yearsHeld) - 1) * 100 : gainLossPercent;
+
 
   const capitalGains = status === 'Sold' ? gainLoss : 0;
-  const totalIncome = dividends + interest;
+  const totalIncome = (dividends ?? 0) + (interest ?? 0);
 
   return (
     <Card className="flex flex-col transition-all hover:shadow-lg hover:-translate-y-1">
