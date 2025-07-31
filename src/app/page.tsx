@@ -56,9 +56,9 @@ export default function DashboardPage() {
                   <TabsTrigger value="Stock">Stocks</TabsTrigger>
                   <TabsTrigger value="Bond">Bonds</TabsTrigger>
                   <TabsTrigger value="Crypto">Crypto</TabsTrigger>
-                  <TabsTrigger value="Real Estate">Real Estate</TabsTrigger>
                   <TabsTrigger value="ETF">ETFs</TabsTrigger>
                   <TabsTrigger value="Savings">Savings</TabsTrigger>
+                  <TabsTrigger value="Real Estate">Real Estate</TabsTrigger>
                 </TabsList>
               </Tabs>
             </div>
