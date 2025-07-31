@@ -2,13 +2,22 @@ import type { Investment } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, ArrowRight, Wallet, Briefcase } from 'lucide-react';
+import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import { Button } from './ui/button';
 
 interface InvestmentCardProps {
   investment: Investment;
   isTaxView: boolean;
+  onEdit: () => void;
+  onDelete: () => void;
 }
 
 const typeIcons: Record<Investment['type'], React.ReactNode> = {
@@ -24,7 +33,7 @@ const formatCurrency = (value: number) => {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
 };
 
-export default function InvestmentCard({ investment, isTaxView }: InvestmentCardProps) {
+export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete }: InvestmentCardProps) {
   const { name, type, status, purchaseDate, initialValue, currentValue, quantity, dividends, interest } = investment;
   const initialTotal = initialValue * quantity;
   const currentTotal = currentValue * quantity;
@@ -51,7 +60,26 @@ export default function InvestmentCard({ investment, isTaxView }: InvestmentCard
               <CardDescription className="font-medium text-primary">{type}</CardDescription>
             </div>
           </div>
-          <Badge variant={status === 'Active' ? 'default' : 'secondary'} className={cn(status === 'Active' && 'bg-green-600 text-white')}>{status}</Badge>
+           <div className="flex items-center gap-2">
+            <Badge variant={status === 'Active' ? 'default' : 'secondary'} className={cn(status === 'Active' && 'bg-green-600 text-white')}>{status}</Badge>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={onEdit}>
+                  <Edit className="mr-2 h-4 w-4" />
+                  Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="flex-grow space-y-4">
