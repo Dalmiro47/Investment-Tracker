@@ -72,14 +72,16 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
   useEffect(() => {
     if (isOpen) {
         if (investment) {
-        form.reset({
+          const valuesToReset = {
             ...investment,
             purchaseDate: new Date(investment.purchaseDate),
+            // Ensure all optional fields have a default value to prevent uncontrolled inputs
             currentValue: investment.currentValue ?? 0,
             ticker: investment.ticker ?? "",
             dividends: investment.dividends ?? 0,
             interest: investment.interest ?? 0,
-        });
+          };
+          form.reset(valuesToReset);
         } else {
           form.reset(defaultFormValues);
         }

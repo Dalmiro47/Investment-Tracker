@@ -3,43 +3,55 @@
 import { getInvestments } from '@/lib/firestore';
 import { db } from '@/lib/firebase';
 import { collection, doc, writeBatch } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth/server';
-import { headers } from 'next/headers';
-import axios from 'axios';
 import type { Investment } from '@/lib/types';
+import axios from 'axios';
+import { headers } from 'next/headers';
+import { initializeApp, getApp, cert, deleteApp } from 'firebase-admin/app';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+
+const getAdminApp = () => {
+  try {
+    return getApp();
+  } catch (error) {
+    // Check if the error is because the app doesn't exist
+    if ((error as any).code === 'app/no-app') {
+      console.log("Initializing Firebase Admin SDK...");
+      const serviceAccount = {
+        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+        clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+        privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
+      };
+      if (!serviceAccount.privateKey) {
+        throw new Error('FIREBASE_PRIVATE_KEY environment variable is not set.');
+      }
+      return initializeApp({
+        credential: cert(serviceAccount),
+      });
+    }
+    // Re-throw other errors
+    throw error;
+  }
+};
+
 
 // Helper to get the currently authenticated user on the server
 async function getAuthenticatedUser() {
   const session = headers().get('x-firebase-session');
   if (!session) {
+    console.log('No session cookie found.');
     return null;
   }
+
   try {
-    const { getApp } = await import('firebase-admin/app');
-    const { getAuth: getAdminAuth } = await import('firebase-admin/auth');
-
-    let app;
-    try {
-      app = getApp();
-    } catch (e) {
-      // Initialize Firebase Admin SDK if not already done.
-      // This part is typically handled by the hosting environment.
-      const { initializeApp, cert } = await import('firebase-admin/app');
-      initializeApp({
-        credential: cert({
-          projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
-        }),
-      });
-      app = getApp();
-    }
-
-    const adminAuth = getAdminAuth(app);
+    const adminApp = getAdminApp();
+    const adminAuth = getAdminAuth(adminApp);
     const decodedToken = await adminAuth.verifySessionCookie(session, true);
     return decodedToken;
-  } catch (error) {
-    console.error('Error verifying session cookie:', error);
+  } catch (error: any) {
+    console.error('Error verifying session cookie:', error.message);
+    if (error.code === 'auth/session-cookie-revoked' || error.code === 'auth/session-cookie-expired') {
+        // Handle revoked or expired cookie
+    }
     return null;
   }
 }
@@ -84,7 +96,7 @@ export async function refreshInvestmentPrices(): Promise<UpdateResult> {
   const user = await getAuthenticatedUser();
 
   if (!user) {
-    return { success: false, updated: 0, failed: 0, message: 'Authentication failed.' };
+    return { success: false, updated: 0, failed: 0, message: 'Authentication failed. Please sign in again.' };
   }
 
   try {
@@ -95,10 +107,10 @@ export async function refreshInvestmentPrices(): Promise<UpdateResult> {
 
     const priceFetchPromises = investments.map(async (inv) => {
       let newPrice: number | null = null;
-      if (inv.type === 'Stock' || inv.type === 'ETF') {
-        newPrice = await getStockPrice(inv.ticker!);
-      } else if (inv.type === 'Crypto') {
-        newPrice = await getCryptoPrice(inv.ticker!);
+      if ((inv.type === 'Stock' || inv.type === 'ETF') && inv.ticker) {
+        newPrice = await getStockPrice(inv.ticker);
+      } else if (inv.type === 'Crypto' && inv.ticker) {
+        newPrice = await getCryptoPrice(inv.ticker);
       }
 
       if (newPrice !== null && newPrice !== inv.currentValue) {
@@ -124,10 +136,9 @@ export async function refreshInvestmentPrices(): Promise<UpdateResult> {
         message = 'All investment prices are already up-to-date.'
     }
 
-
     return { success: true, updated: updatedCount, failed: failedCount, message };
   } catch (error) {
     console.error('Error refreshing investment prices:', error);
-    return { success: false, updated: 0, failed: 0, message: 'An unexpected error occurred.' };
+    return { success: false, updated: 0, failed: 0, message: 'An unexpected error occurred while refreshing prices.' };
   }
 }
