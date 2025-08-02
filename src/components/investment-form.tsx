@@ -1,11 +1,12 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm } from "react-hook-form"
+import { useForm, useWatch } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import {
   Form,
   FormControl,
+  FormDescription,
   FormField,
   FormItem,
   FormLabel,
@@ -28,7 +29,7 @@ import {
 } from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { Investment, InvestmentFormValues, investmentSchema } from "@/lib/types"
+import { Investment, InvestmentFormValues, investmentSchema, InvestmentType } from "@/lib/types"
 import { useEffect } from "react"
 import { cn } from "@/lib/utils"
 import { CalendarIcon } from "lucide-react"
@@ -41,6 +42,8 @@ interface InvestmentFormProps {
   investment?: Investment;
 }
 
+const tickerRequiredTypes: InvestmentType[] = ['Stock', 'ETF', 'Crypto'];
+
 export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: InvestmentFormProps) {
   const form = useForm<InvestmentFormValues>({
     resolver: zodResolver(investmentSchema),
@@ -51,12 +54,18 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
       purchaseDate: new Date(),
       initialValue: 0,
       currentValue: 0,
-      quantity: 0,
+      quantity: 1,
       dividends: 0,
       interest: 0,
+      ticker: "",
     },
   })
   
+  const watchedType = useWatch({
+    control: form.control,
+    name: "type",
+  });
+
   useEffect(() => {
     if (investment) {
       form.reset({
@@ -64,12 +73,23 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
         purchaseDate: new Date(investment.purchaseDate),
       });
     } else {
-      form.reset();
+       form.reset({
+        name: "",
+        type: "Stock",
+        status: "Active",
+        purchaseDate: new Date(),
+        initialValue: 0,
+        currentValue: undefined,
+        quantity: 1,
+        dividends: 0,
+        interest: 0,
+        ticker: "",
+      });
     }
   }, [investment, form, isOpen]);
 
-
   const isSubmitting = form.formState.isSubmitting;
+  const isTickerRequired = tickerRequiredTypes.includes(watchedType);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -110,9 +130,9 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                     </FormControl>
                     <SelectContent>
                       <SelectItem value="Stock">Stock</SelectItem>
-                      <SelectItem value="Bond">Bond</SelectItem>
-                      <SelectItem value="Crypto">Crypto</SelectItem>
                       <SelectItem value="ETF">ETF</SelectItem>
+                      <SelectItem value="Crypto">Crypto</SelectItem>
+                      <SelectItem value="Bond">Bond</SelectItem>
                       <SelectItem value="Savings">Savings</SelectItem>
                       <SelectItem value="Real Estate">Real Estate</SelectItem>
                     </SelectContent>
@@ -124,21 +144,18 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
 
             <FormField
               control={form.control}
-              name="status"
+              name="ticker"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Status</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="Active">Active</SelectItem>
-                      <SelectItem value="Sold">Sold</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Ticker / Symbol</FormLabel>
+                  <FormControl>
+                    <Input placeholder={
+                      watchedType === 'Crypto' ? "e.g. bitcoin" : "e.g. NVD.F"
+                    } {...field} />
+                  </FormControl>
+                  <FormDescription>
+                    {isTickerRequired ? "Required for automatic price updates." : "Optional."}
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -214,19 +231,28 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
               )}
             />
             
-            <FormField
+             <FormField
               control={form.control}
-              name="currentValue"
+              name="status"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Current Value (per unit)</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder="e.g. 185.50" {...field} />
-                  </FormControl>
+                  <FormLabel>Status</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      <SelectItem value="Active">Active</SelectItem>
+                      <SelectItem value="Sold">Sold</SelectItem>
+                    </SelectContent>
+                  </Select>
                   <FormMessage />
                 </FormItem>
               )}
             />
+
 
             <FormField
               control={form.control}

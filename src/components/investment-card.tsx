@@ -29,25 +29,28 @@ const typeIcons: Record<Investment['type'], React.ReactNode> = {
   Savings: <Wallet className="h-6 w-6" />,
 };
 
-const formatCurrency = (value: number) => {
+const formatCurrency = (value: number | null | undefined) => {
+    if (value === null || value === undefined) {
+        return 'N/A';
+    }
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
 };
 
 export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete }: InvestmentCardProps) {
-  const { name, type, status, purchaseDate, initialValue, currentValue, quantity, dividends, interest } = investment;
+  const { name, type, status, purchaseDate, initialValue, currentValue, quantity, dividends, interest, ticker } = investment;
   const initialTotal = initialValue * quantity;
-  const currentTotal = currentValue * quantity;
-  const gainLoss = currentTotal - initialTotal;
-  const gainLossPercent = initialTotal === 0 ? 0 : (gainLoss / initialTotal) * 100;
-  const isGain = gainLoss >= 0;
+  const currentTotal = currentValue ? currentValue * quantity : null;
+  const gainLoss = currentTotal !== null ? currentTotal - initialTotal : null;
+  const gainLossPercent = initialTotal === 0 || gainLoss === null ? 0 : (gainLoss / initialTotal) * 100;
+  const isGain = gainLoss !== null ? gainLoss >= 0 : true;
 
   // Simplified annualized return
   const purchase = new Date(purchaseDate);
   const yearsHeld = (new Date().getTime() - purchase.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-  const annualizedReturn = yearsHeld > 0 && initialTotal > 0 ? (Math.pow(currentTotal / initialTotal, 1 / yearsHeld) - 1) * 100 : gainLossPercent;
+  const annualizedReturn = yearsHeld > 0 && initialTotal > 0 && currentTotal !== null ? (Math.pow(currentTotal / initialTotal, 1 / yearsHeld) - 1) * 100 : gainLossPercent;
 
 
-  const capitalGains = status === 'Sold' ? gainLoss : 0;
+  const capitalGains = status === 'Sold' && gainLoss !== null ? gainLoss : 0;
   const totalIncome = (dividends ?? 0) + (interest ?? 0);
 
   return (
@@ -58,7 +61,7 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
             <span className="p-2 bg-secondary rounded-md text-primary">{typeIcons[type]}</span>
             <div>
               <CardTitle className="font-headline text-xl">{name}</CardTitle>
-              <CardDescription className="font-medium text-primary">{type}</CardDescription>
+              <CardDescription className="font-medium text-primary">{type} {ticker ? `(${ticker})` : ''}</CardDescription>
             </div>
           </div>
            <div className="flex items-center gap-2">

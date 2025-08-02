@@ -1,16 +1,18 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment } from '@/lib/firestore';
+import { refreshInvestmentPrices } from '@/app/actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
 import { InvestmentForm } from '@/components/investment-form';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, SlidersHorizontal, Loader2 } from 'lucide-react';
+import { PlusCircle, SlidersHorizontal, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
+import { useToast } from "@/hooks/use-toast";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -24,6 +26,7 @@ import {
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [loading, setLoading] = useState(true);
   const [isTaxView, setIsTaxView] = useState(false);
@@ -37,17 +40,46 @@ export default function DashboardPage() {
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingInvestmentId, setDeletingInvestmentId] = useState<string | null>(null);
 
+  const [isPending, startTransition] = useTransition();
+
+  const fetchInvestments = async (userId: string) => {
+    setLoading(true);
+    const userInvestments = await getInvestments(userId);
+    setInvestments(userInvestments);
+    setLoading(false);
+  };
+
   useEffect(() => {
     if (user) {
-      const fetchInvestments = async () => {
-        setLoading(true);
-        const userInvestments = await getInvestments(user.uid);
-        setInvestments(userInvestments);
-        setLoading(false);
-      };
-      fetchInvestments();
+      fetchInvestments(user.uid);
     }
   }, [user]);
+
+  const handleRefreshPrices = () => {
+    startTransition(async () => {
+      if (!user) return;
+      
+      toast({ title: 'Refreshing Prices...', description: 'Please wait while we fetch the latest data.' });
+      
+      const result = await refreshInvestmentPrices();
+
+      if (result.success) {
+        toast({
+          title: "Update Complete",
+          description: result.message,
+          variant: result.failed > 0 ? "destructive" : "default",
+        });
+        // Refetch investments to show updated prices
+        await fetchInvestments(user.uid);
+      } else {
+        toast({
+          title: "Update Failed",
+          description: result.message,
+          variant: "destructive",
+        });
+      }
+    });
+  }
 
   const filteredAndSortedInvestments = useMemo(() => {
     let filtered = [...investments];
@@ -63,11 +95,11 @@ export default function DashboardPage() {
     return filtered.sort((a, b) => {
       switch (sortKey) {
         case 'performance':
-          const performanceA = (a.currentValue - a.initialValue) / a.initialValue;
-          const performanceB = (b.currentValue - b.initialValue) / b.initialValue;
+          const performanceA = a.currentValue && a.initialValue ? (a.currentValue - a.initialValue) / a.initialValue : 0;
+          const performanceB = b.currentValue && b.initialValue ? (b.currentValue - b.initialValue) / b.initialValue : 0;
           return performanceB - performanceA;
         case 'totalAmount':
-          return b.currentValue - a.currentValue;
+          return (b.currentValue ?? 0) * b.quantity - (a.currentValue ?? 0) * a.quantity;
         case 'purchaseDate':
         default:
           return new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime();
@@ -131,6 +163,10 @@ export default function DashboardPage() {
               </div>
               <div className="flex-grow" />
               <div className="flex items-center gap-4 w-full sm:w-auto">
+                 <Button onClick={handleRefreshPrices} disabled={isPending}>
+                  {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                  Refresh Prices
+                </Button>
                  <Button onClick={handleAddClick}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add Investment

@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut, type User } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut, type User, getIdToken } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { ShieldCheck } from 'lucide-react';
 
@@ -15,6 +15,18 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+const setCookie = async (user: User | null) => {
+  if (user) {
+    const token = await getIdToken(user, true);
+    await fetch('/api/auth/session', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}` },
+    });
+  } else {
+     await fetch('/api/auth/session', { method: 'DELETE' });
+  }
+};
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -22,8 +34,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
+      await setCookie(user);
       setLoading(false);
     });
 
