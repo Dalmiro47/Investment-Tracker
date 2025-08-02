@@ -44,21 +44,24 @@ interface InvestmentFormProps {
 
 const tickerRequiredTypes: InvestmentType[] = ['Stock', 'ETF', 'Crypto'];
 
+const defaultFormValues: InvestmentFormValues = {
+  name: "",
+  type: "Stock",
+  status: "Active",
+  purchaseDate: new Date(),
+  initialValue: 0,
+  currentValue: 0,
+  quantity: 1,
+  dividends: 0,
+  interest: 0,
+  ticker: "",
+};
+
+
 export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: InvestmentFormProps) {
   const form = useForm<InvestmentFormValues>({
     resolver: zodResolver(investmentSchema),
-    defaultValues: {
-      name: "",
-      type: "Stock",
-      status: "Active",
-      purchaseDate: new Date(),
-      initialValue: 0,
-      currentValue: 0,
-      quantity: 1,
-      dividends: 0,
-      interest: 0,
-      ticker: "",
-    },
+    defaultValues: defaultFormValues,
   })
   
   const watchedType = useWatch({
@@ -73,20 +76,12 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
             ...investment,
             purchaseDate: new Date(investment.purchaseDate),
             currentValue: investment.currentValue ?? 0,
+            ticker: investment.ticker ?? "",
+            dividends: investment.dividends ?? 0,
+            interest: investment.interest ?? 0,
         });
         } else {
-        form.reset({
-            name: "",
-            type: "Stock",
-            status: "Active",
-            purchaseDate: new Date(),
-            initialValue: 0,
-            currentValue: 0,
-            quantity: 1,
-            dividends: 0,
-            interest: 0,
-            ticker: "",
-        });
+          form.reset(defaultFormValues);
         }
     }
   }, [investment, form, isOpen]);
