@@ -46,13 +46,13 @@ async function getAuthenticatedUser() {
   try {
     const adminApp = getAdminApp();
     const adminAuth = getAdminAuth(adminApp);
-    // Here we are verifying the session cookie sent from the client
-    const idToken = await adminAuth.verifyIdToken(session, true);
-    return idToken;
+    // Here we are verifying the ID token sent from the client
+    const decodedToken = await adminAuth.verifyIdToken(session);
+    return decodedToken;
   } catch (error: any) {
-    console.error('Error verifying session cookie:', error.message);
+    console.error('Error verifying ID token:', error.message);
     if (error.code === 'auth/id-token-revoked' || error.code === 'auth/id-token-expired') {
-        // Handle revoked or expired cookie
+        // Handle revoked or expired token
     }
     return null;
   }
