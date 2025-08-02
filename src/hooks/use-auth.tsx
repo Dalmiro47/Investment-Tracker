@@ -15,19 +15,6 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// This function now calls our API route to set/clear the cookie
-const manageSessionCookie = async (user: User | null) => {
-  if (user) {
-    const token = await getIdToken(user, true);
-    await fetch('/api/auth/session', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}` },
-    });
-  } else {
-     await fetch('/api/auth/session', { method: 'DELETE' });
-  }
-};
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -37,16 +24,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
-      // We only need to manage the session cookie when the user's state changes.
-      // The onAuthStateChanged listener is the perfect place for this.
       if (user) {
           const token = await user.getIdToken();
            await fetch('/api/auth/session', {
               method: 'POST',
               headers: { 'Authorization': `Bearer ${token}` },
+              credentials: 'include',
           });
       } else {
-          await fetch('/api/auth/session', { method: 'DELETE' });
+          await fetch('/api/auth/session', { 
+            method: 'DELETE',
+            credentials: 'include',
+          });
       }
       setLoading(false);
     });

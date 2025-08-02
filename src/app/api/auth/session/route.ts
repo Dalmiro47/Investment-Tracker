@@ -14,9 +14,10 @@ export async function POST(req: NextRequest) {
   const cookieStore = cookies();
   cookieStore.set('x-firebase-session', token, {
     httpOnly: true,
-    secure: true,
+    secure: process.env.NODE_ENV === 'production',
     path: '/',
     maxAge: 60 * 60 * 24 * 5, // 5 days
+    sameSite: 'lax',
   });
 
   return NextResponse.json({status: 'success'});
