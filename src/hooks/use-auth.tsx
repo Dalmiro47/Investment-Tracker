@@ -37,7 +37,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
-      await manageSessionCookie(user); // Use the new function
+      // We only need to manage the session cookie when the user's state changes.
+      // The onAuthStateChanged listener is the perfect place for this.
+      if (user) {
+          const token = await user.getIdToken();
+           await fetch('/api/auth/session', {
+              method: 'POST',
+              headers: { 'Authorization': `Bearer ${token}` },
+          });
+      } else {
+          await fetch('/api/auth/session', { method: 'DELETE' });
+      }
       setLoading(false);
     });
 
