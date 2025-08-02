@@ -8,27 +8,28 @@ import axios from 'axios';
 import { headers } from 'next/headers';
 import { initializeApp, getApp, cert, deleteApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+import dotenv from 'dotenv';
+
+dotenv.config({ path: '.env.local' });
 
 const getAdminApp = () => {
   try {
     return getApp('admin');
   } catch (error) {
-    // Check if the error is because the app doesn't exist
     if ((error as any).code === 'app/no-app') {
       console.log("Initializing Firebase Admin SDK...");
       const serviceAccount = {
-        projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+        projectId: process.env.FIREBASE_PROJECT_ID,
         clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
         privateKey: (process.env.FIREBASE_PRIVATE_KEY || '').replace(/\\n/g, '\n'),
       };
-      if (!serviceAccount.privateKey) {
-        throw new Error('FIREBASE_PRIVATE_KEY environment variable is not set.');
+      if (!serviceAccount.projectId || !serviceAccount.clientEmail || !serviceAccount.privateKey) {
+        throw new Error('Firebase Admin SDK credentials are not set in .env.local');
       }
       return initializeApp({
         credential: cert(serviceAccount),
       }, 'admin');
     }
-    // Re-throw other errors
     throw error;
   }
 };
