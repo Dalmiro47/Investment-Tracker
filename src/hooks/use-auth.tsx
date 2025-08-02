@@ -15,7 +15,8 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const setCookie = async (user: User | null) => {
+// This function now calls our API route to set/clear the cookie
+const manageSessionCookie = async (user: User | null) => {
   if (user) {
     const token = await getIdToken(user, true);
     await fetch('/api/auth/session', {
@@ -36,7 +37,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
-      await setCookie(user);
+      await manageSessionCookie(user); // Use the new function
       setLoading(false);
     });
 
@@ -60,7 +61,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
-      router.push('/');
+      // The onAuthStateChanged listener will handle the cookie and redirect
     } catch (error) {
       console.error("Error signing in with Google", error);
     }
@@ -69,7 +70,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
-      router.push('/login');
+      // The onAuthStateChanged listener will handle the cookie and redirect
     } catch (error) {
       console.error("Error signing out", error);
     }

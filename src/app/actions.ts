@@ -11,7 +11,7 @@ import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 
 const getAdminApp = () => {
   try {
-    return getApp();
+    return getApp('admin');
   } catch (error) {
     // Check if the error is because the app doesn't exist
     if ((error as any).code === 'app/no-app') {
@@ -26,7 +26,7 @@ const getAdminApp = () => {
       }
       return initializeApp({
         credential: cert(serviceAccount),
-      });
+      }, 'admin');
     }
     // Re-throw other errors
     throw error;
