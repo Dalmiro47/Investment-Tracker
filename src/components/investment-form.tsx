@@ -67,24 +67,27 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
   });
 
   useEffect(() => {
-    if (investment) {
-      form.reset({
-        ...investment,
-        purchaseDate: new Date(investment.purchaseDate),
-      });
-    } else {
-       form.reset({
-        name: "",
-        type: "Stock",
-        status: "Active",
-        purchaseDate: new Date(),
-        initialValue: 0,
-        currentValue: undefined,
-        quantity: 1,
-        dividends: 0,
-        interest: 0,
-        ticker: "",
-      });
+    if (isOpen) {
+        if (investment) {
+        form.reset({
+            ...investment,
+            purchaseDate: new Date(investment.purchaseDate),
+            currentValue: investment.currentValue ?? 0,
+        });
+        } else {
+        form.reset({
+            name: "",
+            type: "Stock",
+            status: "Active",
+            purchaseDate: new Date(),
+            initialValue: 0,
+            currentValue: 0,
+            quantity: 1,
+            dividends: 0,
+            interest: 0,
+            ticker: "",
+        });
+        }
     }
   }, [investment, form, isOpen]);
 
@@ -210,7 +213,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                 <FormItem>
                   <FormLabel>Quantity / Units</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="e.g. 50" {...field} />
+                    <Input type="number" placeholder="e.g. 50" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -224,7 +227,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                 <FormItem>
                   <FormLabel>Initial Value (per unit)</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="e.g. 150.00" {...field} />
+                    <Input type="number" placeholder="e.g. 150.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -261,7 +264,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                 <FormItem>
                   <FormLabel>Dividends (Total)</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="e.g. 125.00" {...field} />
+                    <Input type="number" placeholder="e.g. 125.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -275,7 +278,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                 <FormItem>
                   <FormLabel>Interest (Total)</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="e.g. 200.00" {...field} />
+                    <Input type="number" placeholder="e.g. 200.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
