@@ -59,8 +59,8 @@ export async function refreshInvestmentPrices(currentInvestments: Investment[]):
         newPrice = await getCryptoPrice(inv.ticker);
       }
 
+      // Check if new price is valid and different from the old one (or if old one was null/0)
       if (newPrice !== null && newPrice !== inv.currentValue) {
-        // Create a new object with the updated price to return
         investmentsToUpdate.push({ ...inv, currentValue: newPrice });
       } else if (newPrice === null && (inv.type === 'Stock' || inv.type === 'ETF' || inv.type === 'Crypto')) {
         failedCount++;

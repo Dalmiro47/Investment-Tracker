@@ -31,7 +31,7 @@ export const investmentSchema = z.object({
   status: z.enum(['Active', 'Sold']),
   purchaseDate: z.date(),
   initialValue: z.coerce.number().min(0, { message: 'Initial value must be positive.' }),
-  currentValue: z.coerce.number().min(0, { message: 'Current value must be positive.' }).optional().nullable(),
+  currentValue: z.coerce.number().min(0, { message: 'Current value must be positive.' }).optional().nullable().default(0),
   quantity: z.coerce.number().min(0.000001, { message: 'Quantity must be greater than 0.' }),
   dividends: z.coerce.number().min(0, { message: 'Dividends must be positive.' }).optional().default(0),
   interest: z.coerce.number().min(0, { message: 'Interest must be positive.' }).optional().default(0),
