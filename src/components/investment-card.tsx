@@ -121,18 +121,18 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
               <p className="text-xs text-muted-foreground text-right mt-1 px-1">Current Price &times; Quantity</p>
             </div>
 
-            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-                <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Initial Price</span>
-                    <span className="font-mono font-semibold ml-auto">{formatCurrency(initialValue)}</span>
+            <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm">
+                <div className="space-y-1">
+                    <p className="text-muted-foreground">Initial Price</p>
+                    <p className="font-mono font-semibold">{formatCurrency(initialValue)}</p>
                 </div>
-                 <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Current Price</span>
-                    <span className="font-mono font-semibold ml-auto">{formatCurrency(currentValue)}</span>
+                 <div className="space-y-1">
+                    <p className="text-muted-foreground">Current Price</p>
+                    <p className="font-mono font-semibold">{formatCurrency(currentValue)}</p>
                 </div>
-                 <div className="flex items-center gap-2 col-span-2">
-                    <span className="text-muted-foreground">Quantity</span>
-                    <span className="font-mono font-semibold ml-auto">{formatQuantity(quantity)}</span>
+                 <div className="space-y-1">
+                    <p className="text-muted-foreground">Quantity</p>
+                    <p className="font-mono font-semibold">{formatQuantity(quantity)}</p>
                 </div>
             </div>
             <Separator />
