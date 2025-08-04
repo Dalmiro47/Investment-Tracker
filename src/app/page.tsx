@@ -77,7 +77,8 @@ export default function DashboardPage() {
 
         await batch.commit();
 
-        // Refetch the latest data from Firestore to ensure UI is in sync
+        // Wait a moment for Firestore to sync before refetching
+        await new Promise(resolve => setTimeout(resolve, 300));
         await fetchInvestments(user.uid);
     }
 
