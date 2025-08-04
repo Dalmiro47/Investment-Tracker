@@ -37,6 +37,13 @@ const formatCurrency = (value: number | null | undefined) => {
   return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
 };
 
+const formatQuantity = (value: number | null | undefined) => {
+  if (value === null || value === undefined) {
+    return 'N/A';
+  }
+  return new Intl.NumberFormat('de-DE', { maximumFractionDigits: 4 }).format(value);
+}
+
 export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete }: InvestmentCardProps) {
   const { name, type, status, purchaseDate, initialValue, currentValue, quantity, dividends, interest, ticker } = investment;
   const initialTotal = initialValue * quantity;
@@ -106,18 +113,26 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="flex justify-between items-baseline p-3 bg-secondary rounded-md">
-              <span className="text-sm text-muted-foreground">Total Value</span>
-              <span className="font-headline text-2xl font-bold text-primary">{formatCurrency(currentTotal)}</span>
+            <div>
+              <div className="flex justify-between items-baseline p-3 bg-secondary rounded-md">
+                <span className="text-sm text-muted-foreground">Total Value</span>
+                <span className="font-headline text-2xl font-bold text-primary">{formatCurrency(currentTotal)}</span>
+              </div>
+              <p className="text-xs text-muted-foreground text-right mt-1 px-1">Current Price &times; Quantity</p>
             </div>
-            <div className="grid grid-cols-2 gap-4 text-sm">
+
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
                 <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Initial</span>
+                    <span className="text-muted-foreground">Initial Price</span>
                     <span className="font-mono font-semibold ml-auto">{formatCurrency(initialValue)}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Current</span>
+                 <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Current Price</span>
                     <span className="font-mono font-semibold ml-auto">{formatCurrency(currentValue)}</span>
+                </div>
+                 <div className="flex items-center gap-2 col-span-2">
+                    <span className="text-muted-foreground">Quantity</span>
+                    <span className="font-mono font-semibold ml-auto">{formatQuantity(quantity)}</span>
                 </div>
             </div>
             <Separator />
