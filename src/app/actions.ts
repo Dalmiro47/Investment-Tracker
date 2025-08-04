@@ -16,7 +16,10 @@ async function getStockPrice(ticker: string): Promise<number | null> {
     // Using the v8 chart endpoint can be more reliable
     const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?region=DE&lang=en-US&interval=1d&range=1d`);
     const result = response.data?.chart?.result?.[0];
-    const price = result?.meta?.regularMarketPrice;
+    const meta = result?.meta;
+    
+    // Prioritize the most "live" price available
+    const price = meta?.preMarketPrice || meta?.postMarketPrice || meta?.regularMarketPrice;
     
     if (price) {
       return price;
