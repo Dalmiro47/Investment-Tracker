@@ -17,9 +17,9 @@ const fromFirestore = (doc: any): Investment => {
 }
 
 // Convert form values (with JS Date) to Firestore-compatible data (with Timestamp)
-const toFirestore = (data: InvestmentFormValues) => {
+const toFirestore = (data: Partial<InvestmentFormValues>) => {
     const firestoreData: any = { ...data };
-    if (data.purchaseDate) {
+    if (data.purchaseDate && data.purchaseDate instanceof Date) {
         firestoreData.purchaseDate = Timestamp.fromDate(data.purchaseDate);
     }
     return firestoreData;
@@ -31,24 +31,13 @@ export const getInvestments = async (userId: string): Promise<Investment[]> => {
     return querySnapshot.docs.map(fromFirestore);
 }
 
-export const addInvestment = async (userId: string, data: InvestmentFormValues): Promise<Investment> => {
-    const docRef = await addDoc(getInvestmentsCollection(userId), toFirestore(data));
-    return {
-        id: docRef.id,
-        ...data,
-        purchaseDate: data.purchaseDate.toISOString(),
-    };
+export const addInvestment = async (userId: string, data: InvestmentFormValues): Promise<void> => {
+    await addDoc(getInvestmentsCollection(userId), toFirestore(data));
 }
 
-export const updateInvestment = async (userId: string, investmentId: string, data: Partial<InvestmentFormValues>): Promise<Investment> => {
+export const updateInvestment = async (userId: string, investmentId: string, data: Partial<InvestmentFormValues>): Promise<void> => {
     const docRef = doc(db, 'users', userId, 'investments', investmentId);
-    await updateDoc(docRef, toFirestore(data as InvestmentFormValues));
-    
-    // This return is slightly incorrect as it assumes `data` is the full object, but it's sufficient for the form's needs.
-    return {
-        id: investmentId,
-        ...data,
-    } as Investment;
+    await updateDoc(docRef, toFirestore(data));
 }
 
 export const deleteInvestment = async (userId: string, investmentId: string): Promise<void> => {

@@ -30,16 +30,23 @@ import { db } from '@/lib/firebase';
 async function getStockPrice(ticker: string): Promise<number | null> {
   if (!ticker) return null;
   try {
-    // NOTE: This will likely fail due to CORS if Yahoo Finance doesn't allow client-side requests.
-    // A proxy/serverless function would be needed if this call fails.
-    const response = await axios.get(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`);
-    const result = response.data.quoteResponse.result[0];
-    if (result && result.regularMarketPrice) {
-      return result.regularMarketPrice;
+    // Using a proxy might be necessary if Yahoo Finance blocks direct client-side requests.
+    // For simplicity, we'll try a direct call first.
+    const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?region=US&lang=en-US&includePrePost=false&interval=2m&useYfid=true&range=1d&corsDomain=finance.yahoo.com&.tsrc=finance`);
+    const result = response.data.chart.result[0];
+    if (result && result.meta.regularMarketPrice) {
+      if (result.meta.currency !== 'EUR') {
+          // NOTE: This is a simplified conversion. For production, a dedicated currency API is better.
+          console.warn(`Ticker ${ticker} is in ${result.meta.currency}. A proper currency conversion API should be used. This is just an example.`);
+          // For now, if not EUR, we can't reliably use it. Return null.
+          // A more advanced version would fetch conversion rates.
+          return null;
+      }
+      return result.meta.regularMarketPrice;
     }
     return null;
-  } catch (error) {
-    console.warn(`Failed to fetch price for stock/ETF ticker: ${ticker}`, error);
+  } catch (error: any) {
+    console.error(`Failed to fetch price for stock/ETF ticker: ${ticker}`, error.response ? error.response.data : error.message);
     return null;
   }
 }
@@ -51,8 +58,8 @@ async function getCryptoPrice(id: string): Promise<number | null> {
     const response = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${id.toLowerCase()}&vs_currencies=eur`);
     const price = response.data[id.toLowerCase()]?.eur;
     return price || null;
-  } catch (error) {
-    console.warn(`Failed to fetch price for crypto ID: ${id}`, error);
+  } catch (error: any) {
+    console.error(`Failed to fetch price for crypto ID: ${id}`, error.response ? error.response.data : error.message);
     return null;
   }
 }
@@ -98,8 +105,6 @@ export default function DashboardPage() {
       let updatedCount = 0;
       let failedCount = 0;
 
-      const batch = writeBatch(db);
-
       const priceFetchPromises = investments.map(async (inv) => {
         if (!inv.ticker) return;
 
@@ -110,9 +115,8 @@ export default function DashboardPage() {
           newPrice = await getCryptoPrice(inv.ticker);
         }
 
-        if (newPrice !== null) {
-          const investmentRef = doc(db, 'users', user.uid, 'investments', inv.id);
-          batch.update(investmentRef, { currentValue: newPrice });
+        if (newPrice !== null && newPrice !== inv.currentValue) {
+          await updateInvestment(user.uid, inv.id, { currentValue: newPrice });
           updatedCount++;
         } else if (newPrice === null && (inv.type === 'Stock' || inv.type === 'ETF' || inv.type === 'Crypto')) {
           failedCount++;
@@ -122,7 +126,6 @@ export default function DashboardPage() {
       await Promise.all(priceFetchPromises);
 
       if (updatedCount > 0) {
-        await batch.commit();
         await fetchInvestments(user.uid); // Refetch to get updated data
       }
       
@@ -186,7 +189,7 @@ export default function DashboardPage() {
   const confirmDelete = async () => {
     if (deletingInvestmentId && user) {
       await deleteInvestment(user.uid, deletingInvestmentId);
-      setInvestments(investments.filter(inv => inv.id !== deletingInvestmentId));
+      await fetchInvestments(user.uid);
     }
     setIsDeleteDialogOpen(false);
     setDeletingInvestmentId(null);
@@ -197,12 +200,11 @@ export default function DashboardPage() {
     if (!user) return;
     
     if (editingInvestment) {
-      const updatedInvestment = await updateInvestment(user.uid, editingInvestment.id, values);
-      setInvestments(investments.map(inv => inv.id === editingInvestment.id ? updatedInvestment : inv));
+      await updateInvestment(user.uid, editingInvestment.id, values);
     } else {
-      const newInvestment = await addInvestment(user.uid, values);
-      setInvestments([newInvestment, ...investments]);
+      await addInvestment(user.uid, values);
     }
+    await fetchInvestments(user.uid);
     setIsFormOpen(false);
     setEditingInvestment(undefined);
   };
