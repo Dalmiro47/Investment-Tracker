@@ -13,15 +13,19 @@ interface UpdateResult {
 async function getStockPrice(ticker: string): Promise<number | null> {
   if (!ticker) return null;
   try {
-    const response = await axios.get(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`);
-    const result = response.data.quoteResponse.result[0];
-    if (result && result.regularMarketPrice) {
-      // NOTE: This doesn't convert currency. Assumes the ticker is priced in EUR (e.g., NVD.F for Frankfurt)
-      return result.regularMarketPrice;
+    // Using the v8 chart endpoint can be more reliable
+    const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?region=DE&lang=en-US&interval=1d&range=1d`);
+    const result = response.data?.chart?.result?.[0];
+    const price = result?.meta?.regularMarketPrice;
+    
+    if (price) {
+      return price;
     }
+    console.warn(`Price not found in response for stock/ETF ticker: ${ticker}`, response.data);
     return null;
-  } catch (error) {
-    console.warn(`Failed to fetch price for stock/ETF ticker: ${ticker}`, error);
+  } catch (error: any) {
+    // Log more detailed error information
+    console.error(`Failed to fetch price for stock/ETF ticker: ${ticker}. Status: ${error.response?.status}. Data: ${JSON.stringify(error.response?.data)}`);
     return null;
   }
 }
