@@ -49,7 +49,6 @@ export default function DashboardPage() {
   const fetchInvestments = async (userId: string) => {
     setLoading(true);
     const userInvestments = await getInvestments(userId);
-    console.log("Fetched investments from Firestore:", userInvestments); // <-- DEBUG LOG
     setInvestments(userInvestments);
     setLoading(false);
   };

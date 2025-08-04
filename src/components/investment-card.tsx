@@ -38,7 +38,6 @@ const formatCurrency = (value: number | null | undefined) => {
 };
 
 export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete }: InvestmentCardProps) {
-  console.log("Rendering card with investment:", investment); // <-- DEBUG LOG
   const { name, type, status, purchaseDate, initialValue, currentValue, quantity, dividends, interest, ticker } = investment;
   const initialTotal = initialValue * quantity;
   const currentTotal = currentValue ? currentValue * quantity : null;
@@ -114,11 +113,11 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
             <div className="grid grid-cols-2 gap-4 text-sm">
                 <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Initial</span>
-                    <span className="font-mono font-semibold ml-auto">{formatCurrency(initialTotal)}</span>
+                    <span className="font-mono font-semibold ml-auto">{formatCurrency(initialValue)}</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Current</span>
-                    <span className="font-mono font-semibold ml-auto">{formatCurrency(currentTotal)}</span>
+                    <span className="font-mono font-semibold ml-auto">{formatCurrency(currentValue)}</span>
                 </div>
             </div>
             <Separator />
