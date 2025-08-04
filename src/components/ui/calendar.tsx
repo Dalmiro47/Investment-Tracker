@@ -61,6 +61,7 @@ function Calendar({
           <ChevronRight className={cn("h-4 w-4", className)} {...props} />
         ),
       }}
+      fixedWeeks
       {...props}
     />
   )
