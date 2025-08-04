@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -76,17 +77,8 @@ export default function DashboardPage() {
 
         await batch.commit();
 
-        // Update local state directly instead of refetching
-        setInvestments(prevInvestments => {
-            const newInvestments = [...prevInvestments];
-            result.updatedInvestments.forEach(updatedInv => {
-                const index = newInvestments.findIndex(inv => inv.id === updatedInv.id);
-                if (index !== -1) {
-                    newInvestments[index] = { ...newInvestments[index], currentValue: updatedInv.currentValue };
-                }
-            });
-            return newInvestments;
-        });
+        // Refetch the latest data from Firestore to ensure UI is in sync
+        await fetchInvestments(user.uid);
     }
 
     toast({
