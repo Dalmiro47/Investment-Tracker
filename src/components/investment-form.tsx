@@ -50,7 +50,7 @@ const defaultFormValues: InvestmentFormValues = {
   status: "Active",
   purchaseDate: new Date(),
   initialValue: 0,
-  currentValue: 0,
+  currentValue: null,
   quantity: 1,
   dividends: 0,
   interest: 0,
@@ -68,6 +68,11 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
     control: form.control,
     name: "type",
   });
+  
+  const watchedStatus = useWatch({
+    control: form.control,
+    name: "status",
+  });
 
   useEffect(() => {
     if (isOpen) {
@@ -75,8 +80,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
           const valuesToReset = {
             ...investment,
             purchaseDate: new Date(investment.purchaseDate),
-            // Ensure all optional fields have a default value to prevent uncontrolled inputs
-            currentValue: investment.currentValue ?? 0,
+            currentValue: investment.currentValue ?? null,
             ticker: investment.ticker ?? "",
             dividends: investment.dividends ?? 0,
             interest: investment.interest ?? 0,
@@ -252,6 +256,23 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                 </FormItem>
               )}
             />
+            
+            {watchedStatus === 'Sold' && (
+               <FormField
+                control={form.control}
+                name="currentValue"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Sold Value (per unit)</FormLabel>
+                    <FormControl>
+                      <Input type="number" placeholder="e.g. 200.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || null)} value={field.value ?? ''} />
+                    </FormControl>
+                    <FormDescription>Enter the price at which you sold each unit.</FormDescription>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
 
 
             <FormField

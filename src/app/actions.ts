@@ -52,6 +52,11 @@ export async function refreshInvestmentPrices(currentInvestments: Investment[]):
     const investmentsToUpdate: Investment[] = [];
 
     const priceFetchPromises = currentInvestments.map(async (inv) => {
+      // Do not refresh prices for sold investments
+      if (inv.status === 'Sold') {
+        return;
+      }
+      
       let newPrice: number | null = null;
       if ((inv.type === 'Stock' || inv.type === 'ETF') && inv.ticker) {
         newPrice = await getStockPrice(inv.ticker);

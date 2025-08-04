@@ -54,6 +54,9 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
 
   const capitalGains = status === 'Sold' && gainLoss !== null ? gainLoss : 0;
   const totalIncome = (dividends ?? 0) + (interest ?? 0);
+  
+  const valueLabel = status === 'Sold' ? 'Sold' : 'Current';
+
 
   return (
     <Card className="flex flex-col transition-all hover:shadow-lg hover:-translate-y-1">
@@ -113,7 +116,7 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                     <span className="font-headline text-xl font-bold">{formatCurrency(initialTotal)}</span>
                 </div>
                  <div className="flex flex-col items-center justify-center p-3 bg-primary/10 rounded-md">
-                    <span className="text-xs text-muted-foreground">Current Value</span>
+                    <span className="text-xs text-muted-foreground">{valueLabel} Value</span>
                     <span className="font-headline text-xl font-bold text-primary">{formatCurrency(currentTotal)}</span>
                 </div>
             </div>
@@ -124,7 +127,7 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                     <p className="font-mono font-semibold">{formatCurrency(initialValue)}</p>
                 </div>
                  <div className="space-y-1">
-                    <p className="text-muted-foreground">Current Price</p>
+                    <p className="text-muted-foreground">{valueLabel} Price</p>
                     <p className="font-mono font-semibold">{formatCurrency(currentValue)}</p>
                 </div>
                  <div className="space-y-1">

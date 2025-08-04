@@ -14,7 +14,7 @@ export interface Investment {
   status: InvestmentStatus;
   purchaseDate: string; // ISO 8601 format
   initialValue: number; // Price per unit at purchase
-  currentValue: number | null; // Current price per unit
+  currentValue: number | null; // Current or Sold price per unit
   quantity: number;
   dividends?: number;
   interest?: number;
@@ -31,7 +31,7 @@ export const investmentSchema = z.object({
   status: z.enum(['Active', 'Sold']),
   purchaseDate: z.date(),
   initialValue: z.coerce.number().min(0, { message: 'Initial value must be positive.' }),
-  currentValue: z.coerce.number().min(0, { message: 'Current value must be positive.' }).optional().nullable().default(0),
+  currentValue: z.coerce.number().min(0, { message: 'Value must be positive.' }).nullable(),
   quantity: z.coerce.number().min(0.000001, { message: 'Quantity must be greater than 0.' }),
   dividends: z.coerce.number().min(0, { message: 'Dividends must be positive.' }).optional().default(0),
   interest: z.coerce.number().min(0, { message: 'Interest must be positive.' }).optional().default(0),
@@ -42,6 +42,13 @@ export const investmentSchema = z.object({
             code: z.ZodIssueCode.custom,
             message: "Ticker is required for this investment type.",
             path: ["ticker"],
+        });
+    }
+    if (data.status === 'Sold' && (data.currentValue === null || data.currentValue === undefined)) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Sold value is required when status is 'Sold'.",
+            path: ["currentValue"],
         });
     }
 });
