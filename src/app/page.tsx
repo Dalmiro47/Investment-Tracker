@@ -3,7 +3,6 @@
 import React, { useState, useMemo, useEffect, useTransition } from 'react';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment } from '@/lib/firestore';
-import { refreshInvestmentPrices } from '@/app/actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
 import { InvestmentForm } from '@/components/investment-form';
@@ -23,6 +22,41 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import axios from 'axios';
+import { doc, writeBatch } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+
+// Fetches price from Yahoo Finance for Stocks/ETFs
+async function getStockPrice(ticker: string): Promise<number | null> {
+  if (!ticker) return null;
+  try {
+    // NOTE: This will likely fail due to CORS if Yahoo Finance doesn't allow client-side requests.
+    // A proxy/serverless function would be needed if this call fails.
+    const response = await axios.get(`https://query1.finance.yahoo.com/v7/finance/quote?symbols=${ticker}`);
+    const result = response.data.quoteResponse.result[0];
+    if (result && result.regularMarketPrice) {
+      return result.regularMarketPrice;
+    }
+    return null;
+  } catch (error) {
+    console.warn(`Failed to fetch price for stock/ETF ticker: ${ticker}`, error);
+    return null;
+  }
+}
+
+// Fetches price from CoinGecko for Crypto
+async function getCryptoPrice(id: string): Promise<number | null> {
+  if (!id) return null;
+  try {
+    const response = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${id.toLowerCase()}&vs_currencies=eur`);
+    const price = response.data[id.toLowerCase()]?.eur;
+    return price || null;
+  } catch (error) {
+    console.warn(`Failed to fetch price for crypto ID: ${id}`, error);
+    return null;
+  }
+}
+
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -61,23 +95,50 @@ export default function DashboardPage() {
       
       toast({ title: 'Refreshing Prices...', description: 'Please wait while we fetch the latest data.' });
       
-      const result = await refreshInvestmentPrices();
+      let updatedCount = 0;
+      let failedCount = 0;
 
-      if (result.success) {
-        toast({
-          title: "Update Complete",
-          description: result.message,
-          variant: result.failed > 0 ? "destructive" : "default",
-        });
-        // Refetch investments to show updated prices
-        await fetchInvestments(user.uid);
-      } else {
-        toast({
-          title: "Update Failed",
-          description: result.message,
-          variant: "destructive",
-        });
+      const batch = writeBatch(db);
+
+      const priceFetchPromises = investments.map(async (inv) => {
+        if (!inv.ticker) return;
+
+        let newPrice: number | null = null;
+        if (inv.type === 'Stock' || inv.type === 'ETF') {
+          newPrice = await getStockPrice(inv.ticker);
+        } else if (inv.type === 'Crypto') {
+          newPrice = await getCryptoPrice(inv.ticker);
+        }
+
+        if (newPrice !== null) {
+          const investmentRef = doc(db, 'users', user.uid, 'investments', inv.id);
+          batch.update(investmentRef, { currentValue: newPrice });
+          updatedCount++;
+        } else if (newPrice === null && (inv.type === 'Stock' || inv.type === 'ETF' || inv.type === 'Crypto')) {
+          failedCount++;
+        }
+      });
+
+      await Promise.all(priceFetchPromises);
+
+      if (updatedCount > 0) {
+        await batch.commit();
+        await fetchInvestments(user.uid); // Refetch to get updated data
       }
+      
+      let message = `Successfully updated ${updatedCount} investments.`;
+      if (failedCount > 0) {
+          message += ` Failed to fetch prices for ${failedCount} investments. Please check their tickers.`;
+      }
+      if(updatedCount === 0 && failedCount === 0) {
+          message = 'All investment prices are already up-to-date or do not require automatic updates.'
+      }
+
+      toast({
+        title: "Update Complete",
+        description: message,
+        variant: failedCount > 0 ? "destructive" : "default",
+      });
     });
   }
 

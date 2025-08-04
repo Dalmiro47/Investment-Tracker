@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
-import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut, type User, getIdToken } from 'firebase/auth';
+import { onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut, type User } from 'firebase/auth';
 import { auth } from '@/lib/firebase';
 import { ShieldCheck } from 'lucide-react';
 
@@ -24,19 +24,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
-      if (user) {
-          const token = await user.getIdToken();
-           await fetch('/api/auth/session', {
-              method: 'POST',
-              headers: { 'Authorization': `Bearer ${token}` },
-              credentials: 'include',
-          });
-      } else {
-          await fetch('/api/auth/session', { 
-            method: 'DELETE',
-            credentials: 'include',
-          });
-      }
       setLoading(false);
     });
 
@@ -60,7 +47,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const provider = new GoogleAuthProvider();
     try {
       await signInWithPopup(auth, provider);
-      // The onAuthStateChanged listener will handle the cookie and redirect
     } catch (error) {
       console.error("Error signing in with Google", error);
     }
@@ -69,7 +55,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       await firebaseSignOut(auth);
-      // The onAuthStateChanged listener will handle the cookie and redirect
     } catch (error) {
       console.error("Error signing out", error);
     }
