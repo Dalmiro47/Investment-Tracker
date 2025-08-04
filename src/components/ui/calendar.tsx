@@ -83,14 +83,15 @@ function Calendar({
           const p = props as DayPickerDefaultProps
           const fromYear = p.fromYear ?? 1950
           const toYear = p.toYear ?? new Date().getFullYear()
+          const month = p.month ?? new Date();
 
           return (
             <div className="flex justify-center gap-1 items-center">
               <Select
                 name="months"
-                value={p.month?.getMonth().toString()}
+                value={month.getMonth().toString()}
                 onValueChange={(value) => {
-                  handleCalendarChange(p.month!, {
+                  handleCalendarChange(month, {
                     target: { value, name: 'months' },
                   } as React.ChangeEvent<HTMLSelectElement>)
                 }}
@@ -101,7 +102,7 @@ function Calendar({
                 <SelectContent>
                   {Array.from({ length: 12 }, (_, i) => (
                     <SelectItem key={i} value={i.toString()}>
-                      {new Date(p.month!.getFullYear(), i).toLocaleString('default', {
+                      {new Date(month.getFullYear(), i).toLocaleString('default', {
                         month: 'long',
                       })}
                     </SelectItem>
@@ -110,9 +111,9 @@ function Calendar({
               </Select>
               <Select
                 name="years"
-                value={p.month?.getFullYear().toString()}
+                value={month.getFullYear().toString()}
                 onValueChange={(value) => {
-                  handleCalendarChange(p.month!, {
+                  handleCalendarChange(month, {
                     target: { value, name: 'years' },
                   } as React.ChangeEvent<HTMLSelectElement>)
                 }}
