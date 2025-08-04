@@ -30,7 +30,7 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
 import { Investment, InvestmentFormValues, investmentSchema, InvestmentType } from "@/lib/types"
-import { useEffect } from "react"
+import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import { CalendarIcon } from "lucide-react"
 import { format } from "date-fns"
@@ -63,6 +63,8 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
     resolver: zodResolver(investmentSchema),
     defaultValues: defaultFormValues,
   })
+
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   
   const watchedType = useWatch({
     control: form.control,
@@ -171,7 +173,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Purchase Date</FormLabel>
-                   <Popover>
+                   <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
                     <PopoverTrigger asChild>
                       <FormControl>
                         <Button
@@ -194,7 +196,10 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                       <Calendar
                         mode="single"
                         selected={field.value}
-                        onSelect={field.onChange}
+                        onSelect={(date) => {
+                            field.onChange(date);
+                            setIsCalendarOpen(false);
+                        }}
                         disabled={(date) =>
                           date > new Date() || date < new Date("1900-01-01")
                         }
