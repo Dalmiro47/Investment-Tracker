@@ -1,4 +1,5 @@
-import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, Timestamp, type PartialWithFieldValue } from 'firebase/firestore';
+
+import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, type PartialWithFieldValue } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, InvestmentFormValues } from './types';
 
@@ -27,7 +28,7 @@ const toFirestore = (data: Partial<InvestmentFormValues>) => {
 
 
 export const getInvestments = async (userId: string): Promise<Investment[]> => {
-    const querySnapshot = await getDocs(getInvestmentsCollection(userId));
+    const querySnapshot = await getDocsFromServer(getInvestmentsCollection(userId));
     return querySnapshot.docs.map(fromFirestore);
 }
 

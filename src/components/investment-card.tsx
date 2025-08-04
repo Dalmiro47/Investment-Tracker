@@ -1,3 +1,4 @@
+
 import type { Investment } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -37,6 +38,7 @@ const formatCurrency = (value: number | null | undefined) => {
 };
 
 export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete }: InvestmentCardProps) {
+  console.log("Rendering card with investment:", investment); // <-- DEBUG LOG
   const { name, type, status, purchaseDate, initialValue, currentValue, quantity, dividends, interest, ticker } = investment;
   const initialTotal = initialValue * quantity;
   const currentTotal = currentValue ? currentValue * quantity : null;
