@@ -150,7 +150,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                   <FormLabel>Ticker / Symbol</FormLabel>
                   <FormControl>
                     <Input placeholder={
-                      watchedType === 'Crypto' ? "e.g. bitcoin" : "e.g. NVD.F"
+                      watchedType === 'Crypto' ? "e.g. bitcoin (coingecko id)" : "e.g. NVD.F (for Frankfurt)"
                     } {...field} />
                   </FormControl>
                   <FormDescription>
