@@ -65,6 +65,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
   })
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   
   const watchedType = useWatch({
     control: form.control,
@@ -79,17 +80,20 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
   useEffect(() => {
     if (isOpen) {
         if (investment) {
+          const purchaseDate = new Date(investment.purchaseDate);
           const valuesToReset = {
             ...investment,
-            purchaseDate: new Date(investment.purchaseDate),
+            purchaseDate,
             currentValue: investment.currentValue ?? null,
             ticker: investment.ticker ?? "",
             dividends: investment.dividends ?? 0,
             interest: investment.interest ?? 0,
           };
           form.reset(valuesToReset);
+          setCalendarMonth(purchaseDate);
         } else {
           form.reset(defaultFormValues);
+          setCalendarMonth(new Date());
         }
     }
   }, [investment, form, isOpen]);
@@ -198,11 +202,16 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                         selected={field.value}
                         onSelect={(date) => {
                             field.onChange(date);
+                            if (date) {
+                              setCalendarMonth(date);
+                            }
                             setIsCalendarOpen(false);
                         }}
                         disabled={(date) =>
                           date > new Date() || date < new Date("1900-01-01")
                         }
+                        month={calendarMonth}
+                        onMonthChange={setCalendarMonth}
                         initialFocus
                       />
                     </PopoverContent>
