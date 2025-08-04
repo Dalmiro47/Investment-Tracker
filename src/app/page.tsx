@@ -66,24 +66,27 @@ export default function DashboardPage() {
     
     const result = await refreshInvestmentPrices(investments);
 
-    if (result.success) {
+    if (result.success && result.updatedInvestments.length > 0) {
         const batch = writeBatch(db);
-        let updatedCount = 0;
         
         result.updatedInvestments.forEach((updatedInv) => {
-            const originalInv = investments.find(inv => inv.id === updatedInv.id);
-            // Only update if the price has actually changed
-            if (originalInv && originalInv.currentValue !== updatedInv.currentValue) {
-                const investmentRef = doc(db, 'users', user.uid, 'investments', updatedInv.id);
-                batch.update(investmentRef, { currentValue: updatedInv.currentValue });
-                updatedCount++;
-            }
+            const investmentRef = doc(db, 'users', user.uid, 'investments', updatedInv.id);
+            batch.update(investmentRef, { currentValue: updatedInv.currentValue });
         });
 
-        if (updatedCount > 0) {
-            await batch.commit();
-            await fetchInvestments(user.uid); // Refetch all data to be safe
-        }
+        await batch.commit();
+
+        // Update local state directly instead of refetching
+        setInvestments(prevInvestments => {
+            const newInvestments = [...prevInvestments];
+            result.updatedInvestments.forEach(updatedInv => {
+                const index = newInvestments.findIndex(inv => inv.id === updatedInv.id);
+                if (index !== -1) {
+                    newInvestments[index] = { ...newInvestments[index], currentValue: updatedInv.currentValue };
+                }
+            });
+            return newInvestments;
+        });
     }
 
     toast({

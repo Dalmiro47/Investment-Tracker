@@ -45,12 +45,10 @@ async function getCryptoPrice(id: string): Promise<number | null> {
 
 export async function refreshInvestmentPrices(currentInvestments: Investment[]): Promise<UpdateResult> {
   try {
-    let updatedCount = 0;
     let failedCount = 0;
+    const investmentsToUpdate: Investment[] = [];
 
-    const updatedInvestments = [...currentInvestments];
-
-    const priceFetchPromises = updatedInvestments.map(async (inv, index) => {
+    const priceFetchPromises = currentInvestments.map(async (inv) => {
       let newPrice: number | null = null;
       if ((inv.type === 'Stock' || inv.type === 'ETF') && inv.ticker) {
         newPrice = await getStockPrice(inv.ticker);
@@ -59,14 +57,16 @@ export async function refreshInvestmentPrices(currentInvestments: Investment[]):
       }
 
       if (newPrice !== null && newPrice !== inv.currentValue) {
-        updatedInvestments[index].currentValue = newPrice;
-        updatedCount++;
+        // Create a new object with the updated price to return
+        investmentsToUpdate.push({ ...inv, currentValue: newPrice });
       } else if (newPrice === null && (inv.type === 'Stock' || inv.type === 'ETF' || inv.type === 'Crypto')) {
         failedCount++;
       }
     });
 
     await Promise.all(priceFetchPromises);
+    
+    const updatedCount = investmentsToUpdate.length;
 
     let message = `Successfully updated ${updatedCount} investments.`;
     if (failedCount > 0) {
@@ -76,9 +76,9 @@ export async function refreshInvestmentPrices(currentInvestments: Investment[]):
         message = 'All investment prices are already up-to-date.'
     }
 
-    return { success: true, updatedInvestments, message };
+    return { success: true, updatedInvestments: investmentsToUpdate, message };
   } catch (error) {
     console.error('Error refreshing investment prices:', error);
-    return { success: false, updatedInvestments: currentInvestments, message: 'An unexpected error occurred while refreshing prices.' };
+    return { success: false, updatedInvestments: [], message: 'An unexpected error occurred while refreshing prices.' };
   }
 }
