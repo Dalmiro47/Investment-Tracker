@@ -2,10 +2,18 @@
 
 import * as React from "react"
 import { ChevronLeft, ChevronRight } from "lucide-react"
-import { DayPicker } from "react-day-picker"
+import { DayPicker, type DayPickerDefaultProps } from "react-day-picker"
 
 import { cn } from "@/lib/utils"
 import { buttonVariants } from "@/components/ui/button"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./select"
+import { ScrollArea } from "./scroll-area"
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>
 
@@ -15,18 +23,29 @@ function Calendar({
   showOutsideDays = true,
   ...props
 }: CalendarProps) {
+  const handleCalendarChange = (
+    _month: Date,
+    e: React.ChangeEvent<HTMLSelectElement>
+  ) => {
+    const propsToUse = props as DayPickerDefaultProps
+    const newMonth = new Date(propsToUse.month ?? new Date())
+    if (e.target.name === 'months') {
+      newMonth.setMonth(parseInt(e.target.value, 10))
+    } else {
+      newMonth.setFullYear(parseInt(e.target.value, 10))
+    }
+    propsToUse.onMonthChange?.(newMonth)
+  }
+  
   return (
     <DayPicker
-      captionLayout="dropdown-buttons"
-      fromYear={1950}
-      toYear={new Date().getFullYear()}
       showOutsideDays={showOutsideDays}
       className={cn("p-3", className)}
       classNames={{
         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
         month: "space-y-4",
         caption: "flex justify-center pt-1 relative items-center",
-        caption_label: "text-sm font-medium",
+        caption_label: "text-sm font-medium hidden",
         caption_dropdowns: "flex justify-center gap-1",
         nav: "space-x-1 flex items-center",
         nav_button: cn(
@@ -58,12 +77,62 @@ function Calendar({
         ...classNames,
       }}
       components={{
-        IconLeft: ({ className, ...props }) => (
-          <ChevronLeft className={cn("h-4 w-4", className)} {...props} />
-        ),
-        IconRight: ({ className, ...props }) => (
-          <ChevronRight className={cn("h-4 w-4", className)} {...props} />
-        ),
+        IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
+        IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
+        Caption: ({...props}) => {
+          const p = props as DayPickerDefaultProps
+          const fromYear = p.fromYear ?? 1950
+          const toYear = p.toYear ?? new Date().getFullYear()
+
+          return (
+            <div className="flex justify-center gap-1 items-center">
+              <Select
+                name="months"
+                value={p.month?.getMonth().toString()}
+                onValueChange={(value) => {
+                  handleCalendarChange(p.month!, {
+                    target: { value, name: 'months' },
+                  } as React.ChangeEvent<HTMLSelectElement>)
+                }}
+              >
+                <SelectTrigger className="w-[60%]">
+                  <SelectValue placeholder="Month" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <SelectItem key={i} value={i.toString()}>
+                      {new Date(p.month!.getFullYear(), i).toLocaleString('default', {
+                        month: 'long',
+                      })}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                name="years"
+                value={p.month?.getFullYear().toString()}
+                onValueChange={(value) => {
+                  handleCalendarChange(p.month!, {
+                    target: { value, name: 'years' },
+                  } as React.ChangeEvent<HTMLSelectElement>)
+                }}
+              >
+                <SelectTrigger className="w-[40%]">
+                  <SelectValue placeholder="Year" />
+                </SelectTrigger>
+                <SelectContent>
+                  <ScrollArea className="h-80">
+                    {Array.from({ length: toYear - fromYear + 1 }, (_, i) => (
+                      <SelectItem key={i} value={(fromYear + i).toString()}>
+                        {fromYear + i}
+                      </SelectItem>
+                    ))}
+                  </ScrollArea>
+                </SelectContent>
+              </Select>
+            </div>
+          )
+        },
       }}
       {...props}
     />
