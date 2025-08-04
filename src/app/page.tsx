@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useTransition } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment } from '@/lib/firestore';
+import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
 import { InvestmentForm } from '@/components/investment-form';
@@ -22,47 +23,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import axios from 'axios';
-import { doc, writeBatch } from 'firebase/firestore';
+import { writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-
-// Fetches price from Yahoo Finance for Stocks/ETFs
-async function getStockPrice(ticker: string): Promise<number | null> {
-  if (!ticker) return null;
-  try {
-    // Using a proxy might be necessary if Yahoo Finance blocks direct client-side requests.
-    // For simplicity, we'll try a direct call first.
-    const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?region=US&lang=en-US&includePrePost=false&interval=2m&useYfid=true&range=1d&corsDomain=finance.yahoo.com&.tsrc=finance`);
-    const result = response.data.chart.result[0];
-    if (result && result.meta.regularMarketPrice) {
-      if (result.meta.currency !== 'EUR') {
-          // NOTE: This is a simplified conversion. For production, a dedicated currency API is better.
-          console.warn(`Ticker ${ticker} is in ${result.meta.currency}. A proper currency conversion API should be used. This is just an example.`);
-          // For now, if not EUR, we can't reliably use it. Return null.
-          // A more advanced version would fetch conversion rates.
-          return null;
-      }
-      return result.meta.regularMarketPrice;
-    }
-    return null;
-  } catch (error: any) {
-    console.error(`Failed to fetch price for stock/ETF ticker: ${ticker}`, error.response ? error.response.data : error.message);
-    return null;
-  }
-}
-
-// Fetches price from CoinGecko for Crypto
-async function getCryptoPrice(id: string): Promise<number | null> {
-  if (!id) return null;
-  try {
-    const response = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${id.toLowerCase()}&vs_currencies=eur`);
-    const price = response.data[id.toLowerCase()]?.eur;
-    return price || null;
-  } catch (error: any) {
-    console.error(`Failed to fetch price for crypto ID: ${id}`, error.response ? error.response.data : error.message);
-    return null;
-  }
-}
+import { doc } from 'firebase/firestore';
 
 
 export default function DashboardPage() {
@@ -70,6 +33,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTaxView, setIsTaxView] = useState(false);
   const [typeFilter, setTypeFilter] = useState<InvestmentType | 'All'>('All');
   const [statusFilter, setStatusFilter] = useState<InvestmentStatus | 'All'>('All');
@@ -80,8 +44,6 @@ export default function DashboardPage() {
   
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingInvestmentId, setDeletingInvestmentId] = useState<string | null>(null);
-
-  const [isPending, startTransition] = useTransition();
 
   const fetchInvestments = async (userId: string) => {
     setLoading(true);
@@ -96,53 +58,41 @@ export default function DashboardPage() {
     }
   }, [user]);
 
-  const handleRefreshPrices = () => {
-    startTransition(async () => {
-      if (!user) return;
-      
-      toast({ title: 'Refreshing Prices...', description: 'Please wait while we fetch the latest data.' });
-      
-      let updatedCount = 0;
-      let failedCount = 0;
+  const handleRefreshPrices = async () => {
+    if (!user || isRefreshing) return;
+    
+    setIsRefreshing(true);
+    toast({ title: 'Refreshing Prices...', description: 'Please wait while we fetch the latest data.' });
+    
+    const result = await refreshInvestmentPrices(investments);
 
-      const priceFetchPromises = investments.map(async (inv) => {
-        if (!inv.ticker) return;
+    if (result.success) {
+        const batch = writeBatch(db);
+        let updatedCount = 0;
+        
+        result.updatedInvestments.forEach((updatedInv) => {
+            const originalInv = investments.find(inv => inv.id === updatedInv.id);
+            // Only update if the price has actually changed
+            if (originalInv && originalInv.currentValue !== updatedInv.currentValue) {
+                const investmentRef = doc(db, 'users', user.uid, 'investments', updatedInv.id);
+                batch.update(investmentRef, { currentValue: updatedInv.currentValue });
+                updatedCount++;
+            }
+        });
 
-        let newPrice: number | null = null;
-        if (inv.type === 'Stock' || inv.type === 'ETF') {
-          newPrice = await getStockPrice(inv.ticker);
-        } else if (inv.type === 'Crypto') {
-          newPrice = await getCryptoPrice(inv.ticker);
+        if (updatedCount > 0) {
+            await batch.commit();
+            await fetchInvestments(user.uid); // Refetch all data to be safe
         }
+    }
 
-        if (newPrice !== null && newPrice !== inv.currentValue) {
-          await updateInvestment(user.uid, inv.id, { currentValue: newPrice });
-          updatedCount++;
-        } else if (newPrice === null && (inv.type === 'Stock' || inv.type === 'ETF' || inv.type === 'Crypto')) {
-          failedCount++;
-        }
-      });
-
-      await Promise.all(priceFetchPromises);
-
-      if (updatedCount > 0) {
-        await fetchInvestments(user.uid); // Refetch to get updated data
-      }
-      
-      let message = `Successfully updated ${updatedCount} investments.`;
-      if (failedCount > 0) {
-          message += ` Failed to fetch prices for ${failedCount} investments. Please check their tickers.`;
-      }
-      if(updatedCount === 0 && failedCount === 0) {
-          message = 'All investment prices are already up-to-date or do not require automatic updates.'
-      }
-
-      toast({
+    toast({
         title: "Update Complete",
-        description: message,
-        variant: failedCount > 0 ? "destructive" : "default",
-      });
+        description: result.message,
+        variant: result.success ? "default" : "destructive",
     });
+
+    setIsRefreshing(false);
   }
 
   const filteredAndSortedInvestments = useMemo(() => {
@@ -226,8 +176,8 @@ export default function DashboardPage() {
               </div>
               <div className="flex-grow" />
               <div className="flex items-center gap-4 w-full sm:w-auto">
-                 <Button onClick={handleRefreshPrices} disabled={isPending}>
-                  {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                 <Button onClick={handleRefreshPrices} disabled={isRefreshing}>
+                  {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                   Refresh Prices
                 </Button>
                  <Button onClick={handleAddClick}>
