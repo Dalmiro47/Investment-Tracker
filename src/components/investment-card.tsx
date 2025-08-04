@@ -52,12 +52,6 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
   const gainLossPercent = initialTotal === 0 || gainLoss === null ? 0 : (gainLoss / initialTotal) * 100;
   const isGain = gainLoss !== null ? gainLoss >= 0 : true;
 
-  // Simplified annualized return
-  const purchase = new Date(purchaseDate);
-  const yearsHeld = (new Date().getTime() - purchase.getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-  const annualizedReturn = yearsHeld > 0 && initialTotal > 0 && currentTotal !== null ? (Math.pow(currentTotal / initialTotal, 1 / yearsHeld) - 1) * 100 : gainLossPercent;
-
-
   const capitalGains = status === 'Sold' && gainLoss !== null ? gainLoss : 0;
   const totalIncome = (dividends ?? 0) + (interest ?? 0);
 
@@ -113,12 +107,15 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
           </div>
         ) : (
           <div className="space-y-4">
-            <div>
-              <div className="flex justify-between items-baseline p-3 bg-secondary rounded-md">
-                <span className="text-sm text-muted-foreground">Total Value</span>
-                <span className="font-headline text-2xl font-bold text-primary">{formatCurrency(currentTotal)}</span>
-              </div>
-              <p className="text-xs text-muted-foreground text-right mt-1 px-1">Current Price &times; Quantity</p>
+            <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md">
+                    <span className="text-xs text-muted-foreground">Purchase Value</span>
+                    <span className="font-headline text-xl font-bold">{formatCurrency(initialTotal)}</span>
+                </div>
+                 <div className="flex flex-col items-center justify-center p-3 bg-primary/10 rounded-md">
+                    <span className="text-xs text-muted-foreground">Current Value</span>
+                    <span className="font-headline text-xl font-bold text-primary">{formatCurrency(currentTotal)}</span>
+                </div>
             </div>
 
             <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm">
@@ -151,15 +148,11 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                 </div>
               </div>
             </div>
-             <div className="text-sm">
-                <span className="text-muted-foreground">Annualized Return: </span>
-                <span className={cn("font-bold", annualizedReturn >= 0 ? "text-green-500" : "text-destructive")}>{annualizedReturn.toFixed(2)}%</span>
-            </div>
           </div>
         )}
       </CardContent>
       <CardFooter className="text-xs text-muted-foreground">
-        Purchased on {format(purchase, 'dd MMM yyyy')}
+        Purchased on {format(new Date(purchaseDate), 'dd MMM yyyy')}
       </CardFooter>
     </Card>
   );
