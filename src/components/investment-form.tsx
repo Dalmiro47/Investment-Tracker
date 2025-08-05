@@ -66,7 +66,6 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
   })
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
-  const [calendarMonth, setCalendarMonth] = useState<Date>(new Date());
   
   const watchedType = useWatch({
     control: form.control,
@@ -78,32 +77,20 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
     name: "status",
   });
 
-  const watchedPurchaseDate = form.watch("purchaseDate");
-
-  useEffect(() => {
-    if (watchedPurchaseDate && watchedPurchaseDate instanceof Date) {
-        if (watchedPurchaseDate.getMonth() !== calendarMonth.getMonth() || watchedPurchaseDate.getFullYear() !== calendarMonth.getFullYear()) {
-            setCalendarMonth(watchedPurchaseDate);
-        }
-    }
-  }, [watchedPurchaseDate, calendarMonth]);
-
   useEffect(() => {
     if (isOpen) {
-        const initialDate = investment ? new Date(investment.purchaseDate) : new Date();
         const valuesToReset = investment 
             ? {
                 ...investment,
-                purchaseDate: initialDate,
+                purchaseDate: new Date(investment.purchaseDate),
                 currentValue: investment.currentValue ?? null,
                 ticker: investment.ticker ?? "",
                 dividends: investment.dividends ?? 0,
                 interest: investment.interest ?? 0,
               }
-            : defaultFormValues;
+            : { ...defaultFormValues, purchaseDate: new Date() };
 
         form.reset(valuesToReset);
-        setCalendarMonth(initialDate);
     }
   }, [investment, form, isOpen]);
 
@@ -210,17 +197,12 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                         mode="single"
                         selected={field.value}
                         onSelect={(date) => {
-                            if (date) {
-                                field.onChange(date);
-                                setCalendarMonth(date);
-                            }
+                            field.onChange(date);
                             setIsCalendarOpen(false);
                         }}
                         disabled={(date) =>
                           date > new Date() || date < new Date("1900-01-01")
                         }
-                        month={calendarMonth}
-                        onMonthChange={setCalendarMonth}
                         initialFocus
                       />
                     </PopoverContent>
