@@ -77,6 +77,17 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
     name: "status",
   });
 
+  const watchedPurchaseDate = form.watch("purchaseDate");
+
+  useEffect(() => {
+    if (watchedPurchaseDate && watchedPurchaseDate instanceof Date) {
+        // Check if the month or year is different to prevent infinite loops
+        if (watchedPurchaseDate.getMonth() !== calendarMonth.getMonth() || watchedPurchaseDate.getFullYear() !== calendarMonth.getFullYear()) {
+            setCalendarMonth(watchedPurchaseDate);
+        }
+    }
+  }, [watchedPurchaseDate, calendarMonth]);
+
   useEffect(() => {
     if (isOpen) {
         if (investment) {
