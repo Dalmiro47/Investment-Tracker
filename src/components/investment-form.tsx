@@ -81,7 +81,6 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
   const watchedPurchaseDate = form.watch("purchaseDate");
 
   useEffect(() => {
-    // This effect syncs the calendar's displayed month with the form's actual date value.
     if (watchedPurchaseDate && watchedPurchaseDate instanceof Date) {
         if (watchedPurchaseDate.getMonth() !== calendarMonth.getMonth() || watchedPurchaseDate.getFullYear() !== calendarMonth.getFullYear()) {
             setCalendarMonth(watchedPurchaseDate);
@@ -90,26 +89,21 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
   }, [watchedPurchaseDate, calendarMonth]);
 
   useEffect(() => {
-    // This effect resets the form and calendar when the dialog opens.
     if (isOpen) {
-        if (investment) {
-          const purchaseDate = new Date(investment.purchaseDate);
-          const valuesToReset = {
-            ...investment,
-            purchaseDate,
-            currentValue: investment.currentValue ?? null,
-            ticker: investment.ticker ?? "",
-            dividends: investment.dividends ?? 0,
-            interest: investment.interest ?? 0,
-          };
-          form.reset(valuesToReset);
-          // Set the calendar to show the month of the existing investment.
-          setCalendarMonth(purchaseDate);
-        } else {
-          form.reset(defaultFormValues);
-          // Set the calendar to show the current month for a new investment.
-          setCalendarMonth(new Date());
-        }
+        const initialDate = investment ? new Date(investment.purchaseDate) : new Date();
+        const valuesToReset = investment 
+            ? {
+                ...investment,
+                purchaseDate: initialDate,
+                currentValue: investment.currentValue ?? null,
+                ticker: investment.ticker ?? "",
+                dividends: investment.dividends ?? 0,
+                interest: investment.interest ?? 0,
+              }
+            : defaultFormValues;
+
+        form.reset(valuesToReset);
+        setCalendarMonth(initialDate);
     }
   }, [investment, form, isOpen]);
 
@@ -216,9 +210,9 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                         mode="single"
                         selected={field.value}
                         onSelect={(date) => {
-                            field.onChange(date);
                             if (date) {
-                              setCalendarMonth(date);
+                                field.onChange(date);
+                                setCalendarMonth(date);
                             }
                             setIsCalendarOpen(false);
                         }}
