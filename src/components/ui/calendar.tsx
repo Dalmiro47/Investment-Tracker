@@ -27,7 +27,7 @@ function Calendar({
         month: "space-y-4",
         caption: "flex justify-center pt-1 relative items-center",
         caption_label: "text-sm font-medium hidden",
-        caption_dropdowns: "flex justify-center gap-1",
+        caption_dropdowns: "flex justify-center gap-2",
         nav: "space-x-1 flex items-center",
         nav_button: cn(
           buttonVariants({ variant: "outline" }),
@@ -60,15 +60,18 @@ function Calendar({
       components={{
         IconLeft: ({ ...props }) => <ChevronLeft className="h-4 w-4" />,
         IconRight: ({ ...props }) => <ChevronRight className="h-4 w-4" />,
-        Dropdown: ({ value, onChange, children, ...props }: DropdownProps) => {
+        Dropdown: (props: DropdownProps) => {
+          const { value, onChange, children, name } = props;
           const options = React.Children.toArray(children) as React.ReactElement<React.HTMLProps<HTMLOptionElement>>[];
           const selected = options.find((child) => child.props.value === value);
+          
           const handleChange = (value: string) => {
             const changeEvent = {
               target: { value },
             } as React.ChangeEvent<HTMLSelectElement>;
             onChange?.(changeEvent);
           };
+
           return (
             <Select
               value={value?.toString()}
@@ -76,11 +79,11 @@ function Calendar({
                 handleChange(value);
               }}
             >
-              <SelectTrigger className="w-[120px]">
+              <SelectTrigger className={cn("w-[120px]", name === 'months' && 'w-[100px]')}>
                 <SelectValue>{selected?.props?.children}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <ScrollArea className="h-48">
+                <ScrollArea className={cn('h-48', name === 'years' && 'h-72')}>
                 {options.map((option, id: number) => (
                   <SelectItem
                     key={`${option.props.value}-${id}`}
