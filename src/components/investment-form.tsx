@@ -1,3 +1,4 @@
+
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -80,6 +81,8 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
   const watchedPurchaseDate = form.watch("purchaseDate");
 
   useEffect(() => {
+    // This effect syncs the calendar's displayed month with the form's actual date value.
+    // It runs whenever the form's date changes, ensuring the header is always correct.
     if (watchedPurchaseDate && watchedPurchaseDate instanceof Date) {
         // Check if the month or year is different to prevent infinite loops
         if (watchedPurchaseDate.getMonth() !== calendarMonth.getMonth() || watchedPurchaseDate.getFullYear() !== calendarMonth.getFullYear()) {
@@ -89,6 +92,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
   }, [watchedPurchaseDate, calendarMonth]);
 
   useEffect(() => {
+    // This effect resets the form and calendar when the dialog opens.
     if (isOpen) {
         if (investment) {
           const purchaseDate = new Date(investment.purchaseDate);
@@ -101,9 +105,11 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
             interest: investment.interest ?? 0,
           };
           form.reset(valuesToReset);
+          // Set the calendar to show the month of the existing investment.
           setCalendarMonth(purchaseDate);
         } else {
           form.reset(defaultFormValues);
+          // Set the calendar to show the current month for a new investment.
           setCalendarMonth(new Date());
         }
     }
@@ -212,6 +218,8 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                         mode="single"
                         selected={field.value}
                         onSelect={(date) => {
+                            // This handler now correctly updates the form value,
+                            // syncs the calendar month, and closes the popover.
                             field.onChange(date);
                             if (date) {
                               setCalendarMonth(date);
@@ -221,6 +229,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                         disabled={(date) =>
                           date > new Date() || date < new Date("1900-01-01")
                         }
+                        // These two props make the calendar a "controlled" component.
                         month={calendarMonth}
                         onMonthChange={setCalendarMonth}
                         initialFocus
@@ -340,3 +349,5 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
     </Dialog>
   )
 }
+
+    
