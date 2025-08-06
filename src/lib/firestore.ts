@@ -1,6 +1,6 @@
 
 
-import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, getDoc, runTransaction } from 'firebase/firestore';
+import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, getDoc, runTransaction, getDocs } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, OldInvestmentFormValues, Transaction, TransactionFormValues } from './types';
 
@@ -36,15 +36,16 @@ const transactionFromFirestore = (doc: any): Transaction => {
 // Convert form values (with JS Date) to Firestore-compatible data (with Timestamp)
 const toFirestore = (data: any) => {
     const firestoreData: any = { ...data };
-    // Check for date fields that need conversion
     if (data.purchaseDate && data.purchaseDate instanceof Date) {
         firestoreData.purchaseDate = Timestamp.fromDate(data.purchaseDate);
     }
     if (data.date && data.date instanceof Date) {
         firestoreData.date = Timestamp.fromDate(data.date);
     }
-    // Remove the status field if it exists, as it's a computed property
-    delete firestoreData.status;
+    // No need to handle status manually anymore
+    if ('status' in firestoreData) {
+        delete firestoreData.status;
+    }
     return firestoreData;
 }
 
@@ -94,51 +95,50 @@ export const getTransactions = async (userId: string, investmentId: string): Pro
 
 export const addTransaction = async (userId: string, investmentId: string, transactionData: TransactionFormValues): Promise<void> => {
     const investmentRef = doc(db, 'users', userId, 'investments', investmentId);
-    const newTransactionRef = doc(collection(db, 'users', userId, 'investments', investmentId, 'transactions'));
     const transactionsCollection = getTransactionsCollection(userId, investmentId);
+    const newTransactionRef = doc(transactionsCollection);
 
-    const batch = writeBatch(db);
-
-    // 1. Add the new transaction document to the batch
-    batch.set(newTransactionRef, toFirestore({
-        ...transactionData,
-        totalAmount: transactionData.quantity * transactionData.pricePerUnit
-    }));
-
-    // 2. Fetch all transactions (including the new one in memory) and recalculate aggregates
-    const currentTransactionsSnapshot = await getDocsFromServer(transactionsCollection);
-    
-    // Manually add the new transaction to our in-memory list for calculation
-    const allTransactionsData: (Transaction | TransactionFormValues)[] = [
-        ...currentTransactionsSnapshot.docs.map(transactionFromFirestore),
-        { 
-            ...transactionData,
-            // Convert date to string for consistent type handling during calculation
-            date: transactionData.date.toISOString() 
+    await runTransaction(db, async (transaction) => {
+        // 1. READ all documents first.
+        const investmentDoc = await transaction.get(investmentRef);
+        if (!investmentDoc.exists()) {
+            throw new Error("Investment document does not exist!");
         }
-    ];
+        const currentTransactionsSnapshot = await getDocs(transactionsCollection);
+        const existingTransactions = currentTransactionsSnapshot.docs.map(transactionFromFirestore);
+        
+        // 2. PREPARE new data in memory.
+        const newTransaction = {
+            id: newTransactionRef.id,
+            ...transactionData,
+            date: transactionData.date.toISOString(), // for consistent calculation
+            totalAmount: transactionData.quantity * transactionData.pricePerUnit
+        };
+        const allTransactions = [...existingTransactions, newTransaction];
 
-    const buys = allTransactionsData.filter(t => t.type === 'Buy');
-    const sells = allTransactionsData.filter(t => t.type === 'Sell');
+        // 3. CALCULATE aggregates based on the complete list of transactions.
+        const buys = allTransactions.filter(t => t.type === 'Buy');
+        const sells = allTransactions.filter(t => t.type === 'Sell');
 
-    const totalBuyQty = buys.reduce((sum, t) => sum + t.quantity, 0);
-    const totalSellQty = sells.reduce((sum, t) => sum + t.quantity, 0);
-    const totalBuyCost = buys.reduce((sum, t) => sum + t.pricePerUnit * t.quantity, 0);
+        const totalBuyQty = buys.reduce((sum, t) => sum + t.quantity, 0);
+        const totalSellQty = sells.reduce((sum, t) => sum + t.quantity, 0);
+        const totalBuyCost = buys.reduce((sum, t) => sum + t.pricePerUnit * t.quantity, 0);
 
-    const totalQuantity = totalBuyQty - totalSellQty;
-    const averageBuyPrice = totalBuyQty > 0 ? totalBuyCost / totalBuyQty : 0;
-    
-    // Determine status based on remaining quantity, using a small epsilon for floating point issues
-    const status: Investment['status'] = totalQuantity > 0.000001 ? 'Active' : 'Sold';
+        const quantity = totalBuyQty - totalSellQty;
+        const averageBuyPrice = totalBuyQty > 0 ? totalBuyCost / totalBuyQty : 0;
+        const status: Investment['status'] = quantity > 0.000001 ? 'Active' : 'Sold';
 
-    // 3. Add the update operation for the parent investment document to the batch
-    batch.update(investmentRef, {
-        totalQuantity,
-        averageBuyPrice,
-        totalCost: totalBuyCost,
-        status, // Status is now calculated and set here
+        // 4. WRITE all changes to Firestore.
+        transaction.set(newTransactionRef, toFirestore({
+            ...transactionData,
+            totalAmount: newTransaction.totalAmount,
+        }));
+
+        transaction.update(investmentRef, {
+            quantity: quantity,
+            initialValue: averageBuyPrice, // This maps to averageBuyPrice
+            totalCost: totalBuyCost,
+            status: status,
+        });
     });
-
-    // 4. Commit the entire batch
-    await batch.commit();
 };
