@@ -3,7 +3,7 @@ import type { Investment } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, ShieldCheck } from 'lucide-react';
+import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, ShieldCheck, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, addYears, isPast } from 'date-fns';
 import {
@@ -19,6 +19,7 @@ interface InvestmentCardProps {
   isTaxView: boolean;
   onEdit: () => void;
   onDelete: () => void;
+  onViewHistory: () => void;
 }
 
 const typeIcons: Record<Investment['type'], React.ReactNode> = {
@@ -44,7 +45,7 @@ const formatQuantity = (value: number | null | undefined) => {
   return new Intl.NumberFormat('de-DE', { maximumFractionDigits: 4 }).format(value);
 }
 
-export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete }: InvestmentCardProps) {
+export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete, onViewHistory }: InvestmentCardProps) {
   const { name, type, status, purchaseDate, initialValue, currentValue, quantity, dividends, interest, ticker } = investment;
   const initialTotal = initialValue * quantity;
   const currentTotal = currentValue ? currentValue * quantity : null;
@@ -57,7 +58,7 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
   
   const valueLabel = status === 'Sold' ? 'Sold' : 'Current';
   
-  const taxFreeSellDate = type === 'Crypto' ? addYears(new Date(purchaseDate), 1) : null;
+  const taxFreeSellDate = type === 'Crypto' && purchaseDate ? addYears(new Date(purchaseDate), 1) : null;
   const isTaxFree = taxFreeSellDate && isPast(taxFreeSellDate);
 
 
@@ -81,6 +82,10 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                 <DropdownMenuItem onClick={onViewHistory}>
+                  <History className="mr-2 h-4 w-4" />
+                  View History
+                </DropdownMenuItem>
                 <DropdownMenuItem onClick={onEdit}>
                   <Edit className="mr-2 h-4 w-4" />
                   Edit
@@ -173,9 +178,11 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
           </div>
         )}
       </CardContent>
-      <CardFooter className="text-xs text-muted-foreground">
-        Purchased on {format(new Date(purchaseDate), 'dd MMM yyyy')}
-      </CardFooter>
+      {purchaseDate && (
+        <CardFooter className="text-xs text-muted-foreground">
+            Purchased on {format(new Date(purchaseDate), 'dd MMM yyyy')}
+        </CardFooter>
+      )}
     </Card>
   );
 }

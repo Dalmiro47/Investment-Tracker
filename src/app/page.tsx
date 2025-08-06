@@ -28,6 +28,7 @@ import {
 import { writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { doc } from 'firebase/firestore';
+import { TransactionHistoryDialog } from '@/components/transaction-history-dialog';
 
 
 export default function DashboardPage() {
@@ -46,6 +47,9 @@ export default function DashboardPage() {
   
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [deletingInvestmentId, setDeletingInvestmentId] = useState<string | null>(null);
+
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [viewingHistoryInvestment, setViewingHistoryInvestment] = useState<Investment | undefined>(undefined);
 
   const fetchInvestments = async (userId: string) => {
     setLoading(true);
@@ -131,6 +135,11 @@ export default function DashboardPage() {
     setEditingInvestment(investment);
     setIsFormOpen(true);
   };
+
+  const handleHistoryClick = (investment: Investment) => {
+    setViewingHistoryInvestment(investment);
+    setIsHistoryOpen(true);
+  }
   
   const handleDeleteClick = (id: string) => {
     setDeletingInvestmentId(id);
@@ -174,6 +183,12 @@ export default function DashboardPage() {
         console.error("Form submission error:", error);
     }
   };
+
+  const onTransactionAdded = async () => {
+    if(user) {
+        await fetchInvestments(user.uid);
+    }
+  }
   
   if (!user) {
     return null; // AuthProvider handles redirects
@@ -256,6 +271,7 @@ export default function DashboardPage() {
                   isTaxView={isTaxView}
                   onEdit={() => handleEditClick(investment)}
                   onDelete={() => handleDeleteClick(investment.id)}
+                  onViewHistory={() => handleHistoryClick(investment)}
                 />
               ))}
             </div>
@@ -291,6 +307,14 @@ export default function DashboardPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {viewingHistoryInvestment && (
+        <TransactionHistoryDialog 
+            isOpen={isHistoryOpen}
+            onOpenChange={setIsHistoryOpen}
+            investment={viewingHistoryInvestment}
+            onTransactionAdded={onTransactionAdded}
+        />
+      )}
     </>
   );
 }
