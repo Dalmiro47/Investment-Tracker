@@ -115,7 +115,9 @@ export default function DashboardPage() {
           return totalB - totalA;
         case 'purchaseDate':
         default:
-          return new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime();
+          const dateA = a.purchaseDate ? new Date(a.purchaseDate).getTime() : 0;
+          const dateB = b.purchaseDate ? new Date(b.purchaseDate).getTime() : 0;
+          return dateB - dateA;
       }
     });
   }, [investments, typeFilter, statusFilter, sortKey]);
