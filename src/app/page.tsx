@@ -7,6 +7,7 @@ import { addInvestment, deleteInvestment, getInvestments, updateInvestment } fro
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
+import PortfolioSummary from '@/components/portfolio-summary';
 import { InvestmentForm } from '@/components/investment-form';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -164,7 +165,8 @@ export default function DashboardPage() {
       <div className="min-h-screen w-full bg-background">
         <DashboardHeader isTaxView={isTaxView} onTaxViewChange={setIsTaxView} />
         <main className="p-4 sm:p-6 lg:p-8">
-          <div className="mb-8 p-4 bg-card/50 rounded-lg shadow-sm">
+          <PortfolioSummary investments={investments} />
+          <div className="mt-8 mb-8 p-4 bg-card/50 rounded-lg shadow-sm">
             <div className="flex flex-col sm:flex-row items-center gap-4">
               <div className="flex items-center gap-2">
                 <SlidersHorizontal className="h-5 w-5 text-muted-foreground"/>
