@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
-import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues } from '@/lib/types';
+import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues as OldInvestmentFormValues } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
@@ -148,7 +148,7 @@ export default function DashboardPage() {
   }
 
 
-  const handleFormSubmit = async (values: InvestmentFormValues) => {
+  const handleFormSubmit = async (values: OldInvestmentFormValues) => {
     if (!user) return;
     
     const isEditing = !!editingInvestment;
