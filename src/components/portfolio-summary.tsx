@@ -41,6 +41,7 @@ export default function PortfolioSummary({ investments }: { investments: Investm
             .map(item => ({
                 name: item.type,
                 value: item.currentValue,
+                portfolioPercentage: item.portfolioPercentage,
                 fill: CHART_COLORS[Object.keys(summary).indexOf(item.type) % CHART_COLORS.length]
             }))
             .sort((a, b) => b.value - a.value);
@@ -125,12 +126,14 @@ export default function PortfolioSummary({ investments }: { investments: Investm
                                     labelLine={false}
                                     label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
                                         const RADIAN = Math.PI / 180;
-                                        const radius = innerRadius + (outerRadius - innerRadius) * 1.2;
+                                        const radius = innerRadius + (outerRadius - innerRadius) * 1.25;
                                         const x = cx + radius * Math.cos(-midAngle * RADIAN);
                                         const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                                        const percentage = (percent * 100).toFixed(0);
+
                                         return (
                                              <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-xs font-semibold">
-                                                {chartData[index].name}
+                                                {`${chartData[index].name} (${percentage}%)`}
                                             </text>
                                         );
                                     }}
@@ -155,4 +158,3 @@ export default function PortfolioSummary({ investments }: { investments: Investm
         </Card>
     );
 }
-
