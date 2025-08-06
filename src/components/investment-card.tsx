@@ -126,13 +126,13 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                     <p className="text-muted-foreground">Initial Price</p>
                     <p className="font-mono font-semibold">{formatCurrency(initialValue)}</p>
                 </div>
+                <div className="space-y-1">
+                    <p className="text-muted-foreground">Quantity</p>
+                    <p className="font-mono font-semibold">{formatQuantity(quantity)}</p>
+                </div>
                  <div className="space-y-1">
                     <p className="text-muted-foreground">{valueLabel} Price</p>
                     <p className="font-mono font-semibold">{formatCurrency(currentValue)}</p>
-                </div>
-                 <div className="space-y-1">
-                    <p className="text-muted-foreground">Quantity</p>
-                    <p className="font-mono font-semibold">{formatQuantity(quantity)}</p>
                 </div>
             </div>
             <Separator />
