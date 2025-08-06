@@ -3,9 +3,9 @@ import type { Investment } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit } from 'lucide-react';
+import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, ShieldCheck } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, addYears, isPast } from 'date-fns';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -56,6 +56,9 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
   const totalIncome = (dividends ?? 0) + (interest ?? 0);
   
   const valueLabel = status === 'Sold' ? 'Sold' : 'Current';
+  
+  const taxFreeSellDate = type === 'Crypto' ? addYears(new Date(purchaseDate), 1) : null;
+  const isTaxFree = taxFreeSellDate && isPast(taxFreeSellDate);
 
 
   return (
@@ -151,6 +154,22 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                 </div>
               </div>
             </div>
+            {taxFreeSellDate && status === 'Active' && (
+               <div className="pt-4">
+                <Separator />
+                <div className="mt-4 text-sm rounded-md bg-accent/20 p-3">
+                    <div className="flex items-center gap-2 text-muted-foreground">
+                        <ShieldCheck className="h-4 w-4" />
+                        <span className="font-semibold">German Tax-Free Date</span>
+                    </div>
+                    <div className={cn("flex items-center gap-2 mt-1", isTaxFree ? "text-green-600" : "text-foreground")}>
+                      <p className="font-semibold">{format(taxFreeSellDate, 'dd MMMM yyyy')}</p>
+                      {isTaxFree && <Badge variant="secondary" className="border-green-600/50 bg-green-500/10 text-green-700 dark:text-green-400">Ready</Badge>}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Gains may be tax-free if held for over one year.</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </CardContent>
