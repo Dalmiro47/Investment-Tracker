@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { Investment, InvestmentFormValues, investmentSchema, InvestmentType } from "@/lib/types"
+import { Investment, OldInvestmentFormValues, oldInvestmentSchema, InvestmentType } from "@/lib/types"
 import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import { CalendarIcon } from "lucide-react"
@@ -39,16 +39,15 @@ import { format } from "date-fns"
 interface InvestmentFormProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: InvestmentFormValues) => void;
+  onSubmit: (values: OldInvestmentFormValues) => void;
   investment?: Investment;
 }
 
 const tickerRequiredTypes: InvestmentType[] = ['Stock', 'ETF', 'Crypto'];
 
-const defaultFormValues: InvestmentFormValues = {
+const defaultFormValues: Omit<OldInvestmentFormValues, 'status'> = {
   name: "",
   type: "Stock",
-  status: "Active",
   purchaseDate: new Date(),
   initialValue: 0,
   currentValue: null,
@@ -60,9 +59,12 @@ const defaultFormValues: InvestmentFormValues = {
 
 
 export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: InvestmentFormProps) {
-  const form = useForm<InvestmentFormValues>({
-    resolver: zodResolver(investmentSchema),
-    defaultValues: defaultFormValues,
+  const form = useForm<OldInvestmentFormValues>({
+    resolver: zodResolver(oldInvestmentSchema),
+    defaultValues: {
+      ...defaultFormValues,
+      status: 'Active',
+    },
   })
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -88,7 +90,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                 dividends: investment.dividends ?? 0,
                 interest: investment.interest ?? 0,
               }
-            : { ...defaultFormValues, purchaseDate: new Date() };
+            : { ...defaultFormValues, status: 'Active', purchaseDate: new Date() };
 
         form.reset(valuesToReset);
     }
@@ -197,7 +199,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                         mode="single"
                         selected={field.value}
                         onSelect={(date) => {
-                            field.onChange(date);
+                            if (date) field.onChange(date);
                             setIsCalendarOpen(false);
                         }}
                         disabled={(date) =>
@@ -241,43 +243,19 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
             />
             
              <FormField
-              control={form.control}
-              name="status"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Status</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select status" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      <SelectItem value="Active">Active</SelectItem>
-                      <SelectItem value="Sold">Sold</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            {watchedStatus === 'Sold' && (
-               <FormField
                 control={form.control}
                 name="currentValue"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Sold Value (per unit)</FormLabel>
+                    <FormLabel>Current / Sold Value (per unit)</FormLabel>
                     <FormControl>
                       <Input type="number" placeholder="e.g. 200.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || null)} value={field.value ?? ''} />
                     </FormControl>
-                    <FormDescription>Enter the price at which you sold each unit.</FormDescription>
+                     <FormDescription>For sold items, enter the final sale price.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
               />
-            )}
 
 
             <FormField

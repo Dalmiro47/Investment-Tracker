@@ -1,4 +1,5 @@
 
+
 import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, getDoc, runTransaction } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, OldInvestmentFormValues, Transaction, TransactionFormValues } from './types';
@@ -42,6 +43,8 @@ const toFirestore = (data: any) => {
     if (data.date && data.date instanceof Date) {
         firestoreData.date = Timestamp.fromDate(data.date);
     }
+    // Remove the status field if it exists, as it's a computed property
+    delete firestoreData.status;
     return firestoreData;
 }
 
@@ -90,43 +93,52 @@ export const getTransactions = async (userId: string, investmentId: string): Pro
 }
 
 export const addTransaction = async (userId: string, investmentId: string, transactionData: TransactionFormValues): Promise<void> => {
-    await runTransaction(db, async (tx) => {
-        const investmentRef = doc(db, 'users', userId, 'investments', investmentId);
-        const newTransactionRef = doc(getTransactionsCollection(userId, investmentId));
+    const investmentRef = doc(db, 'users', userId, 'investments', investmentId);
+    const newTransactionRef = doc(collection(db, 'users', userId, 'investments', investmentId, 'transactions'));
+    const transactionsCollection = getTransactionsCollection(userId, investmentId);
 
-        // 1. Add the new transaction
-        tx.set(newTransactionRef, toFirestore({
+    const batch = writeBatch(db);
+
+    // 1. Add the new transaction document to the batch
+    batch.set(newTransactionRef, toFirestore({
+        ...transactionData,
+        totalAmount: transactionData.quantity * transactionData.pricePerUnit
+    }));
+
+    // 2. Fetch all transactions (including the new one in memory) and recalculate aggregates
+    const currentTransactionsSnapshot = await getDocsFromServer(transactionsCollection);
+    
+    // Manually add the new transaction to our in-memory list for calculation
+    const allTransactionsData: (Transaction | TransactionFormValues)[] = [
+        ...currentTransactionsSnapshot.docs.map(transactionFromFirestore),
+        { 
             ...transactionData,
-            totalAmount: transactionData.quantity * transactionData.pricePerUnit
-        }));
+            // Convert date to string for consistent type handling during calculation
+            date: transactionData.date.toISOString() 
+        }
+    ];
 
-        // 2. Aggregate the data and update the parent investment document
-        // In a real-world app, this would be better handled by a Cloud Function for reliability.
-        // For this client-side implementation, we'll re-fetch all transactions and recalculate.
-        const currentTransactionsSnapshot = await getDocsFromServer(getTransactionsCollection(userId, investmentId));
-        const allTransactions = [...currentTransactionsSnapshot.docs.map(transactionFromFirestore), {
-            id: newTransactionRef.id,
-            ...transactionData,
-            date: transactionData.date.toISOString(),
-            totalAmount: transactionData.quantity * transactionData.pricePerUnit
-        }];
-        
-        const buys = allTransactions.filter(t => t.type === 'Buy');
-        const sells = allTransactions.filter(t => t.type === 'Sell');
+    const buys = allTransactionsData.filter(t => t.type === 'Buy');
+    const sells = allTransactionsData.filter(t => t.type === 'Sell');
 
-        const totalBuyQty = buys.reduce((sum, t) => sum + t.quantity, 0);
-        const totalSellQty = sells.reduce((sum, t) => sum + t.quantity, 0);
-        const totalBuyCost = buys.reduce((sum, t) => sum + t.totalAmount, 0);
+    const totalBuyQty = buys.reduce((sum, t) => sum + t.quantity, 0);
+    const totalSellQty = sells.reduce((sum, t) => sum + t.quantity, 0);
+    const totalBuyCost = buys.reduce((sum, t) => sum + t.pricePerUnit * t.quantity, 0);
 
-        const totalQuantity = totalBuyQty - totalSellQty;
-        const averageBuyPrice = totalBuyQty > 0 ? totalBuyCost / totalBuyQty : 0;
-        const status: Investment['status'] = totalQuantity > 0.000001 ? 'Active' : 'Sold';
+    const totalQuantity = totalBuyQty - totalSellQty;
+    const averageBuyPrice = totalBuyQty > 0 ? totalBuyCost / totalBuyQty : 0;
+    
+    // Determine status based on remaining quantity, using a small epsilon for floating point issues
+    const status: Investment['status'] = totalQuantity > 0.000001 ? 'Active' : 'Sold';
 
-        tx.update(investmentRef, {
-            totalQuantity,
-            averageBuyPrice,
-            totalCost: totalBuyCost,
-            status,
-        });
+    // 3. Add the update operation for the parent investment document to the batch
+    batch.update(investmentRef, {
+        totalQuantity,
+        averageBuyPrice,
+        totalCost: totalBuyCost,
+        status, // Status is now calculated and set here
     });
+
+    // 4. Commit the entire batch
+    await batch.commit();
 };

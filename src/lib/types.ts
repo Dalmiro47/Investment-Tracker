@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 export type InvestmentType = 'Stock' | 'Bond' | 'Crypto' | 'Real Estate' | 'ETF' | 'Savings';
@@ -28,7 +29,7 @@ export interface Investment {
   averageBuyPrice: number;
   currentValue: number | null; // Current market price per unit
   // Direct fields
-  status: InvestmentStatus; // This could be derived from totalQuantity
+  status: InvestmentStatus; // This is derived from totalQuantity
   dividends?: number; // Might be replaced by Dividend transactions
   interest?: number; // Might be replaced by Interest transactions
   // Deprecated fields, to be removed later
@@ -71,7 +72,8 @@ export const oldInvestmentSchema = z.object({
     message: "Name must be at least 2 characters.",
   }),
   type: z.enum(['Stock', 'Bond', 'Crypto', 'Real Estate', 'ETF', 'Savings']),
-  status: z.enum(['Active', 'Sold']),
+  // Status is no longer directly editable
+  status: z.enum(['Active', 'Sold']).readonly(), 
   purchaseDate: z.date(),
   initialValue: z.coerce.number().min(0, { message: 'Initial value must be positive.' }),
   currentValue: z.coerce.number().min(0, { message: 'Value must be positive.' }).nullable(),
@@ -88,12 +90,6 @@ export const oldInvestmentSchema = z.object({
             path: ["ticker"],
         });
     }
-    if (data.status === 'Sold' && (data.currentValue === null || data.currentValue === undefined)) {
-        ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: "Sold value is required when status is 'Sold'.",
-            path: ["currentValue"],
-        });
-    }
+    // No need to check for currentValue on 'Sold' status anymore, as status is not user-editable.
 });
 export type OldInvestmentFormValues = z.infer<typeof oldInvestmentSchema>;
