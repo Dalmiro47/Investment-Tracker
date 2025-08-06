@@ -106,11 +106,13 @@ export default function DashboardPage() {
     return filtered.sort((a, b) => {
       switch (sortKey) {
         case 'performance':
-          const performanceA = a.currentValue && a.initialValue ? (a.currentValue - a.initialValue) / a.initialValue : 0;
-          const performanceB = b.currentValue && b.initialValue ? (b.currentValue - b.initialValue) / b.initialValue : 0;
+          const performanceA = a.currentValue && a.initialValue ? (a.currentValue - a.initialValue) / a.initialValue : -Infinity;
+          const performanceB = b.currentValue && b.initialValue ? (b.currentValue - b.initialValue) / b.initialValue : -Infinity;
           return performanceB - performanceA;
         case 'totalAmount':
-          return (b.currentValue ?? 0) * b.quantity - (a.currentValue ?? 0) * a.quantity;
+          const totalA = (a.currentValue ?? 0) * a.quantity;
+          const totalB = (b.currentValue ?? 0) * b.quantity;
+          return totalB - totalA;
         case 'purchaseDate':
         default:
           return new Date(b.purchaseDate).getTime() - new Date(a.purchaseDate).getTime();
@@ -137,6 +139,7 @@ export default function DashboardPage() {
     if (deletingInvestmentId && user) {
       await deleteInvestment(user.uid, deletingInvestmentId);
       await fetchInvestments(user.uid);
+      toast({ title: "Success", description: "Investment deleted successfully." });
     }
     setIsDeleteDialogOpen(false);
     setDeletingInvestmentId(null);
@@ -146,14 +149,28 @@ export default function DashboardPage() {
   const handleFormSubmit = async (values: InvestmentFormValues) => {
     if (!user) return;
     
-    if (editingInvestment) {
-      await updateInvestment(user.uid, editingInvestment.id, values);
-    } else {
-      await addInvestment(user.uid, values);
+    const isEditing = !!editingInvestment;
+    try {
+        if (isEditing) {
+          await updateInvestment(user.uid, editingInvestment.id, values);
+        } else {
+          await addInvestment(user.uid, values);
+        }
+        await fetchInvestments(user.uid);
+        setIsFormOpen(false);
+        setEditingInvestment(undefined);
+        toast({
+            title: "Success",
+            description: `Investment ${isEditing ? 'updated' : 'added'} successfully.`,
+        });
+    } catch (error) {
+        toast({
+            title: "Error",
+            description: `There was a problem ${isEditing ? 'updating' : 'adding'} the investment.`,
+            variant: "destructive"
+        });
+        console.error("Form submission error:", error);
     }
-    await fetchInvestments(user.uid);
-    setIsFormOpen(false);
-    setEditingInvestment(undefined);
   };
   
   if (!user) {
@@ -268,7 +285,7 @@ export default function DashboardPage() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDelete}>Delete</AlertDialogAction>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
