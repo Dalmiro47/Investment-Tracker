@@ -184,16 +184,39 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
   const [isAdding, setIsAdding] = useState(false);
 
   const fetchTransactions = async () => {
-    if (!user) return;
-    setLoading(true);
-    const fetchedTransactions = await getTransactions(user.uid, investment.id);
-    setTransactions(fetchedTransactions);
-    setLoading(false);
+      if (!user) return;
+      setLoading(true);
+      
+      let fetchedTransactions = await getTransactions(user.uid, investment.id);
+      
+      // Migration logic: If no "Buy" transactions exist, create a synthetic one from the original investment data.
+      const hasBuyTransaction = fetchedTransactions.some(tx => tx.type === 'Buy');
+      
+      if (!hasBuyTransaction && investment.initialValue > 0 && investment.quantity > 0) {
+          const syntheticInitialBuy: Transaction = {
+              id: 'synthetic-initial-buy',
+              type: 'Buy',
+              date: investment.purchaseDate,
+              quantity: investment.quantity,
+              pricePerUnit: investment.initialValue,
+              totalAmount: investment.initialValue * investment.quantity
+          };
+          // Prepend the synthetic transaction to the list
+          fetchedTransactions = [syntheticInitialBuy, ...fetchedTransactions];
+      }
+
+      // Sort all transactions by date descending to ensure correct order
+      fetchedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      
+      setTransactions(fetchedTransactions);
+      setLoading(false);
   };
 
   useEffect(() => {
     if (isOpen) {
       fetchTransactions();
+      // Reset the 'add' form view when dialog is opened
+      setIsAdding(false);
     }
   }, [isOpen, user, investment.id]);
 
