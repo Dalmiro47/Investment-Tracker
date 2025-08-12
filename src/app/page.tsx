@@ -2,13 +2,14 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
-import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter } from '@/lib/types';
+import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
 import PortfolioSummary from '@/components/portfolio-summary';
 import { InvestmentForm } from '@/components/investment-form';
+import { TaxSettingsDialog } from '@/components/tax-settings-dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -54,6 +55,13 @@ export default function DashboardPage() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [historyDialogView, setHistoryDialogView] = useState<'list' | 'form'>('list');
   const [viewingHistoryInvestment, setViewingHistoryInvestment] = useState<Investment | undefined>(undefined);
+
+  const [isTaxSettingsOpen, setIsTaxSettingsOpen] = useState(false);
+  const [taxSettings, setTaxSettings] = useState<TaxSettings>({
+    churchTaxRate: 0,
+    filingStatus: 'single',
+    cryptoMarginalRate: 0.30,
+  });
 
   const fetchAllData = async (userId: string) => {
     setLoading(true);
@@ -226,9 +234,19 @@ export default function DashboardPage() {
   return (
     <>
       <div className="min-h-screen w-full bg-background">
-        <DashboardHeader isTaxView={isTaxView} onTaxViewChange={setIsTaxView} />
+        <DashboardHeader 
+            isTaxView={isTaxView} 
+            onTaxViewChange={setIsTaxView}
+            onTaxSettingsClick={() => setIsTaxSettingsOpen(true)}
+        />
         <main className="p-4 sm:p-6 lg:p-8">
-          <PortfolioSummary investments={investments} transactionsMap={transactionsMap} sellYears={sellYears} />
+          <PortfolioSummary 
+            investments={investments} 
+            transactionsMap={transactionsMap} 
+            sellYears={sellYears} 
+            isTaxView={isTaxView}
+            taxSettings={taxSettings}
+          />
           <div className="mt-8 mb-8 p-4 bg-card/50 rounded-lg shadow-sm">
             <div className="flex flex-col sm:flex-row items-center gap-4">
               <div className="flex items-center gap-2">
@@ -322,6 +340,16 @@ export default function DashboardPage() {
         onOpenChange={setIsFormOpen}
         onSubmit={handleFormSubmit}
         investment={editingInvestment}
+      />
+      <TaxSettingsDialog
+        isOpen={isTaxSettingsOpen}
+        onOpenChange={setIsTaxSettingsOpen}
+        currentSettings={taxSettings}
+        onSave={(newSettings) => {
+            setTaxSettings(newSettings);
+            setIsTaxSettingsOpen(false);
+            toast({ title: "Success", description: "Tax settings updated." });
+        }}
       />
        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>

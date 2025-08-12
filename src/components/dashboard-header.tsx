@@ -1,7 +1,8 @@
+
 "use client";
 
 import Link from 'next/link';
-import { CircleDollarSign, LayoutGrid, LogOut, User } from 'lucide-react';
+import { CircleDollarSign, LayoutGrid, LogOut, User, Settings } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -12,9 +13,10 @@ import { useAuth } from '@/hooks/use-auth';
 interface DashboardHeaderProps {
   isTaxView: boolean;
   onTaxViewChange: (checked: boolean) => void;
+  onTaxSettingsClick: () => void;
 }
 
-export default function DashboardHeader({ isTaxView, onTaxViewChange }: DashboardHeaderProps) {
+export default function DashboardHeader({ isTaxView, onTaxViewChange, onTaxSettingsClick }: DashboardHeaderProps) {
   const { user, signOut } = useAuth();
   
   const getInitials = (name: string | null | undefined) => {
@@ -33,7 +35,7 @@ export default function DashboardHeader({ isTaxView, onTaxViewChange }: Dashboar
           <CircleDollarSign className="h-6 w-6 text-primary" />
           <span className="font-headline text-xl font-bold tracking-tight">DDS Investment Tracker</span>
         </Link>
-        <div className="flex flex-1 items-center justify-center space-x-2">
+        <div className="flex flex-1 items-center justify-center space-x-4">
           <div className="flex items-center space-x-2">
             <Label htmlFor="tax-mode" className="font-medium">German Tax Report</Label>
             <Switch
@@ -43,6 +45,12 @@ export default function DashboardHeader({ isTaxView, onTaxViewChange }: Dashboar
               aria-label="Toggle tax report view"
             />
           </div>
+          {isTaxView && (
+            <Button variant="outline" size="sm" onClick={onTaxSettingsClick}>
+              <Settings className="mr-2 h-4 w-4" />
+              Tax Settings
+            </Button>
+          )}
         </div>
         <div className="flex items-center space-x-4">
           <DropdownMenu>

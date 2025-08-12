@@ -11,6 +11,11 @@ export type YearFilter =
   | { kind: 'all' }
   | { kind: 'year'; year: number; mode: 'combined' | 'realized' | 'holdings' };
 
+export interface TaxSettings {
+  churchTaxRate: 0 | 0.08 | 0.09;
+  filingStatus: 'single' | 'married';
+  cryptoMarginalRate: number; // Storing as a number, e.g., 0.30 for 30%
+}
 
 export interface Transaction {
   id: string;
@@ -31,6 +36,9 @@ export interface Investment {
   purchaseDate: string;          // ISO
   purchaseQuantity: number;      // your initial qty (one-time)
   purchasePricePerUnit: number;  // your initial price per unit
+  
+  // For Crypto tax rule
+  stakingOrLending?: boolean;
 
   // Market data
   currentValue: number | null;   // live price per unit
@@ -45,11 +53,6 @@ export interface Investment {
 
   createdAt?: string;
   updatedAt?: string;
-
-  // --- DEPRECATED ---
-  // Kept for backwards compatibility during transition if needed, but new logic should not use them.
-  initialValue?: number;
-  quantity?: number;
 }
 
 
@@ -61,6 +64,7 @@ export const investmentSchema = z.object({
   purchaseDate: z.date({ required_error: "Purchase date is required." }),
   purchaseQuantity: z.coerce.number().positive({ message: "Quantity must be positive." }),
   purchasePricePerUnit: z.coerce.number().nonnegative({ message: "Purchase price must be zero or more." }),
+  stakingOrLending: z.boolean().optional(),
 }).superRefine((data, ctx) => {
     const tickerRequiredTypes: InvestmentType[] = ['Stock', 'ETF', 'Crypto'];
     if (tickerRequiredTypes.includes(data.type) && (!data.ticker || data.ticker.trim() === '')) {

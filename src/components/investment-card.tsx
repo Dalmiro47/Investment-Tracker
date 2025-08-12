@@ -21,6 +21,8 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Checkbox } from './ui/checkbox';
+import { Label } from './ui/label';
 
 
 interface InvestmentCardProps {
@@ -193,8 +195,8 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                 </div>
             </div>
 
-            <div className="text-sm border-t border-b py-2 space-y-2">
-                <div className="grid grid-cols-3 gap-x-4 text-center">
+            <div className="text-sm border-t border-b py-2">
+                 <div className="grid grid-cols-3 gap-x-4 text-center">
                     <div>
                         <p className="text-muted-foreground">Bought</p>
                         <p className="font-mono font-semibold">{formatQty(purchaseQty)}</p>
@@ -237,7 +239,7 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
               </div>
                <div className="text-right">
                 <div className="text-sm text-muted-foreground">Realized P/L</div>
-                 <div className={cn("font-bold text-lg", displayRealizedPL >= 0 ? "text-green-600" : "text-destructive")}>{formatCurrency(displayRealizedPL)}</div>
+                 <div className={cn("font-bold text-lg text-right w-full", displayRealizedPL >= 0 ? "text-green-600" : "text-destructive")}>{formatCurrency(displayRealizedPL)}</div>
               </div>
             </div>
              <div className="text-center pt-2">
@@ -260,7 +262,7 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                 {taxInfo.isEligibleNow ? (
                     <span className="flex items-center gap-1 font-medium text-green-500">
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        Tax-free eligible since {format(taxInfo.taxFreeDate, 'dd MMM yyyy')}
+                        Tax-free since {format(taxInfo.taxFreeDate, 'dd MMM yyyy')} ({taxInfo.holdingPeriodYears}-year rule)
                     </span>
                 ) : (
                     <span className="text-muted-foreground">

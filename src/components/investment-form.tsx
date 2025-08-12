@@ -35,6 +35,8 @@ import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import { CalendarIcon } from "lucide-react"
 import { format } from "date-fns"
+import { Checkbox } from "./ui/checkbox"
+import { Label } from "./ui/label"
 
 interface InvestmentFormProps {
   isOpen: boolean;
@@ -50,6 +52,7 @@ const defaultFormValues: InvestmentFormValues = {
   purchaseQuantity: 0,
   purchasePricePerUnit: 0,
   ticker: "",
+  stakingOrLending: false,
 };
 
 
@@ -73,6 +76,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                 ...investment,
                 purchaseDate: new Date(investment.purchaseDate),
                 ticker: investment.ticker ?? "",
+                stakingOrLending: investment.stakingOrLending ?? false,
               }
             : { ...defaultFormValues, purchaseDate: new Date() };
 
@@ -93,7 +97,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-4 py-4">
+          <form onSubmit={form.handleSubmit(onSubmit)} className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
             <FormField
               control={form.control}
               name="name"
@@ -219,7 +223,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
               control={form.control}
               name="purchasePricePerUnit"
               render={({ field }) => (
-                <FormItem>
+                <FormItem className={watchedType === 'Crypto' ? '' : 'md:col-span-2'}>
                   <FormLabel>Purchase Price (per unit)</FormLabel>
                   <FormControl>
                     <Input type="number" placeholder="e.g. 150.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
@@ -228,6 +232,27 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                 </FormItem>
               )}
             />
+
+            {watchedType === 'Crypto' && (
+                <FormField
+                control={form.control}
+                name="stakingOrLending"
+                render={({ field }) => (
+                    <FormItem className="flex flex-row items-end space-x-2 pb-2">
+                        <FormControl>
+                            <Checkbox
+                            checked={field.value}
+                            onCheckedChange={field.onChange}
+                            />
+                        </FormControl>
+                        <div className="space-y-1 leading-none">
+                             <Label htmlFor="stakingOrLending" className="cursor-pointer">Used for Staking/Lending?</Label>
+                             <FormDescription>Extends tax-free holding to 10 years.</FormDescription>
+                        </div>
+                    </FormItem>
+                )}
+                />
+            )}
             
             <div className="md:col-span-2 flex justify-end gap-2 pt-4">
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
