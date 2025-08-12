@@ -28,9 +28,12 @@ export function calculatePositionMetrics(
   const buyPrice = dec(inv.purchasePricePerUnit);
   
   const sells = txs.filter(t => t.type === 'Sell');
-  const soldQty = sells.reduce((sum, t) => add(sum, dec(t.quantity)), dec(0));
+  const soldQtyDec = sells.reduce((sum, t) => add(sum, dec(t.quantity)), dec(0));
   
-  const availableQty = buyQty.gt(soldQty) ? sub(buyQty, soldQty) : dec(0);
+  // Clamp sold quantity for calculations to not exceed buy quantity
+  const effectiveSoldQty = soldQtyDec.gt(buyQty) ? buyQty : soldQtyDec;
+  
+  const availableQty = sub(buyQty, effectiveSoldQty);
 
   const purchaseValue = mul(buyQty, buyPrice);
   const costBasis = mul(availableQty, buyPrice);
@@ -39,7 +42,7 @@ export function calculatePositionMetrics(
 
   const realizedProceeds = sells.reduce((sum, t) => add(sum, dec(t.totalAmount)), dec(0));
   
-  const sellCostBasis = mul(buyQty.lt(soldQty) ? buyQty : soldQty, buyPrice);
+  const sellCostBasis = mul(effectiveSoldQty, buyPrice);
   const realizedPL = sub(realizedProceeds, sellCostBasis);
   
   const unrealizedPL = sub(marketValue, costBasis);
@@ -51,7 +54,7 @@ export function calculatePositionMetrics(
   return {
     buyQty: toNum(buyQty, 8),
     buyPrice: toNum(buyPrice),
-    soldQty: toNum(soldQty, 8),
+    soldQty: toNum(soldQtyDec, 8), // Report the actual sold quantity
     availableQty: toNum(availableQty, 8),
     purchaseValue: toNum(purchaseValue),
     costBasis: toNum(costBasis),
