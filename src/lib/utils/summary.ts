@@ -1,10 +1,11 @@
 
 
+import { availableQty } from '../types';
 import type { Investment, InvestmentType } from '@/lib/types';
 
 export interface SummaryItem {
     type: InvestmentType;
-    initialValue: number; // Represents totalCost for this summary
+    costBasis: number; // Represents totalCost for this summary for *active* investments
     currentValue: number; // Represents total marketValue for this summary
     gainLoss: number;
     gainLossPercent: number;
@@ -12,8 +13,8 @@ export interface SummaryItem {
 }
 
 export interface SummaryTotals {
-    initialValue: number; // Represents totalCost
-    currentValue: number; // Represents total marketValue
+    costBasis: number; 
+    currentValue: number; 
     gainLoss: number;
     gainLossPercent: number;
 }
@@ -34,41 +35,41 @@ export function summarizeByType(investments: Investment[]): PortfolioSummaryData
         if (!summary[type]) {
             summary[type] = {
                 type,
-                initialValue: 0, // Will be totalCost
-                currentValue: 0, // Will be marketValue
+                costBasis: 0,
+                currentValue: 0, 
             };
         }
         
-        // Use aggregated totalCost if available, otherwise calculate from initial values
-        const costBasisForAvailableQty = (inv.averageBuyPrice ?? inv.initialValue) * inv.quantity;
-        summary[type].initialValue += costBasisForAvailableQty;
+        const avQty = availableQty(inv);
 
-        // Calculate current market value based on available quantity
-        const currentTotal = (inv.currentValue ?? (inv.averageBuyPrice ?? inv.initialValue)) * inv.quantity;
-        summary[type].currentValue += currentTotal;
+        // Cost basis of the remaining (available) quantity
+        summary[type].costBasis += inv.purchasePricePerUnit * avQty;
+
+        // Current market value of the remaining (available) quantity
+        summary[type].currentValue += (inv.currentValue ?? inv.purchasePricePerUnit) * avQty;
     });
 
     const totals: SummaryTotals = {
-        initialValue: 0,
+        costBasis: 0,
         currentValue: 0,
         gainLoss: 0,
         gainLossPercent: 0,
     };
 
     Object.values(summary).forEach(typeSum => {
-        totals.initialValue += typeSum.initialValue;
+        totals.costBasis += typeSum.costBasis;
         totals.currentValue += typeSum.currentValue;
     });
     
     // Now calculate percentages and gain/loss after we have totals
     Object.values(summary).forEach(typeSum => {
-        typeSum.gainLoss = typeSum.currentValue - typeSum.initialValue;
-        typeSum.gainLossPercent = typeSum.initialValue ? (typeSum.gainLoss / typeSum.initialValue) * 100 : 0;
+        typeSum.gainLoss = typeSum.currentValue - typeSum.costBasis;
+        typeSum.gainLossPercent = typeSum.costBasis ? (typeSum.gainLoss / typeSum.costBasis) * 100 : 0;
         typeSum.portfolioPercentage = totals.currentValue > 0 ? (typeSum.currentValue / totals.currentValue) * 100 : 0;
     });
 
-    totals.gainLoss = totals.currentValue - totals.initialValue;
-    totals.gainLossPercent = totals.initialValue > 0 ? (totals.gainLoss / totals.initialValue) * 100 : 0;
+    totals.gainLoss = totals.currentValue - totals.costBasis;
+    totals.gainLossPercent = totals.costBasis > 0 ? (totals.gainLoss / totals.costBasis) * 100 : 0;
 
 
     return { summary, totals };

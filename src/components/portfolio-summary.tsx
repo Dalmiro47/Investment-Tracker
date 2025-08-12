@@ -63,9 +63,9 @@ export default function PortfolioSummary({ investments }: { investments: Investm
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Asset Type</TableHead>
-                                    <TableHead className="text-right">Total Cost</TableHead>
+                                    <TableHead className="text-right">Cost Basis</TableHead>
                                     <TableHead className="text-right">Market Value</TableHead>
-                                    <TableHead className="text-right">Profit / Loss</TableHead>
+                                    <TableHead className="text-right">Unrealized P/L</TableHead>
                                     <TableHead className="text-right">Performance</TableHead>
                                     <TableHead className="text-right">% of Portfolio</TableHead>
                                 </TableRow>
@@ -74,7 +74,7 @@ export default function PortfolioSummary({ investments }: { investments: Investm
                                 {Object.values(summary).map(item => (
                                     <TableRow key={item.type}>
                                         <TableCell className="font-medium">{item.type}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(item.initialValue)}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(item.costBasis)}</TableCell>
                                         <TableCell className="text-right font-mono font-bold">{formatCurrency(item.currentValue)}</TableCell>
                                         <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", item.gainLoss >= 0 ? "text-green-500" : "text-destructive")}>
                                           {item.gainLoss >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
@@ -88,7 +88,7 @@ export default function PortfolioSummary({ investments }: { investments: Investm
                             <TableFooter>
                                 <TableRow className="bg-muted/50 font-bold">
                                     <TableCell>Total</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(totals.initialValue)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(totals.costBasis)}</TableCell>
                                     <TableCell className="text-right font-mono">{formatCurrency(totals.currentValue)}</TableCell>
                                     <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", totals.gainLoss >= 0 ? "text-green-500" : "text-destructive")}>
                                         {totals.gainLoss >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
