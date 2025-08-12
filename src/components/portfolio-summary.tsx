@@ -101,7 +101,7 @@ export default function PortfolioSummary({ investments, transactionsMap, sellYea
 
     const { rows, totals, taxSummary } = summaryData;
     const totalPortfolioValue = donutMode === 'market' ? totals.marketValue : totals.economicValue;
-    const showTaxEstimator = isTaxView && taxSummary && filter.kind === 'year';
+    const showTaxEstimator = isTaxView && taxSummary && yearFilter.kind === 'year';
 
     return (
         <Card>
@@ -199,7 +199,7 @@ export default function PortfolioSummary({ investments, transactionsMap, sellYea
                     )}
                 </div>
                  <p className="text-xs text-muted-foreground mt-1">
-                    Realized P/L reflects the selected year and view mode. Market &amp; unrealized values are based on current prices.
+                    Realized P/L reflects the selected year and view mode. Market & unrealized values are based on current prices.
                 </p>
             </CardHeader>
             <CardContent>
