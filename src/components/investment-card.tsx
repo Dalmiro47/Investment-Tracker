@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { Investment } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -20,7 +20,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { Button } from './ui/button';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 
 
 interface InvestmentCardProps {
@@ -89,8 +89,51 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
               <CardDescription className="font-medium text-primary">{type} {ticker ? `(${ticker})` : ''}</CardDescription>
             </div>
           </div>
-           <div className="flex items-center gap-2">
+           <div className="flex items-center gap-1">
             <Badge variant={status === 'Active' ? 'default' : 'secondary'} className={cn(status === 'Active' && 'bg-green-600 text-white')}>{status}</Badge>
+            <Dialog>
+                <DialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8">
+                        <Info className="h-4 w-4" />
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle>Field Explanations</DialogTitle>
+                        <DialogDescription>Here's how each value on the card is calculated.</DialogDescription>
+                    </DialogHeader>
+                    <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4">
+                        <div>
+                            <h4 className="font-semibold">Total Cost</h4>
+                            <p className="text-muted-foreground">The full original amount you paid for this investment. <br/><code className="text-xs">Formula: Initial Quantity × Initial Price per Unit</code></p>
+                        </div>
+                         <div>
+                            <h4 className="font-semibold">Market Value</h4>
+                            <p className="text-muted-foreground">The current value of the shares/units you still hold. <br/><code className="text-xs">Formula: Available Quantity × Current Price</code></p>
+                        </div>
+                        <div>
+                            <h4 className="font-semibold">Bought, Sold, Available</h4>
+                            <p className="text-muted-foreground"><span className="font-medium text-foreground">Bought:</span> The total quantity you initially purchased. <br/><span className="font-medium text-foreground">Sold:</span> The total quantity you have sold via transactions. <br/><span className="font-medium text-foreground">Available:</span> The quantity you currently still hold (`Bought - Sold`).</p>
+                        </div>
+                        <div>
+                            <h4 className="font-semibold">Buy Price, Avg. Sell Price, Current Price</h4>
+                            <p className="text-muted-foreground"><span className="font-medium text-foreground">Buy Price:</span> The price per unit you paid at the initial purchase. <br/><span className="font-medium text-foreground">Avg. Sell Price:</span> The weighted average price of all your sales (`Total Sale Proceeds / Total Quantity Sold`). <br/><span className="font-medium text-foreground">Current Price:</span> The latest market price for one unit.</p>
+                        </div>
+                        <div>
+                            <h4 className="font-semibold">Unrealized P/L</h4>
+                            <p className="text-muted-foreground">Your "paper" profit or loss on the assets you still hold. <br/><code className="text-xs">Formula: (Current Price - Buy Price) × Available Quantity</code></p>
+                        </div>
+                        <div>
+                            <h4 className="font-semibold">Realized P/L</h4>
+                            <p className="text-muted-foreground">Your "locked-in" profit or loss from all completed sales. <br/><code className="text-xs">Formula: (Avg. Sell Price - Buy Price) × Sold Quantity</code></p>
+                        </div>
+                         <div>
+                            <h4 className="font-semibold">Total P/L (Performance)</h4>
+                            <p className="text-muted-foreground">The overall profit or loss, combining realized and unrealized amounts. The percentage shows the total return on your original investment. <br/><code className="text-xs">Total P/L Formula: Unrealized P/L + Realized P/L</code> <br/> <code className="text-xs">Performance % Formula: Total P/L / Total Cost</code></p>
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -227,16 +270,6 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                         : ''}
                     </span>
                 )}
-                 <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Info className="h-3.5 w-3.5 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-xs">
-                            <p>Germany: private crypto sales may become tax-free after a 1-year holding period. This is an estimate, not tax advice.</p>
-                        </TooltipContent>
-                    </Tooltip>
-                 </TooltipProvider>
              </div>
           )}
         </CardFooter>
