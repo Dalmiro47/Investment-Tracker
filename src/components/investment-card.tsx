@@ -193,24 +193,24 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                 </div>
             </div>
 
-            <div className="text-sm border-t border-b py-2">
-                <div className="flex justify-around">
-                    <div className="text-center">
+            <div className="text-sm border-t border-b py-2 space-y-2">
+                <div className="grid grid-cols-3 gap-x-4 text-center">
+                    <div>
                         <p className="text-muted-foreground">Bought</p>
                         <p className="font-mono font-semibold">{formatQty(purchaseQty)}</p>
                     </div>
-                     <div className="text-center">
+                     <div>
                         <p className="text-muted-foreground">Sold</p>
                         <p className="font-mono font-semibold">{formatQty(soldQty)}</p>
                     </div>
-                     <div className="text-center">
+                     <div>
                         <p className="text-muted-foreground">Available</p>
                         <p className="font-mono font-semibold">{formatQty(availableQty)}</p>
                     </div>
                 </div>
             </div>
             
-            <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm">
+            <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm text-center">
                 <div className="space-y-1">
                     <p className="text-muted-foreground">Buy Price</p>
                     <p className="font-mono font-semibold">{formatCurrency(investment.purchasePricePerUnit)}</p>
