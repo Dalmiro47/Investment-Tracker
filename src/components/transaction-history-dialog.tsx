@@ -236,16 +236,17 @@ interface TransactionHistoryDialogProps {
   onOpenChange: (open: boolean) => void;
   investment: Investment;
   onTransactionAdded: () => void;
+  initialView?: 'list' | 'form';
 }
 
 const formatCurrency = (value: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
 const formatQuantity = (value: number) => new Intl.NumberFormat('de-DE', { maximumFractionDigits: 8 }).format(value);
 
-export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onTransactionAdded }: TransactionHistoryDialogProps) {
+export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onTransactionAdded, initialView = 'list' }: TransactionHistoryDialogProps) {
   const { user } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'list' | 'form'>('list');
+  const [view, setView] = useState<'list' | 'form'>(initialView);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
   const [deletingTransactionId, setDeletingTransactionId] = useState<string | null>(null);
 
@@ -259,10 +260,10 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
 
   useEffect(() => {
     if (isOpen) {
-      setView('list');
+      setView(initialView);
       setEditingTransaction(undefined);
     }
-  }, [isOpen]);
+  }, [isOpen, initialView]);
 
   useEffect(() => {
     if (isOpen) {

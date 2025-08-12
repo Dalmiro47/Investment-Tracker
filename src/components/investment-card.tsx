@@ -4,7 +4,7 @@ import type { Investment } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History } from 'lucide-react';
+import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History, PlusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { dec, toNum, formatCurrency, formatQty, formatPercent, div, mul, sub, add } from '@/lib/money';
@@ -14,6 +14,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
+  DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { Button } from './ui/button';
 
@@ -23,6 +24,7 @@ interface InvestmentCardProps {
   onEdit: () => void;
   onDelete: () => void;
   onViewHistory: () => void;
+  onAddTransaction: () => void;
 }
 
 const typeIcons: Record<Investment['type'], React.ReactNode> = {
@@ -34,7 +36,7 @@ const typeIcons: Record<Investment['type'], React.ReactNode> = {
   Savings: <Wallet className="h-6 w-6" />,
 };
 
-export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete, onViewHistory }: InvestmentCardProps) {
+export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete, onViewHistory, onAddTransaction }: InvestmentCardProps) {
   const { name, type, status, ticker, purchaseDate, realizedProceeds, realizedPnL, dividends, interest } = investment;
   
   // --- High-Precision Calculations ---
@@ -87,13 +89,18 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
+                 <DropdownMenuItem onClick={onAddTransaction}>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Add Transaction
+                </DropdownMenuItem>
                  <DropdownMenuItem onClick={onViewHistory}>
                   <History className="mr-2 h-4 w-4" />
                   View History
                 </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onEdit}>
                   <Edit className="mr-2 h-4 w-4" />
-                  Edit
+                  Edit Investment
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
                   <Trash2 className="mr-2 h-4 w-4" />

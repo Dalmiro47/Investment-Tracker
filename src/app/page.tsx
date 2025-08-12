@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [deletingInvestmentId, setDeletingInvestmentId] = useState<string | null>(null);
 
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [historyDialogView, setHistoryDialogView] = useState<'list' | 'form'>('list');
   const [viewingHistoryInvestment, setViewingHistoryInvestment] = useState<Investment | undefined>(undefined);
 
   const fetchAllData = async (userId: string) => {
@@ -159,8 +160,15 @@ export default function DashboardPage() {
 
   const handleHistoryClick = (investment: Investment) => {
     setViewingHistoryInvestment(investment);
+    setHistoryDialogView('list');
     setIsHistoryOpen(true);
   }
+
+  const handleAddTransactionClick = (investment: Investment) => {
+    setViewingHistoryInvestment(investment);
+    setHistoryDialogView('form');
+    setIsHistoryOpen(true);
+  };
   
   const handleDeleteClick = (id: string) => {
     setDeletingInvestmentId(id);
@@ -293,6 +301,7 @@ export default function DashboardPage() {
                   onEdit={() => handleEditClick(investment)}
                   onDelete={() => handleDeleteClick(investment.id)}
                   onViewHistory={() => handleHistoryClick(investment)}
+                  onAddTransaction={() => handleAddTransactionClick(investment)}
                 />
               ))}
             </div>
@@ -334,6 +343,7 @@ export default function DashboardPage() {
             onOpenChange={setIsHistoryOpen}
             investment={viewingHistoryInvestment}
             onTransactionAdded={onTransactionAdded}
+            initialView={historyDialogView}
         />
       )}
     </>
