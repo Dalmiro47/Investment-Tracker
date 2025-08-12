@@ -37,6 +37,9 @@ export interface Investment {
   interest: number;              // optional cumulated via transactions
   status: InvestmentStatus;      // Active if availableQty > 0, else Sold
 
+  createdAt?: string;
+  updatedAt?: string;
+
   // --- DEPRECATED ---
   // Kept for backwards compatibility during transition if needed, but new logic should not use them.
   initialValue?: number;
