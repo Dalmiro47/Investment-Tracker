@@ -2,7 +2,7 @@
 "use client";
 
 import { useState } from 'react';
-import type { Investment } from '@/lib/types';
+import type { Investment, TaxSettings } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -10,7 +10,7 @@ import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wa
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { dec, toNum, formatCurrency, formatQty, formatPercent, div, mul, sub, add } from '@/lib/money';
-import { getCryptoTaxInfo } from '@/lib/tax';
+import { getCryptoTaxInfo, calcEstimatedTaxDue } from '@/lib/tax';
 
 import {
   DropdownMenu,
@@ -21,8 +21,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
-import { Checkbox } from './ui/checkbox';
-import { Label } from './ui/label';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 
 
 interface InvestmentCardProps {
@@ -32,6 +31,10 @@ interface InvestmentCardProps {
   onDelete: () => void;
   onViewHistory: () => void;
   onAddTransaction: () => void;
+  taxSettings: TaxSettings | null;
+  realizedPLYear: number;
+  dividendsYear: number;
+  interestYear: number;
 }
 
 const typeIcons: Record<Investment['type'], React.ReactNode> = {
@@ -43,8 +46,19 @@ const typeIcons: Record<Investment['type'], React.ReactNode> = {
   Savings: <Wallet className="h-6 w-6" />,
 };
 
-export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete, onViewHistory, onAddTransaction }: InvestmentCardProps) {
-  const { name, type, status, ticker, purchaseDate, realizedProceeds, realizedPnL, dividends, interest } = investment;
+export default function InvestmentCard({ 
+  investment, 
+  isTaxView, 
+  onEdit, 
+  onDelete, 
+  onViewHistory, 
+  onAddTransaction,
+  taxSettings,
+  realizedPLYear,
+  dividendsYear,
+  interestYear,
+}: InvestmentCardProps) {
+  const { name, type, status, ticker, purchaseDate, realizedPnL } = investment;
   
   // --- High-Precision Calculations ---
   const purchasePrice = dec(investment.purchasePricePerUnit);
@@ -62,22 +76,32 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
   
   const performance = div(totalPL, totalCost);
 
-  const avgSellPrice = div(dec(realizedProceeds), soldQty);
+  const avgSellPrice = div(dec(investment.realizedProceeds), soldQty);
   
-  const totalIncome = add(dec(dividends ?? 0), dec(interest ?? 0));
-  const totalTaxable = add(dec(realizedPnL), totalIncome);
-
   // --- Display-ready values (rounded) ---
   const displayTotalCost = toNum(totalCost);
   const displayMarketValue = toNum(marketValue);
-  const displayRealizedValue = toNum(dec(realizedProceeds));
+  const displayRealizedValue = toNum(dec(investment.realizedProceeds));
   const displayUnrealizedPL = toNum(unrealizedPL);
   const displayRealizedPL = toNum(dec(realizedPnL));
   const displayTotalPL = toNum(totalPL);
   const displayAvgSellPrice = toNum(avgSellPrice);
 
   const isCrypto = investment.type === 'Crypto';
-  const taxInfo = isCrypto ? getCryptoTaxInfo(investment) : null;
+  const cryptoTaxInfo = isCrypto ? getCryptoTaxInfo(investment) : null;
+  
+  const estimatedTax = taxSettings ? calcEstimatedTaxDue(
+    {
+      type: investment.type,
+      realizedPL: realizedPLYear,
+      dividends: dividendsYear,
+      interest: interestYear,
+      purchaseDate: investment.purchaseDate
+    },
+    taxSettings
+  ) : null;
+  
+  const totalTaxable = realizedPLYear + dividendsYear + interestYear;
 
 
   return (
@@ -127,7 +151,7 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                         </div>
                         <div>
                             <h4 className="font-semibold">Realized P/L</h4>
-                            <p className="text-muted-foreground">Your "locked-in" profit or loss from all completed sales. <br/><code className="text-xs">Formula: (Avg. Sell Price - Buy Price) × Sold Quantity</code></p>
+                            <p className="text-muted-foreground">Your "locked-in" profit or loss from all completed sales. This value is filtered by the year you select in the summary. <br/><code className="text-xs">Formula: (Avg. Sell Price - Buy Price) × Sold Quantity</code></p>
                         </div>
                          <div>
                             <h4 className="font-semibold">Total P/L (Performance)</h4>
@@ -170,17 +194,46 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
           <div className="space-y-3 rounded-md border p-4">
             <h4 className="font-semibold text-center text-muted-foreground">Tax Report View</h4>
             <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Realized P/L</span>
-              <span className="font-mono font-semibold">{formatCurrency(displayRealizedPL)}</span>
+              <span className="text-muted-foreground">Realized P/L (Year)</span>
+              <span className="font-mono font-semibold">{formatCurrency(realizedPLYear)}</span>
             </div>
              <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Dividends/Interest</span>
-              <span className="font-mono font-semibold">{formatCurrency(toNum(totalIncome))}</span>
+              <span className="text-muted-foreground">Dividends/Interest (Year)</span>
+              <span className="font-mono font-semibold">{formatCurrency(dividendsYear + interestYear)}</span>
             </div>
-             <div className="flex justify-between items-center text-primary font-bold">
-              <span className="">Total Taxable</span>
-              <span className="font-mono">{formatCurrency(toNum(totalTaxable))}</span>
+             <div className="flex justify-between items-center text-foreground font-bold border-t pt-2 mt-1">
+              <span className="">Total Taxable Income (Year)</span>
+              <span className="font-mono">{formatCurrency(totalTaxable)}</span>
             </div>
+            {estimatedTax && (
+              <div className="flex justify-between items-center text-primary font-bold border-t pt-2 mt-1">
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span className="flex items-center gap-1.5 cursor-help">
+                          Estimated Tax Due
+                          <Info className="h-3.5 w-3.5" />
+                        </span>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-xs text-left">
+                        <div className="font-normal text-sm space-y-1">
+                          {estimatedTax.isTaxFree && (
+                            <p className="font-semibold text-green-500">Tax-free due to holding period.</p>
+                          )}
+                          <p><span className="font-semibold">Taxable Base:</span> {formatCurrency(estimatedTax.taxBase)}</p>
+                          <p><span className="font-semibold">Tax Rate (est.):</span> {formatPercent(estimatedTax.taxRate)}</p>
+                          <Separator className="my-1"/>
+                          <p><span className="font-semibold">Income Tax:</span> {formatCurrency(estimatedTax.tax)}</p>
+                          <p><span className="font-semibold">Solidarity Surcharge:</span> {formatCurrency(estimatedTax.soli)}</p>
+                          <p><span className="font-semibold">Church Tax:</span> {formatCurrency(estimatedTax.church)}</p>
+                          <p className="text-xs text-muted-foreground pt-1">Note: Capital gains allowance (€1k/2k) is applied at the portfolio summary level, not per investment.</p>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                <span className="font-mono">{formatCurrency(estimatedTax.total)}</span>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
@@ -229,19 +282,21 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
             
             <Separator />
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="text-sm text-muted-foreground">Unrealized P/L</div>
-                <div className={cn("flex items-center font-bold text-lg", displayUnrealizedPL >= 0 ? "text-green-600" : "text-destructive")}>
-                  {displayUnrealizedPL >= 0 ? <TrendingUp className="h-5 w-5 mr-1" /> : <TrendingDown className="h-5 w-5 mr-1" />}
-                  {formatCurrency(displayUnrealizedPL)}
-                </div>
+            <div className="grid grid-cols-3 gap-4 text-center">
+               <div>
+                  <div className="text-sm text-muted-foreground">Unrealized P/L</div>
+                  <div className={cn("flex items-center justify-center font-bold text-lg", displayUnrealizedPL >= 0 ? "text-green-600" : "text-destructive")}>
+                    {displayUnrealizedPL >= 0 ? <TrendingUp className="h-5 w-5 mr-1" /> : <TrendingDown className="h-5 w-5 mr-1" />}
+                    {formatCurrency(displayUnrealizedPL)}
+                  </div>
               </div>
-               <div className="text-right">
-                <div className="text-sm text-muted-foreground">Realized P/L</div>
-                 <div className={cn("font-bold text-lg text-right w-full", displayRealizedPL >= 0 ? "text-green-600" : "text-destructive")}>{formatCurrency(displayRealizedPL)}</div>
+               <div className="text-center">
+                  <div className="text-sm text-muted-foreground">Realized P/L</div>
+                  <div className={cn("font-bold text-lg text-center w-full", displayRealizedPL >= 0 ? "text-green-600" : "text-destructive")}>{formatCurrency(displayRealizedPL)}</div>
               </div>
+              <div></div>
             </div>
+
              <div className="text-center pt-2">
                 <div className="text-sm text-muted-foreground">Total P/L (Performance)</div>
                 <div className={cn("flex items-center justify-center font-bold text-xl", displayTotalPL >= 0 ? "text-green-600" : "text-destructive")}>
@@ -257,18 +312,18 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                 Purchased on {format(parseISO(purchaseDate), 'dd MMM yyyy')}
             </div>
           )}
-          {isCrypto && taxInfo?.taxFreeDate && (
+          {isCrypto && cryptoTaxInfo?.taxFreeDate && (
              <div className="flex items-center gap-1.5 mt-2">
-                {taxInfo.isEligibleNow ? (
+                {cryptoTaxInfo.isEligibleNow ? (
                     <span className="flex items-center gap-1 font-medium text-green-500">
                         <CheckCircle2 className="h-3.5 w-3.5" />
-                        Tax-free since {format(taxInfo.taxFreeDate, 'dd MMM yyyy')} ({taxInfo.holdingPeriodYears}-year rule)
+                        Tax-free since {format(cryptoTaxInfo.taxFreeDate, 'dd MMM yyyy')} ({cryptoTaxInfo.holdingPeriodYears}-year rule)
                     </span>
                 ) : (
                     <span className="text-muted-foreground">
-                        Tax-free from {format(taxInfo.taxFreeDate, 'dd MMM yyyy')}
-                        {taxInfo.daysUntilEligible && taxInfo.daysUntilEligible > 0
-                        ? ` (in ${taxInfo.daysUntilEligible} days)`
+                        Tax-free from {format(cryptoTaxInfo.taxFreeDate, 'dd MMM yyyy')}
+                        {cryptoTaxInfo.daysUntilEligible && cryptoTaxInfo.daysUntilEligible > 0
+                        ? ` (in ${cryptoTaxInfo.daysUntilEligible} days)`
                         : ''}
                     </span>
                 )}
@@ -278,3 +333,5 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
     </Card>
   );
 }
+
+    

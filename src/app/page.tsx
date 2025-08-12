@@ -31,6 +31,7 @@ import { db } from '@/lib/firebase';
 import { doc } from 'firebase/firestore';
 import { TransactionHistoryDialog } from '@/components/transaction-history-dialog';
 import { performancePct } from '@/lib/types';
+import { calculatePositionMetrics } from '@/lib/portfolio';
 
 
 export default function DashboardPage() {
@@ -62,6 +63,9 @@ export default function DashboardPage() {
     filingStatus: 'single',
     cryptoMarginalRate: 0.30,
   });
+
+  const [yearFilter, setYearFilter] = useState<YearFilter>({ kind: 'all' });
+
 
   const fetchAllData = async (userId: string) => {
     setLoading(true);
@@ -156,6 +160,17 @@ export default function DashboardPage() {
     });
   }, [investments, typeFilter, statusFilter, sortKey]);
 
+  const investmentMetrics = useMemo(() => {
+    const metricsMap = new Map<string, ReturnType<typeof calculatePositionMetrics>>();
+    if (Object.keys(transactionsMap).length > 0) {
+      filteredAndSortedInvestments.forEach(inv => {
+        const metrics = calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], yearFilter);
+        metricsMap.set(inv.id, metrics);
+      });
+    }
+    return metricsMap;
+  }, [filteredAndSortedInvestments, transactionsMap, yearFilter]);
+
   const handleAddClick = () => {
     setEditingInvestment(undefined);
     setIsFormOpen(true);
@@ -246,6 +261,8 @@ export default function DashboardPage() {
             sellYears={sellYears} 
             isTaxView={isTaxView}
             taxSettings={taxSettings}
+            yearFilter={yearFilter}
+            onYearFilterChange={setYearFilter}
           />
           <div className="mt-8 mb-8 p-4 bg-card/50 rounded-lg shadow-sm">
             <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -311,17 +328,24 @@ export default function DashboardPage() {
             </div>
           ) : filteredAndSortedInvestments.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredAndSortedInvestments.map(investment => (
-                <InvestmentCard 
-                  key={investment.id} 
-                  investment={investment} 
-                  isTaxView={isTaxView}
-                  onEdit={() => handleEditClick(investment)}
-                  onDelete={() => handleDeleteClick(investment.id)}
-                  onViewHistory={() => handleHistoryClick(investment)}
-                  onAddTransaction={() => handleAddTransactionClick(investment)}
-                />
-              ))}
+              {filteredAndSortedInvestments.map(investment => {
+                const metrics = investmentMetrics.get(investment.id);
+                return (
+                  <InvestmentCard 
+                    key={investment.id} 
+                    investment={investment} 
+                    isTaxView={isTaxView}
+                    onEdit={() => handleEditClick(investment)}
+                    onDelete={() => handleDeleteClick(investment.id)}
+                    onViewHistory={() => handleHistoryClick(investment)}
+                    onAddTransaction={() => handleAddTransactionClick(investment)}
+                    taxSettings={taxSettings}
+                    realizedPLYear={metrics?.realizedPLYear ?? 0}
+                    dividendsYear={metrics?.dividendsYear ?? 0}
+                    interestYear={metrics?.interestYear ?? 0}
+                  />
+                )
+              })}
             </div>
           ) : (
             <div className="text-center py-16">
@@ -377,3 +401,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    

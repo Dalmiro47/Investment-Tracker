@@ -132,3 +132,5 @@ export function performancePct(inv: Investment): number {
     
     return (totalValue - totalCost) / totalCost;
 }
+
+    

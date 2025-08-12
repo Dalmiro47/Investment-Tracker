@@ -33,19 +33,37 @@ interface PortfolioSummaryProps {
     sellYears: number[];
     isTaxView: boolean;
     taxSettings: TaxSettings | null;
+    yearFilter: YearFilter;
+    onYearFilterChange: (filter: YearFilter) => void;
 }
 
-export default function PortfolioSummary({ investments, transactionsMap, sellYears, isTaxView, taxSettings }: PortfolioSummaryProps) {
+export default function PortfolioSummary({ 
+    investments, 
+    transactionsMap, 
+    sellYears, 
+    isTaxView, 
+    taxSettings,
+    yearFilter,
+    onYearFilterChange,
+}: PortfolioSummaryProps) {
     
     const [donutMode, setDonutMode] = useState<DonutMode>('market');
-    const [yearFilter, setYearFilter] = useState<YearFilter>({ kind: 'all' });
-    const [yearViewMode, setYearViewMode] = useState<YearViewMode>('combined');
-
-    useEffect(() => {
-        if (yearFilter.kind === 'year') {
-            setYearFilter({ ...yearFilter, year: yearFilter.year, mode: yearViewMode });
+    
+    const handleYearChange = (value: string) => {
+        if (value === 'all') {
+            onYearFilterChange({ kind: 'all' });
+        } else {
+            // When changing year, keep the current mode or default to 'combined'
+            const currentMode = yearFilter.kind === 'year' ? yearFilter.mode : 'combined';
+            onYearFilterChange({ kind: 'year', year: parseInt(value), mode: currentMode });
         }
-    }, [yearViewMode]);
+    };
+
+    const handleModeChange = (mode: YearViewMode) => {
+        if (yearFilter.kind === 'year') {
+            onYearFilterChange({ ...yearFilter, mode });
+        }
+    };
 
     const summaryData: AggregatedSummary | null = useMemo(() => {
         if (investments.length === 0 || Object.keys(transactionsMap).length === 0) {
@@ -77,14 +95,6 @@ export default function PortfolioSummary({ investments, transactionsMap, sellYea
             .sort((a, b) => b.value - a.value);
 
     }, [summaryData, donutMode]);
-    
-    const handleYearChange = (value: string) => {
-        if (value === 'all') {
-            setYearFilter({ kind: 'all' });
-        } else {
-            setYearFilter({ kind: 'year', year: parseInt(value), mode: yearViewMode });
-        }
-    };
 
     if (investments.length === 0) {
         return null;
@@ -112,7 +122,7 @@ export default function PortfolioSummary({ investments, transactionsMap, sellYea
                         <CardDescription>An overview of your current portfolio performance.</CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
-                         <Select onValueChange={handleYearChange} defaultValue="all">
+                         <Select onValueChange={handleYearChange} value={yearFilter.kind === 'year' ? String(yearFilter.year) : 'all'}>
                             <SelectTrigger className="w-[180px]">
                                 <SelectValue placeholder="Select Tax Year" />
                             </SelectTrigger>
@@ -189,7 +199,7 @@ export default function PortfolioSummary({ investments, transactionsMap, sellYea
                 </div>
                 <div className="flex items-center gap-4 mt-2 mb-4">
                     {yearFilter.kind === 'year' && (
-                        <Tabs value={yearViewMode} onValueChange={(v) => setYearViewMode(v as YearViewMode)}>
+                        <Tabs value={yearFilter.mode} onValueChange={(v) => handleModeChange(v as YearViewMode)}>
                             <TabsList>
                                 <TabsTrigger value="combined">Combined</TabsTrigger>
                                 <TabsTrigger value="realized">Realized (Tax)</TabsTrigger>
@@ -360,3 +370,5 @@ export default function PortfolioSummary({ investments, transactionsMap, sellYea
         </Card>
     );
 }
+
+    

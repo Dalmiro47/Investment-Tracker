@@ -12,6 +12,64 @@ export interface TaxInfo {
   holdingPeriodYears: number;
 }
 
+export interface TaxInputs {
+  type: Investment['type'];
+  realizedPL: number;
+  dividends: number;
+  interest: number;
+  purchaseDate?: string;
+}
+
+export function calcEstimatedTaxDue(
+  inputs: TaxInputs,
+  settings: TaxSettings,
+  // Note: allowance is handled at the summary level, so we don't pass it here.
+  // This function calculates tax on the raw inputs for this *single* investment.
+): { taxBase: number; taxRate: number; tax: number; soli: number; church: number; total: number; isTaxFree: boolean; } {
+  const churchRate = settings.churchTaxRate ?? 0;
+  const soliPct = 0.055;
+  const clamp0 = (n: number) => Math.max(0, n);
+
+  let isTaxFree = false;
+
+  if (inputs.type === 'Crypto') {
+    if (inputs.purchaseDate) {
+      const pDate = parseISO(inputs.purchaseDate);
+      const holdingPeriodYears = 1; // Simplified for now
+      const taxFreeDate = addYears(pDate, holdingPeriodYears);
+      const today = new Date();
+      // A simple check if the asset *could* be sold tax-free today.
+      // The actual taxable amount comes from sales within the holding period.
+      isTaxFree = isAfter(today, taxFreeDate) || isSameDay(today, taxFreeDate);
+    }
+    
+    // For crypto, the tax base is only positive realized P/L.
+    const taxablePL = clamp0(inputs.realizedPL);
+    
+    // In a per-card view, we can't apply the €600 Freigrenze, so we calculate tax on the gain.
+    // The summary view will apply the Freigrenze to the total.
+    const base = taxablePL;
+    const incomeTax = base * (settings.cryptoMarginalRate ?? 0);
+    const soli = incomeTax * soliPct;
+    const churchTax = incomeTax * churchRate;
+    const total = incomeTax + soli + churchTax;
+
+    return { taxBase: base, taxRate: base > 0 ? total / base : 0, tax: incomeTax, soli, church: churchTax, total, isTaxFree };
+  }
+
+  // Stocks/ETFs/Savings/Bonds -> Kapitalerträge
+  const gross = clamp0(inputs.realizedPL) + clamp0(inputs.dividends) + clamp0(inputs.interest);
+  
+  // The allowance is applied at the summary level, so we calculate tax on the full gross amount here.
+  const base = gross; 
+  const capTax = base * 0.25; // Abgeltungsteuer 25%
+  const soli = capTax * soliPct; // 5.5% of the tax
+  const churchTax = capTax * churchRate; // church on the tax
+  const total = capTax + soli + churchTax;
+
+  return { taxBase: base, taxRate: base > 0 ? total / base : 0, tax: capTax, soli, church: churchTax, total, isTaxFree };
+}
+
 /**
  * Calculates tax-free eligibility dates for a crypto investment.
  */
@@ -107,3 +165,5 @@ export function taxCryptoYear(
 
   return { taxable, baseTax, soli, church, totalTax };
 }
+
+    
