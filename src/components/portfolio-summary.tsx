@@ -10,17 +10,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { TrendingUp, TrendingDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { formatCurrency, formatPercent } from '@/lib/money';
 
-
-const formatCurrency = (value: number | null | undefined) => {
-    if (value === null || value === undefined) return 'N/A';
-    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
-};
-
-const formatPercent = (value: number | null | undefined) => {
-    if (value === null || value === undefined) return 'N/A';
-    return `${value.toFixed(2)}%`;
-}
 
 const CHART_COLORS = [
     'hsl(var(--chart-1))',
@@ -36,16 +27,20 @@ export default function PortfolioSummary({ investments }: { investments: Investm
     const { summary, totals } = useMemo(() => summarizeByType(investments), [investments]);
 
     const chartData = useMemo(() => {
-        return Object.values(summary)
-            .filter(item => item.currentValue > 0)
+        // Chart should represent the composition of the *current active* portfolio value.
+        const activeInvestments = investments.filter(inv => inv.status === 'Active');
+        const activeSummary = summarizeByType(activeInvestments);
+
+        return Object.values(activeSummary.summary)
+            .filter(item => (item.currentValue - item.realizedProceeds) > 0)
             .map(item => ({
                 name: item.type,
-                value: item.currentValue,
+                value: item.currentValue - item.realizedProceeds,
                 portfolioPercentage: item.portfolioPercentage,
                 fill: CHART_COLORS[Object.keys(summary).indexOf(item.type) % CHART_COLORS.length]
             }))
             .sort((a, b) => b.value - a.value);
-    }, [summary]);
+    }, [investments, summary]);
 
     if (investments.length === 0) {
         return null;
@@ -63,9 +58,9 @@ export default function PortfolioSummary({ investments }: { investments: Investm
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Asset Type</TableHead>
-                                    <TableHead className="text-right">Cost Basis</TableHead>
-                                    <TableHead className="text-right">Market Value</TableHead>
-                                    <TableHead className="text-right">Unrealized P/L</TableHead>
+                                    <TableHead className="text-right">Total Cost</TableHead>
+                                    <TableHead className="text-right">Total Value</TableHead>
+                                    <TableHead className="text-right">Total P/L</TableHead>
                                     <TableHead className="text-right">Performance</TableHead>
                                     <TableHead className="text-right">% of Portfolio</TableHead>
                                 </TableRow>
@@ -74,28 +69,28 @@ export default function PortfolioSummary({ investments }: { investments: Investm
                                 {Object.values(summary).map(item => (
                                     <TableRow key={item.type}>
                                         <TableCell className="font-medium">{item.type}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(item.costBasis)}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(item.totalCost)}</TableCell>
                                         <TableCell className="text-right font-mono font-bold">{formatCurrency(item.currentValue)}</TableCell>
                                         <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", item.gainLoss >= 0 ? "text-green-500" : "text-destructive")}>
                                           {item.gainLoss >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                                           {formatCurrency(item.gainLoss)}
                                         </TableCell>
-                                        <TableCell className={cn("text-right font-mono", item.gainLossPercent >= 0 ? "text-green-500" : "text-destructive")}>{formatPercent(item.gainLossPercent)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatPercent(item.portfolioPercentage)}</TableCell>
+                                        <TableCell className={cn("text-right font-mono", item.gainLossPercent >= 0 ? "text-green-500" : "text-destructive")}>{formatPercent(item.gainLossPercent / 100)}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatPercent(item.portfolioPercentage / 100)}</TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
                             <TableFooter>
                                 <TableRow className="bg-muted/50 font-bold">
                                     <TableCell>Total</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(totals.costBasis)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(totals.totalCost)}</TableCell>
                                     <TableCell className="text-right font-mono">{formatCurrency(totals.currentValue)}</TableCell>
                                     <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", totals.gainLoss >= 0 ? "text-green-500" : "text-destructive")}>
                                         {totals.gainLoss >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                                         {formatCurrency(totals.gainLoss)}
                                     </TableCell>
-                                    <TableCell className={cn("text-right font-mono", totals.gainLossPercent >= 0 ? "text-green-500" : "text-destructive")}>{formatPercent(totals.gainLossPercent)}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatPercent(100)}</TableCell>
+                                    <TableCell className={cn("text-right font-mono", totals.gainLossPercent >= 0 ? "text-green-500" : "text-destructive")}>{formatPercent(totals.gainLossPercent / 100)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatPercent(1)}</TableCell>
                                 </TableRow>
                             </TableFooter>
                         </Table>
@@ -109,8 +104,8 @@ export default function PortfolioSummary({ investments }: { investments: Investm
                                     formatter={(value, name, props) => (
                                         <div className="flex flex-col">
                                             <span className="font-bold">{props.payload.name}</span>
-                                            <span>{formatCurrency(props.payload.value)}</span>
-                                            <span className="text-muted-foreground">{formatPercent(props.payload.payload.portfolioPercentage)} of portfolio</span>
+                                            <span>{formatCurrency(props.payload.value as number)}</span>
+                                            <span className="text-muted-foreground">{formatPercent((props.payload.payload as any).portfolioPercentage / 100)} of portfolio</span>
                                         </div>
                                     )}
                                 />

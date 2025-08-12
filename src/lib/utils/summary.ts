@@ -1,20 +1,21 @@
 
-
 import { availableQty } from '../types';
 import type { Investment, InvestmentType } from '@/lib/types';
 
 export interface SummaryItem {
     type: InvestmentType;
-    costBasis: number; // Represents totalCost for this summary for *active* investments
-    currentValue: number; // Represents total marketValue for this summary
+    totalCost: number;
+    currentValue: number; // Represents total marketValue + realized proceeds for this summary
+    totalReturnValue: number;
     gainLoss: number;
     gainLossPercent: number;
     portfolioPercentage: number;
 }
 
 export interface SummaryTotals {
-    costBasis: number; 
-    currentValue: number; 
+    totalCost: number; 
+    currentValue: number; // Represents total marketValue + realized proceeds for this summary
+    totalReturnValue: number;
     gainLoss: number;
     gainLossPercent: number;
 }
@@ -25,51 +26,57 @@ export interface PortfolioSummaryData {
 }
 
 export function summarizeByType(investments: Investment[]): PortfolioSummaryData {
-    // Filter out sold investments for summary of current holdings
-    const activeInvestments = investments.filter(inv => inv.status === 'Active');
-
     const summary: Record<string, any> = {};
 
-    activeInvestments.forEach(inv => {
+    investments.forEach(inv => {
         const type = inv.type;
         if (!summary[type]) {
             summary[type] = {
                 type,
-                costBasis: 0,
-                currentValue: 0, 
+                totalCost: 0,
+                currentValue: 0,
+                realizedProceeds: 0,
             };
         }
         
         const avQty = availableQty(inv);
 
-        // Cost basis of the remaining (available) quantity
-        summary[type].costBasis += inv.purchasePricePerUnit * avQty;
+        // Total original cost of all shares ever purchased for this investment
+        summary[type].totalCost += inv.purchasePricePerUnit * inv.purchaseQuantity;
 
         // Current market value of the remaining (available) quantity
-        summary[type].currentValue += (inv.currentValue ?? inv.purchasePricePerUnit) * avQty;
+        const marketValue = (inv.currentValue ?? 0) * avQty;
+        
+        // Total value = what we got from selling + what we have left
+        summary[type].currentValue += marketValue + inv.realizedProceeds;
+        summary[type].realizedProceeds += inv.realizedProceeds;
     });
 
     const totals: SummaryTotals = {
-        costBasis: 0,
+        totalCost: 0,
         currentValue: 0,
+        totalReturnValue: 0,
         gainLoss: 0,
         gainLossPercent: 0,
     };
 
     Object.values(summary).forEach(typeSum => {
-        totals.costBasis += typeSum.costBasis;
+        totals.totalCost += typeSum.totalCost;
         totals.currentValue += typeSum.currentValue;
     });
     
     // Now calculate percentages and gain/loss after we have totals
     Object.values(summary).forEach(typeSum => {
-        typeSum.gainLoss = typeSum.currentValue - typeSum.costBasis;
-        typeSum.gainLossPercent = typeSum.costBasis ? (typeSum.gainLoss / typeSum.costBasis) * 100 : 0;
-        typeSum.portfolioPercentage = totals.currentValue > 0 ? (typeSum.currentValue / totals.currentValue) * 100 : 0;
+        typeSum.gainLoss = typeSum.currentValue - typeSum.totalCost;
+        typeSum.gainLossPercent = typeSum.totalCost > 0 ? (typeSum.gainLoss / typeSum.totalCost) * 100 : 0;
+        // Portfolio percentage should be based on the current market value of ACTIVE assets, not total return value.
+        const activeMarketValue = typeSum.currentValue - typeSum.realizedProceeds;
+        const totalActiveMarketValue = totals.currentValue - Object.values(summary).reduce((acc, s) => acc + (s.realizedProceeds ?? 0), 0);
+        typeSum.portfolioPercentage = totalActiveMarketValue > 0 ? (activeMarketValue / totalActiveMarketValue) * 100 : 0;
     });
 
-    totals.gainLoss = totals.currentValue - totals.costBasis;
-    totals.gainLossPercent = totals.costBasis > 0 ? (totals.gainLoss / totals.costBasis) * 100 : 0;
+    totals.gainLoss = totals.currentValue - totals.totalCost;
+    totals.gainLossPercent = totals.totalCost > 0 ? (totals.gainLoss / totals.totalCost) * 100 : 0;
 
 
     return { summary, totals };

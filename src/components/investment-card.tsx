@@ -44,13 +44,14 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
   const soldQty = dec(investment.totalSoldQty);
   
   const availableQty = sub(purchaseQty, soldQty);
+  const totalCost = mul(purchaseQty, purchasePrice);
   
-  const purchaseValue = mul(purchaseQty, purchasePrice);
   const marketValue = mul(availableQty, currentPrice);
 
   const unrealizedPL = mul(availableQty, sub(currentPrice, purchasePrice));
   const totalPL = add(unrealizedPL, dec(realizedPnL));
-  const performance = div(totalPL, purchaseValue);
+  
+  const performance = div(totalPL, totalCost);
 
   const avgSellPrice = div(dec(realizedProceeds), soldQty);
   
@@ -58,7 +59,7 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
   const totalTaxable = add(dec(realizedPnL), totalIncome);
 
   // --- Display-ready values (rounded) ---
-  const displayPurchaseValue = toNum(purchaseValue);
+  const displayTotalCost = toNum(totalCost);
   const displayMarketValue = toNum(marketValue);
   const displayRealizedValue = toNum(dec(realizedProceeds));
   const displayUnrealizedPL = toNum(unrealizedPL);
@@ -124,8 +125,8 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
           <div className="space-y-4">
              <div className="grid grid-cols-2 gap-2">
                 <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md">
-                    <span className="text-xs text-muted-foreground">Purchase Value</span>
-                    <span className="font-headline text-xl font-bold">{formatCurrency(displayPurchaseValue)}</span>
+                    <span className="text-xs text-muted-foreground">Total Cost</span>
+                    <span className="font-headline text-xl font-bold">{formatCurrency(displayTotalCost)}</span>
                 </div>
                  <div className="flex flex-col items-center justify-center p-3 bg-primary/10 rounded-md">
                     <span className="text-xs text-muted-foreground">{status === 'Sold' ? 'Realized Value' : 'Market Value'}</span>
@@ -181,7 +182,7 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
               </div>
             </div>
              <div className="text-center pt-2">
-                <div className="text-sm text-muted-foreground">Total P/L</div>
+                <div className="text-sm text-muted-foreground">Total P/L (Performance)</div>
                 <div className={cn("flex items-center justify-center font-bold text-xl", displayTotalPL >= 0 ? "text-green-600" : "text-destructive")}>
                   {formatCurrency(displayTotalPL)} ({formatPercent(performance)})
                 </div>

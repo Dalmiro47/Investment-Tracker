@@ -1,3 +1,4 @@
+
 import Big from 'big.js';
 
 // 20 decimals should be plenty; round half up like banks
@@ -6,13 +7,12 @@ Big.RM = Big.roundHalfUp;
 
 export const dec = (n?: number | string | null) => new Big(n ?? 0);
 
-export const add = (a: number | string, b: number | string) => dec(a).plus(dec(b));
-export const sub = (a: number | string, b: number | string) => dec(a).minus(dec(b));
-export const mul = (a: number | string, b: number | string) => dec(a).times(dec(b));
-export const div = (a: number | string, b: number | string) => {
-    const divisor = dec(b);
-    if (divisor.eq(0)) return dec(0); // Avoid division by zero
-    return dec(a).div(divisor);
+export const add = (a: Big, b: Big) => a.plus(b);
+export const sub = (a: Big, b: Big) => a.minus(b);
+export const mul = (a: Big, b: Big) => a.times(b);
+export const div = (a: Big, b: Big) => {
+    if (b.eq(0)) return dec(0); // Avoid division by zero
+    return a.div(b);
 }
 
 
@@ -29,7 +29,9 @@ export const formatQty = (n: number | Big) => {
     return toLocale(num, { maximumFractionDigits: 8 });
 }
 
-export const formatPercent = (n: number | Big) => {
+export const formatPercent = (n: number | Big | null | undefined) => {
+    if (n === null || n === undefined) return '0.00%';
     const num = typeof n === 'number' ? n : toNum(n, 4);
-    return toLocale(num * 100, { maximumFractionDigits: 2 }) + '%';
+    if (!isFinite(num)) return '0.00%';
+    return toLocale(num, { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
