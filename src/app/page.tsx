@@ -2,8 +2,8 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
-import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction } from '@/lib/types';
-import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments } from '@/lib/firestore';
+import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter } from '@/lib/types';
+import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
@@ -37,6 +37,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [transactionsMap, setTransactionsMap] = useState<Record<string, Transaction[]>>({});
+  const [sellYears, setSellYears] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTaxView, setIsTaxView] = useState(false);
@@ -56,8 +57,14 @@ export default function DashboardPage() {
   const fetchAllData = async (userId: string) => {
     setLoading(true);
     try {
-      const userInvestments = await getInvestments(userId);
+      const [userInvestments, years] = await Promise.all([
+        getInvestments(userId),
+        getSellYears(userId),
+      ]);
+      
       setInvestments(userInvestments);
+      setSellYears(years);
+
       if (userInvestments.length > 0) {
         const txMap = await getAllTransactionsForInvestments(userId, userInvestments);
         setTransactionsMap(txMap);
@@ -65,8 +72,8 @@ export default function DashboardPage() {
         setTransactionsMap({});
       }
     } catch(error) {
-       console.error("Error fetching investments:", error);
-       toast({ title: "Error", description: "Could not fetch investments.", variant: "destructive" });
+       console.error("Error fetching page data:", error);
+       toast({ title: "Error", description: "Could not fetch portfolio data.", variant: "destructive" });
     } finally {
       setLoading(false);
     }
@@ -213,7 +220,7 @@ export default function DashboardPage() {
       <div className="min-h-screen w-full bg-background">
         <DashboardHeader isTaxView={isTaxView} onTaxViewChange={setIsTaxView} />
         <main className="p-4 sm:p-6 lg:p-8">
-          <PortfolioSummary investments={investments} transactionsMap={transactionsMap} />
+          <PortfolioSummary investments={investments} transactionsMap={transactionsMap} sellYears={sellYears} />
           <div className="mt-8 mb-8 p-4 bg-card/50 rounded-lg shadow-sm">
             <div className="flex flex-col sm:flex-row items-center gap-4">
               <div className="flex items-center gap-2">

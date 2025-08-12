@@ -2,6 +2,7 @@
 
 
 
+
 import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query, where, getDocs, collectionGroup } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues } from './types';
@@ -89,6 +90,34 @@ export async function getAllTransactionsForInvestments(
   
   return transactionsMap;
 }
+
+export async function getSellYears(userId: string): Promise<number[]> {
+  const q = query(collectionGroup(db, 'transactions'), where('type', '==', 'Sell'));
+  // Note: This queries across all investments for the user if rules allow.
+  // Assuming a structure where transactions are under a user's collection, this needs security rules.
+  // For now, we'll implement it by fetching all transactions and filtering client-side as it's simpler
+  // without modifying security rules.
+  const allInvestments = await getInvestments(userId);
+  const txMap = await getAllTransactionsForInvestments(userId, allInvestments);
+
+  const years = new Set<number>();
+  Object.values(txMap).flat().forEach(tx => {
+    if (tx.type === 'Sell') {
+      years.add(new Date(tx.date).getFullYear());
+    }
+  });
+
+  const sortedYears = Array.from(years).sort((a, b) => b - a);
+
+  // Ensure current year is included if no sales have been made
+  const currentYear = new Date().getFullYear();
+  if (!sortedYears.includes(currentYear)) {
+    sortedYears.push(currentYear);
+  }
+
+  return sortedYears.sort((a,b) => b-a);
+}
+
 
 export async function addTransaction(uid: string, invId: string, t: TransactionFormValues) {
   await runTransaction(db, async (tx) => {

@@ -1,19 +1,19 @@
 
-import type { Investment, Transaction, InvestmentType } from '@/lib/types';
+import type { Investment, Transaction, YearFilter } from '@/lib/types';
 import { dec, add, sub, mul, div, toNum } from '@/lib/money';
 
 export interface PositionMetrics {
   buyQty: number;
   buyPrice: number;
-  soldQty: number;
+  soldQtyAll: number;
   availableQty: number;
   purchaseValue: number;
-  costBasis: number;
   marketValue: number;
-  realizedProceeds: number;
-  realizedPL: number;
+  realizedPLAll: number;
+  realizedPLYear: number;
   unrealizedPL: number;
-  totalPL: number;
+  realizedPLDisplay: number;
+  totalPLDisplay: number;
   performancePct: number;
   type: string;
 }
@@ -21,48 +21,64 @@ export interface PositionMetrics {
 export function calculatePositionMetrics(
   inv: Investment,
   txs: Transaction[],
-  currentPrice: number | null
+  currentPrice: number | null,
+  filter: YearFilter
 ): PositionMetrics {
+  
+  const zeroMetrics: Omit<PositionMetrics, 'type'> = {
+    buyQty: 0, buyPrice: 0, soldQtyAll: 0, availableQty: 0, purchaseValue: 0, marketValue: 0,
+    realizedPLAll: 0, realizedPLYear: 0, unrealizedPL: 0, realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0
+  };
+
+  // Find the initial purchase transaction. For simplicity, we use the embedded purchase data.
+  if (!inv.purchaseQuantity || inv.purchaseQuantity <= 0) {
+    return { ...zeroMetrics, type: inv.type };
+  }
 
   const buyQty = dec(inv.purchaseQuantity);
   const buyPrice = dec(inv.purchasePricePerUnit);
-  
-  const sells = txs.filter(t => t.type === 'Sell');
-  const soldQtyDec = sells.reduce((sum, t) => add(sum, dec(t.quantity)), dec(0));
-  
-  // Clamp sold quantity for calculations to not exceed buy quantity
-  const effectiveSoldQty = soldQtyDec.gt(buyQty) ? buyQty : soldQtyDec;
-  
-  const availableQty = sub(buyQty, effectiveSoldQty);
-
   const purchaseValue = mul(buyQty, buyPrice);
-  const costBasis = mul(availableQty, buyPrice);
-  
-  const marketValue = mul(availableQty, dec(currentPrice ?? 0));
 
-  const realizedProceeds = sells.reduce((sum, t) => add(sum, dec(t.totalAmount)), dec(0));
+  const sells = txs.filter(t => t.type === 'Sell');
   
-  const sellCostBasis = mul(effectiveSoldQty, buyPrice);
-  const realizedPL = sub(realizedProceeds, sellCostBasis);
+  // All-time calculations
+  const soldQtyAll = sells.reduce((sum, t) => add(sum, dec(t.quantity)), dec(0));
+  const realizedProceedsAll = sells.reduce((sum, t) => add(sum, dec(t.totalAmount)), dec(0));
+  const sellCostBasisAll = mul(soldQtyAll.gt(buyQty) ? buyQty : soldQtyAll, buyPrice);
+  const realizedPLAll = sub(realizedProceedsAll, sellCostBasisAll);
   
+  // Year-filtered calculations
+  let realizedPLYear = dec(0);
+  if (filter.kind === 'year') {
+    const sellsInYear = sells.filter(t => new Date(t.date).getFullYear() === filter.year);
+    const soldQtyYear = sellsInYear.reduce((sum, t) => add(sum, dec(t.quantity)), dec(0));
+    const realizedProceedsYear = sellsInYear.reduce((sum, t) => add(sum, dec(t.totalAmount)), dec(0));
+    const sellCostBasisYear = mul(soldQtyYear, buyPrice); // Assuming FIFO from the single buy
+    realizedPLYear = sub(realizedProceedsYear, sellCostBasisYear);
+  }
+
+  const availableQty = buyQty.sub(soldQtyAll).gt(0) ? buyQty.sub(soldQtyAll) : dec(0);
+  const costBasis = mul(availableQty, buyPrice);
+  const marketValue = mul(availableQty, dec(currentPrice ?? 0));
   const unrealizedPL = sub(marketValue, costBasis);
-  
-  const totalPL = add(realizedPL, unrealizedPL);
-  
-  const performancePct = purchaseValue.gt(0) ? div(totalPL, purchaseValue) : dec(0);
+
+  // Display-logic metrics
+  const realizedPLDisplay = filter.kind === 'all' ? realizedPLAll : realizedPLYear;
+  const totalPLDisplay = add(realizedPLDisplay, unrealizedPL);
+  const performancePct = purchaseValue.gt(0) ? div(totalPLDisplay, purchaseValue) : dec(0);
 
   return {
     buyQty: toNum(buyQty, 8),
     buyPrice: toNum(buyPrice),
-    soldQty: toNum(soldQtyDec, 8), // Report the actual sold quantity
+    soldQtyAll: toNum(soldQtyAll, 8),
     availableQty: toNum(availableQty, 8),
     purchaseValue: toNum(purchaseValue),
-    costBasis: toNum(costBasis),
     marketValue: toNum(marketValue),
-    realizedProceeds: toNum(realizedProceeds),
-    realizedPL: toNum(realizedPL),
+    realizedPLAll: toNum(realizedPLAll),
+    realizedPLYear: toNum(realizedPLYear),
     unrealizedPL: toNum(unrealizedPL),
-    totalPL: toNum(totalPL),
+    realizedPLDisplay: toNum(realizedPLDisplay),
+    totalPLDisplay: toNum(totalPLDisplay),
     performancePct: toNum(performancePct, 4),
     type: inv.type,
   };
@@ -86,16 +102,14 @@ export interface SummaryResult {
 
 export function aggregateByType(
   investments: Investment[],
-  transactionsMap: Record<string, Transaction[]>
+  transactionsMap: Record<string, Transaction[]>,
+  filter: YearFilter
 ): SummaryResult {
   const metricsPerInvestment: PositionMetrics[] = investments
     .map(inv => {
-      // For now, we assume a single purchase transaction is embedded in the investment data itself.
-      // A more robust solution might find the earliest "Buy" tx if they were stored separately.
       if (!inv.purchaseQuantity || inv.purchaseQuantity <= 0) return null;
-      
       const txs = transactionsMap[inv.id] ?? [];
-      return calculatePositionMetrics(inv, txs, inv.currentValue);
+      return calculatePositionMetrics(inv, txs, inv.currentValue, filter);
     })
     .filter((p): p is PositionMetrics => p !== null);
 
@@ -107,19 +121,19 @@ export function aggregateByType(
         type: p.type,
         costBasis: dec(0),
         marketValue: dec(0),
-        realizedPL: dec(0),
+        realizedPL: dec(0), // Corresponds to realizedPLDisplay
         unrealizedPL: dec(0),
-        totalPL: dec(0),
-        purchaseValue: dec(0), // for perf calculation
+        totalPL: dec(0),    // Corresponds to totalPLDisplay
+        purchaseValue: dec(0),
       };
     }
     
     const t = byType[p.type];
-    t.costBasis = add(t.costBasis, dec(p.costBasis));
+    t.costBasis = add(t.costBasis, mul(dec(p.availableQty), dec(p.buyPrice)));
     t.marketValue = add(t.marketValue, dec(p.marketValue));
-    t.realizedPL = add(t.realizedPL, dec(p.realizedPL));
+    t.realizedPL = add(t.realizedPL, dec(p.realizedPLDisplay));
     t.unrealizedPL = add(t.unrealizedPL, dec(p.unrealizedPL));
-    t.totalPL = add(t.totalPL, dec(p.totalPL));
+    t.totalPL = add(t.totalPL, dec(p.totalPLDisplay));
     t.purchaseValue = add(t.purchaseValue, dec(p.purchaseValue));
   });
   
@@ -141,7 +155,6 @@ export function aggregateByType(
     unrealizedPL: acc.unrealizedPL + row.unrealizedPL,
     totalPL: acc.totalPL + row.totalPL,
     economicValue: acc.economicValue + row.economicValue,
-    // temp values for final calculation
     purchaseValue: acc.purchaseValue + (byType[row.type].purchaseValue ? toNum(byType[row.type].purchaseValue) : 0),
   }), { 
       costBasis: 0, marketValue: 0, realizedPL: 0, unrealizedPL: 0, totalPL: 0, 

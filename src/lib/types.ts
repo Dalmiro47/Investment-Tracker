@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 export type InvestmentType = 'Stock' | 'Bond' | 'Crypto' | 'Real Estate' | 'ETF' | 'Savings';
@@ -5,6 +6,9 @@ export type InvestmentStatus = 'Active' | 'Sold';
 export type SortKey = 'purchaseDate' | 'performance' | 'totalAmount';
 
 export type TransactionType = 'Sell' | 'Dividend' | 'Interest';
+
+export type YearFilter = { kind: 'all' } | { kind: 'year'; year: number };
+
 
 export interface Transaction {
   id: string;
