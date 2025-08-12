@@ -4,10 +4,11 @@ import type { Investment } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History, PlusCircle } from 'lucide-react';
+import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History, PlusCircle, Info, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { dec, toNum, formatCurrency, formatQty, formatPercent, div, mul, sub, add } from '@/lib/money';
+import { getCryptoTaxInfo } from '@/lib/tax';
 
 import {
   DropdownMenu,
@@ -17,6 +18,8 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { Button } from './ui/button';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+
 
 interface InvestmentCardProps {
   investment: Investment;
@@ -68,6 +71,10 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
   const displayRealizedPL = toNum(dec(realizedPnL));
   const displayTotalPL = toNum(totalPL);
   const displayAvgSellPrice = toNum(avgSellPrice);
+
+  const isCrypto = investment.type === 'Crypto';
+  const taxInfo = isCrypto ? getCryptoTaxInfo(investment) : null;
+
 
   return (
     <Card className="flex flex-col transition-all hover:shadow-lg hover:-translate-y-1">
@@ -197,11 +204,40 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
           </div>
         )}
       </CardContent>
-      {purchaseDate && (
-        <CardFooter className="text-xs text-muted-foreground pt-4">
-            Purchased on {format(parseISO(purchaseDate), 'dd MMM yyyy')}
+      <CardFooter className="flex-col items-start text-xs text-muted-foreground pt-4">
+          {purchaseDate && (
+            <div>
+                Purchased on {format(parseISO(purchaseDate), 'dd MMM yyyy')}
+            </div>
+          )}
+          {isCrypto && taxInfo?.taxFreeDate && (
+             <div className="flex items-center gap-1.5 mt-2">
+                {taxInfo.isEligibleNow ? (
+                    <span className="flex items-center gap-1 font-medium text-green-500">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                        Tax-free eligible since {format(taxInfo.taxFreeDate, 'dd MMM yyyy')}
+                    </span>
+                ) : (
+                    <span className="text-muted-foreground">
+                        Tax-free from {format(taxInfo.taxFreeDate, 'dd MMM yyyy')}
+                        {taxInfo.daysUntilEligible && taxInfo.daysUntilEligible > 0
+                        ? ` (in ${taxInfo.daysUntilEligible} days)`
+                        : ''}
+                    </span>
+                )}
+                 <TooltipProvider>
+                    <Tooltip>
+                        <TooltipTrigger asChild>
+                            <Info className="h-3.5 w-3.5 cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-xs">
+                            <p>Germany: private crypto sales may become tax-free after a 1-year holding period. This is an estimate, not tax advice.</p>
+                        </TooltipContent>
+                    </Tooltip>
+                 </TooltipProvider>
+             </div>
+          )}
         </CardFooter>
-      )}
     </Card>
   );
 }
