@@ -7,7 +7,8 @@ import { Separator } from '@/components/ui/separator';
 import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
-import { availableQty, unrealizedPnL, performancePct } from '@/lib/types';
+import { dec, toNum, formatCurrency, formatQty, formatPercent, div, mul, sub, add } from '@/lib/money';
+
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -33,35 +34,37 @@ const typeIcons: Record<Investment['type'], React.ReactNode> = {
   Savings: <Wallet className="h-6 w-6" />,
 };
 
-const formatCurrency = (value: number | null | undefined, maximumFractionDigits = 2) => {
-    if (value === null || value === undefined) return 'N/A';
-    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits }).format(value);
-};
-
-const formatNumber = (value: number | null | undefined, maximumFractionDigits = 4) => {
-  if (value === null || value === undefined) return 'N/A';
-  return new Intl.NumberFormat('de-DE', { maximumFractionDigits }).format(value);
-}
-
-const formatPercent = (value: number | null | undefined) => {
-  if (value === null || value === undefined) return 'N/A';
-  return `${(value * 100).toFixed(2)}%`;
-}
-
 export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete, onViewHistory }: InvestmentCardProps) {
-  const { name, type, status, ticker, purchaseDate, purchaseQuantity, purchasePricePerUnit, currentValue, realizedProceeds, realizedPnL, dividends, interest, totalSoldQty } = investment;
-
-  const avQty = availableQty(investment);
-  const unrlPnL = unrealizedPnL(investment) ?? 0;
-  const totalPnL = realizedPnL + unrlPnL;
-  const perf = performancePct(investment);
-
-  const purchaseValue = purchaseQuantity * purchasePricePerUnit;
-  const marketValue = avQty * (currentValue ?? 0);
+  const { name, type, status, ticker, purchaseDate, realizedProceeds, realizedPnL, dividends, interest } = investment;
   
-  const totalIncome = (dividends ?? 0) + (interest ?? 0);
+  // --- High-Precision Calculations ---
+  const purchasePrice = dec(investment.purchasePricePerUnit);
+  const currentPrice = dec(investment.currentValue);
+  const purchaseQty = dec(investment.purchaseQuantity);
+  const soldQty = dec(investment.totalSoldQty);
+  
+  const availableQty = sub(purchaseQty, soldQty);
+  
+  const purchaseValue = mul(purchaseQty, purchasePrice);
+  const marketValue = mul(availableQty, currentPrice);
 
-  const avgSellPrice = totalSoldQty > 0 ? realizedProceeds / totalSoldQty : null;
+  const unrealizedPL = mul(availableQty, sub(currentPrice, purchasePrice));
+  const totalPL = add(unrealizedPL, dec(realizedPnL));
+  const performance = div(totalPL, purchaseValue);
+
+  const avgSellPrice = div(dec(realizedProceeds), soldQty);
+  
+  const totalIncome = add(dec(dividends ?? 0), dec(interest ?? 0));
+  const totalTaxable = add(dec(realizedPnL), totalIncome);
+
+  // --- Display-ready values (rounded) ---
+  const displayPurchaseValue = toNum(purchaseValue);
+  const displayMarketValue = toNum(marketValue);
+  const displayRealizedValue = toNum(dec(realizedProceeds));
+  const displayUnrealizedPL = toNum(unrealizedPL);
+  const displayRealizedPL = toNum(dec(realizedPnL));
+  const displayTotalPL = toNum(totalPL);
+  const displayAvgSellPrice = toNum(avgSellPrice);
 
   return (
     <Card className="flex flex-col transition-all hover:shadow-lg hover:-translate-y-1">
@@ -106,15 +109,15 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
             <h4 className="font-semibold text-center text-muted-foreground">Tax Report View</h4>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Realized P/L</span>
-              <span className="font-mono font-semibold">{formatCurrency(realizedPnL)}</span>
+              <span className="font-mono font-semibold">{formatCurrency(displayRealizedPL)}</span>
             </div>
              <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Dividends/Interest</span>
-              <span className="font-mono font-semibold">{formatCurrency(totalIncome)}</span>
+              <span className="font-mono font-semibold">{formatCurrency(toNum(totalIncome))}</span>
             </div>
              <div className="flex justify-between items-center text-primary font-bold">
               <span className="">Total Taxable</span>
-              <span className="font-mono">{formatCurrency(realizedPnL + totalIncome)}</span>
+              <span className="font-mono">{formatCurrency(toNum(totalTaxable))}</span>
             </div>
           </div>
         ) : (
@@ -122,11 +125,11 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
              <div className="grid grid-cols-2 gap-2">
                 <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md">
                     <span className="text-xs text-muted-foreground">Purchase Value</span>
-                    <span className="font-headline text-xl font-bold">{formatCurrency(purchaseValue)}</span>
+                    <span className="font-headline text-xl font-bold">{formatCurrency(displayPurchaseValue)}</span>
                 </div>
                  <div className="flex flex-col items-center justify-center p-3 bg-primary/10 rounded-md">
                     <span className="text-xs text-muted-foreground">{status === 'Sold' ? 'Realized Value' : 'Market Value'}</span>
-                    <span className="font-headline text-xl font-bold text-primary">{formatCurrency(status === 'Sold' ? realizedProceeds : marketValue)}</span>
+                    <span className="font-headline text-xl font-bold text-primary">{formatCurrency(status === 'Sold' ? displayRealizedValue : displayMarketValue)}</span>
                 </div>
             </div>
 
@@ -134,15 +137,15 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                 <div className="flex justify-around">
                     <div className="text-center">
                         <p className="text-muted-foreground">Bought</p>
-                        <p className="font-mono font-semibold">{formatNumber(purchaseQuantity)}</p>
+                        <p className="font-mono font-semibold">{formatQty(purchaseQty)}</p>
                     </div>
                      <div className="text-center">
                         <p className="text-muted-foreground">Sold</p>
-                        <p className="font-mono font-semibold">{formatNumber(totalSoldQty)}</p>
+                        <p className="font-mono font-semibold">{formatQty(soldQty)}</p>
                     </div>
                      <div className="text-center">
                         <p className="text-muted-foreground">Available</p>
-                        <p className="font-mono font-semibold">{formatNumber(avQty)}</p>
+                        <p className="font-mono font-semibold">{formatQty(availableQty)}</p>
                     </div>
                 </div>
             </div>
@@ -150,15 +153,15 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
             <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm">
                 <div className="space-y-1">
                     <p className="text-muted-foreground">Buy Price</p>
-                    <p className="font-mono font-semibold">{formatCurrency(purchasePricePerUnit)}</p>
+                    <p className="font-mono font-semibold">{formatCurrency(investment.purchasePricePerUnit)}</p>
                 </div>
                 <div className="space-y-1">
                     <p className="text-muted-foreground">Avg. Sell Price</p>
-                    <p className="font-mono font-semibold">{avgSellPrice ? formatCurrency(avgSellPrice) : 'N/A'}</p>
+                    <p className="font-mono font-semibold">{!soldQty.eq(0) ? formatCurrency(displayAvgSellPrice) : 'N/A'}</p>
                 </div>
                  <div className="space-y-1">
                     <p className="text-muted-foreground">Current Price</p>
-                    <p className="font-mono font-semibold">{formatCurrency(currentValue)}</p>
+                    <p className="font-mono font-semibold">{formatCurrency(investment.currentValue ?? 0)}</p>
                 </div>
             </div>
             
@@ -167,20 +170,20 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <div className="text-sm text-muted-foreground">Unrealized P/L</div>
-                <div className={cn("flex items-center font-bold text-lg", unrlPnL >= 0 ? "text-green-600" : "text-destructive")}>
-                  {unrlPnL >= 0 ? <TrendingUp className="h-5 w-5 mr-1" /> : <TrendingDown className="h-5 w-5 mr-1" />}
-                  {formatCurrency(unrlPnL)}
+                <div className={cn("flex items-center font-bold text-lg", displayUnrealizedPL >= 0 ? "text-green-600" : "text-destructive")}>
+                  {displayUnrealizedPL >= 0 ? <TrendingUp className="h-5 w-5 mr-1" /> : <TrendingDown className="h-5 w-5 mr-1" />}
+                  {formatCurrency(displayUnrealizedPL)}
                 </div>
               </div>
                <div className="text-right">
                 <div className="text-sm text-muted-foreground">Realized P/L</div>
-                 <div className={cn("font-bold text-lg", realizedPnL >= 0 ? "text-green-600" : "text-destructive")}>{formatCurrency(realizedPnL)}</div>
+                 <div className={cn("font-bold text-lg", displayRealizedPL >= 0 ? "text-green-600" : "text-destructive")}>{formatCurrency(displayRealizedPL)}</div>
               </div>
             </div>
              <div className="text-center pt-2">
                 <div className="text-sm text-muted-foreground">Total P/L</div>
-                <div className={cn("flex items-center justify-center font-bold text-xl", totalPnL >= 0 ? "text-green-600" : "text-destructive")}>
-                  {formatCurrency(totalPnL)} ({formatPercent(perf)})
+                <div className={cn("flex items-center justify-center font-bold text-xl", displayTotalPL >= 0 ? "text-green-600" : "text-destructive")}>
+                  {formatCurrency(displayTotalPL)} ({formatPercent(performance)})
                 </div>
               </div>
           </div>
