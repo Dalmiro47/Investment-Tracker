@@ -6,11 +6,11 @@ import type { Investment, TaxSettings } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History, PlusCircle, Info, CheckCircle2 } from 'lucide-react';
+import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History, PlusCircle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, differenceInDays } from 'date-fns';
 import { dec, toNum, formatCurrency, formatQty, formatPercent, div, mul, sub, add } from '@/lib/money';
-import { getCryptoTaxInfo, calcEstimatedTaxDue } from '@/lib/tax';
+import { isCryptoSellTaxFree, estimateCardTax } from '@/lib/tax';
 
 import {
   DropdownMenu,
@@ -88,9 +88,12 @@ export default function InvestmentCard({
   const displayAvgSellPrice = toNum(avgSellPrice);
 
   const isCrypto = investment.type === 'Crypto';
-  const cryptoTaxInfo = isCrypto ? getCryptoTaxInfo(investment) : null;
+  let holdingPeriodDays: number | null = null;
+  if(purchaseDate) {
+      holdingPeriodDays = differenceInDays(new Date(), parseISO(purchaseDate));
+  }
   
-  const estimatedTax = taxSettings ? calcEstimatedTaxDue(
+  const estimatedTax = taxSettings ? estimateCardTax(
     {
       type: investment.type,
       realizedPL: realizedPLYear,
@@ -211,14 +214,14 @@ export default function InvestmentCard({
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <span className="flex items-center gap-1.5 cursor-help">
-                          Estimated Tax Due
+                          Estimated Tax Due (This Asset)
                           <Info className="h-3.5 w-3.5" />
                         </span>
                       </TooltipTrigger>
                       <TooltipContent className="max-w-xs text-left">
                         <div className="font-normal text-sm space-y-1">
                           {estimatedTax.isTaxFree && (
-                            <p className="font-semibold text-green-500">Tax-free due to holding period.</p>
+                            <p className="font-semibold text-green-500">Potentially tax-free due to holding period.</p>
                           )}
                           <p><span className="font-semibold">Taxable Base:</span> {formatCurrency(estimatedTax.taxBase)}</p>
                           <p><span className="font-semibold">Tax Rate (est.):</span> {formatPercent(estimatedTax.taxRate)}</p>
@@ -226,7 +229,8 @@ export default function InvestmentCard({
                           <p><span className="font-semibold">Income Tax:</span> {formatCurrency(estimatedTax.tax)}</p>
                           <p><span className="font-semibold">Solidarity Surcharge:</span> {formatCurrency(estimatedTax.soli)}</p>
                           <p><span className="font-semibold">Church Tax:</span> {formatCurrency(estimatedTax.church)}</p>
-                          <p className="text-xs text-muted-foreground pt-1">Note: Capital gains allowance (€1k/2k) is applied at the portfolio summary level, not per investment.</p>
+                          <Separator className="my-1"/>
+                          <p className="text-xs text-muted-foreground pt-1 font-bold">Note: Portfolio-wide allowances/thresholds are applied in the main Tax Estimate report.</p>
                         </div>
                       </TooltipContent>
                     </Tooltip>
@@ -310,28 +314,15 @@ export default function InvestmentCard({
           {purchaseDate && (
             <div>
                 Purchased on {format(parseISO(purchaseDate), 'dd MMM yyyy')}
+                {isCrypto && holdingPeriodDays !== null && ` (${holdingPeriodDays} days ago)`}
             </div>
           )}
-          {isCrypto && cryptoTaxInfo?.taxFreeDate && (
-             <div className="flex items-center gap-1.5 mt-2">
-                {cryptoTaxInfo.isEligibleNow ? (
-                    <span className="flex items-center gap-1 font-medium text-green-500">
-                        <CheckCircle2 className="h-3.5 w-3.5" />
-                        Tax-free since {format(cryptoTaxInfo.taxFreeDate, 'dd MMM yyyy')} ({cryptoTaxInfo.holdingPeriodYears}-year rule)
-                    </span>
-                ) : (
-                    <span className="text-muted-foreground">
-                        Tax-free from {format(cryptoTaxInfo.taxFreeDate, 'dd MMM yyyy')}
-                        {cryptoTaxInfo.daysUntilEligible && cryptoTaxInfo.daysUntilEligible > 0
-                        ? ` (in ${cryptoTaxInfo.daysUntilEligible} days)`
-                        : ''}
-                    </span>
-                )}
-             </div>
+          {isCrypto && isCryptoSellTaxFree(purchaseDate, new Date().toISOString(), investment.stakingOrLending ?? false) && (
+            <div className="flex items-center gap-1.5 mt-2 font-medium text-green-500">
+                Gains on sale are now tax-free (held {'>'}1 year).
+            </div>
           )}
         </CardFooter>
     </Card>
   );
 }
-
-    

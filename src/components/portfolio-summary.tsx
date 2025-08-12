@@ -10,12 +10,13 @@ import { PieChart, Pie, Cell, Tooltip } from 'recharts';
 import { TrendingUp, TrendingDown, Info, Scale } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatPercent, toNum } from '@/lib/money';
-import { aggregateByType, AggregatedSummary, TaxSummary } from '@/lib/portfolio';
+import { aggregateByType, AggregatedSummary, YearTaxSummary } from '@/lib/portfolio';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Skeleton } from './ui/skeleton';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TAX } from '@/lib/tax';
 
 
 const CHART_COLORS = [
@@ -30,13 +31,15 @@ type YearViewMode = 'combined' | 'realized' | 'holdings';
 interface TaxEstimateDialogProps {
     isOpen: boolean;
     onOpenChange: (open: boolean) => void;
-    taxSummary: TaxSummary | null;
+    taxSummary: YearTaxSummary | null;
     year: number;
     taxSettings: TaxSettings | null;
 }
 
 function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings }: TaxEstimateDialogProps) {
     if (!taxSummary || !taxSettings) return null;
+
+    const { capitalTaxResult: capital, cryptoTaxResult: crypto } = taxSummary;
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -52,26 +55,30 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                 <div className="space-y-4 text-sm py-4">
                     {/* Capital Gains */}
                     <div className="p-3 rounded-md bg-muted/50 border">
-                        <h4 className="font-semibold mb-2">Capital Income (Stocks, ETFs, Interest)</h4>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Taxable Income</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.taxable)}</span></div>
-                        <div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Allowance Used</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.allowanceUsed)}</span></div>
+                        <h4 className="font-semibold mb-2">Capital Income (§20 EStG)</h4>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Total Capital Income</span> <span className="font-mono">{formatCurrency(capital.allowance + capital.taxableBase)}</span></div>
+                        <div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Allowance Used</span> <span className="font-mono">- {formatCurrency(capital.allowanceUsed)}</span></div>
+                        <div className="border-t my-1"></div>
+                        <div className="flex justify-between font-medium"><span className="">Taxable Base</span> <span className="font-mono">{formatCurrency(capital.taxableBase)}</span></div>
                         <div className="border-t my-2"></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Base Tax (25%)</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.baseTax)}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.soli)}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.church)}</span></div>
-                        <div className="flex justify-between font-bold mt-1"><span className="">Total Capital Tax</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.totalTax)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Base Tax ({formatPercent(TAX.abgeltungsteuer)})</span> <span className="font-mono">{formatCurrency(capital.baseTax)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge</span> <span className="font-mono">{formatCurrency(capital.soli)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax</span> <span className="font-mono">{formatCurrency(capital.church)}</span></div>
+                        <div className="flex justify-between font-bold mt-1"><span className="">Total Capital Tax</span> <span className="font-mono">{formatCurrency(capital.total)}</span></div>
                     </div>
 
                     {/* Crypto */}
                     <div className="p-3 rounded-md bg-muted/50 border">
-                        <h4 className="font-semibold mb-2">Crypto Private Sales</h4>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Taxable Gains</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.taxable)}</span></div>
-                        <div className="text-xs text-muted-foreground pl-2">After €600 threshold</div>
+                        <h4 className="font-semibold mb-2">Crypto Private Sales (§23 EStG)</h4>
+                         <div className="flex justify-between"><span className="text-muted-foreground">Short-term Gains</span> <span className="font-mono">{formatCurrency(crypto.thresholdUsed + crypto.taxableBase)}</span></div>
+                        <div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Threshold Used</span> <span className="font-mono">- {formatCurrency(crypto.thresholdUsed)}</span></div>
+                         <div className="border-t my-1"></div>
+                        <div className="flex justify-between font-medium"><span className="">Taxable Base</span> <span className="font-mono">{formatCurrency(crypto.taxableBase)}</span></div>
                         <div className="border-t my-2"></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Base Tax ({formatPercent(taxSettings.cryptoMarginalRate)})</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.baseTax)}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.soli)}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.church)}</span></div>
-                        <div className="flex justify-between font-bold mt-1"><span className="">Total Crypto Tax</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.totalTax)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Income Tax ({formatPercent(taxSettings.cryptoMarginalRate)})</span> <span className="font-mono">{formatCurrency(crypto.incomeTax)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge</span> <span className="font-mono">{formatCurrency(crypto.soli)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax</span> <span className="font-mono">{formatCurrency(crypto.church)}</span></div>
+                        <div className="flex justify-between font-bold mt-1"><span className="">Total Crypto Tax</span> <span className="font-mono">{formatCurrency(crypto.total)}</span></div>
                     </div>
                     
                     {/* Grand Total */}

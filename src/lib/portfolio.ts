@@ -1,7 +1,8 @@
 
 import type { Investment, Transaction, YearFilter, TaxSettings } from '@/lib/types';
 import { dec, add, sub, mul, div, toNum } from '@/lib/money';
-import { isCryptoSellTaxFree, taxCapitalIncome, taxCryptoYear, SPARER_PAUSCHBETRAG } from './tax';
+import { isCryptoSellTaxFree, calcCapitalTax, calcCryptoTax, CapitalTaxResult, CryptoTaxResult } from './tax';
+import { differenceInDays, parseISO } from 'date-fns';
 
 export interface PositionMetrics {
   // Base metrics
@@ -18,7 +19,8 @@ export interface PositionMetrics {
   unrealizedPL: number;
   
   // Tax-specific metrics for the filtered year
-  taxableCryptoGainYear: number;
+  shortTermCryptoGainYear: number;
+  capitalGainsYear: number; // Realized P/L from stocks, etfs, bonds
   dividendsYear: number;
   interestYear: number;
 
@@ -38,8 +40,9 @@ export function calculatePositionMetrics(
   
   const zeroMetrics: Omit<PositionMetrics, 'type'> = {
     buyQty: 0, buyPrice: 0, soldQtyAll: 0, availableQty: 0, purchaseValue: 0, marketValue: 0,
-    realizedPLAll: 0, realizedPLYear: 0, unrealizedPL: 0, taxableCryptoGainYear: 0,
-    dividendsYear: 0, interestYear: 0, realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0
+    realizedPLAll: 0, realizedPLYear: 0, unrealizedPL: 0, shortTermCryptoGainYear: 0,
+    capitalGainsYear: 0, dividendsYear: 0, interestYear: 0,
+    realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0
   };
 
   if (!inv.purchaseQuantity || inv.purchaseQuantity <= 0) {
@@ -58,7 +61,8 @@ export function calculatePositionMetrics(
   const realizedPLAll = sub(realizedProceedsAll, sellCostBasisAll);
   
   let realizedPLYear = dec(0);
-  let taxableCryptoGainYear = dec(0);
+  let shortTermCryptoGainYear = dec(0);
+  let capitalGainsYear = dec(0);
   
   const dividends = txs.filter(t => t.type === 'Dividend');
   const interests = txs.filter(t => t.type === 'Interest');
@@ -74,17 +78,23 @@ export function calculatePositionMetrics(
       const sellCostBasisYear = mul(soldQtyYear, buyPrice);
       realizedPLYear = sub(realizedProceedsYear, sellCostBasisYear);
     }
-
+    
     if (inv.type === 'Crypto') {
-        sellsInYear.forEach(sell => {
-            const isTaxFree = isCryptoSellTaxFree(inv.purchaseDate, sell.date, inv.stakingOrLending ?? false);
-            if (!isTaxFree) {
-                const gainOnThisSell = mul(dec(sell.quantity), sub(dec(sell.pricePerUnit), buyPrice));
-                if (gainOnThisSell.gt(0)) { // Only add gains to the taxable amount
-                    taxableCryptoGainYear = add(taxableCryptoGainYear, gainOnThisSell);
-                }
+      sellsInYear.forEach(sell => {
+        const pDate = parseISO(inv.purchaseDate);
+        const sDate = parseISO(sell.date);
+        const holdingDays = differenceInDays(sDate, pDate);
+        
+        if (holdingDays < 365) {
+            const gainOnThisSell = mul(dec(sell.quantity), sub(dec(sell.pricePerUnit), buyPrice));
+            if (gainOnThisSell.gt(0)) {
+              shortTermCryptoGainYear = add(shortTermCryptoGainYear, gainOnThisSell);
             }
-        });
+        }
+      });
+    } else {
+        // Stocks, ETFs, Bonds are capital gains
+        capitalGainsYear = realizedPLYear;
     }
 
     dividendsYear = dividends
@@ -123,7 +133,8 @@ export function calculatePositionMetrics(
     realizedPLAll: toNum(realizedPLAll),
     realizedPLYear: toNum(realizedPLYear),
     unrealizedPL: toNum(unrealizedPL),
-    taxableCryptoGainYear: toNum(taxableCryptoGainYear),
+    shortTermCryptoGainYear: toNum(shortTermCryptoGainYear),
+    capitalGainsYear: toNum(capitalGainsYear),
     dividendsYear: toNum(dividendsYear),
     interestYear: toNum(interestYear),
     realizedPLDisplay: toNum(realizedPLDisplay),
@@ -134,9 +145,9 @@ export function calculatePositionMetrics(
 }
 
 
-export interface TaxSummary {
-  capitalGains: ReturnType<typeof taxCapitalIncome>;
-  crypto: ReturnType<typeof taxCryptoYear>;
+export interface YearTaxSummary {
+  capitalTaxResult: CapitalTaxResult;
+  cryptoTaxResult: CryptoTaxResult;
   grandTotal: number;
 }
 
@@ -161,7 +172,7 @@ export interface AggregatedSummary {
     performancePct: number;
     economicValue: number;
   };
-  taxSummary: TaxSummary | null;
+  taxSummary: YearTaxSummary | null;
 }
 
 export function aggregateByType(
@@ -249,28 +260,32 @@ export function aggregateByType(
     };
     
     // Step 3: Calculate tax summary if applicable
-    let taxSummary: TaxSummary | null = null;
+    let taxSummary: YearTaxSummary | null = null;
     if (filter.kind === 'year' && taxSettings) {
-        const capitalGainsIncome = metricsPerInvestment
-            .filter(p => p.type === 'Stock' || p.type === 'ETF')
-            .reduce((sum, p) => sum + Math.max(0, p.realizedPLYear), 0);
-        
-        const dividendIncome = metricsPerInvestment.reduce((sum, p) => sum + p.dividendsYear, 0);
-        const interestIncome = metricsPerInvestment.reduce((sum, p) => sum + p.interestYear, 0);
+        const capitalIncome = metricsPerInvestment
+            .reduce((sum, p) => sum + p.capitalGainsYear + p.dividendsYear + p.interestYear, 0);
 
-        const cryptoGains = metricsPerInvestment
-            .filter(p => p.type === 'Crypto')
-            .reduce((sum, p) => sum + p.taxableCryptoGainYear, 0);
+        const shortTermCryptoGains = metricsPerInvestment
+            .reduce((sum, p) => sum + p.shortTermCryptoGainYear, 0);
             
-        const allowance = SPARER_PAUSCHBETRAG(taxSettings.filingStatus);
+        const capitalTaxResult = calcCapitalTax({
+            year: filter.year,
+            filing: taxSettings.filingStatus,
+            churchRate: taxSettings.churchTaxRate,
+            capitalIncome: capitalIncome
+        });
         
-        const capitalGainsTaxInfo = taxCapitalIncome(capitalGainsIncome, dividendIncome, interestIncome, allowance, taxSettings);
-        const cryptoTaxInfo = taxCryptoYear(cryptoGains, taxSettings);
+        const cryptoTaxResult = calcCryptoTax({
+            year: filter.year,
+            marginalRate: taxSettings.cryptoMarginalRate,
+            churchRate: taxSettings.churchTaxRate,
+            shortTermGains: shortTermCryptoGains
+        });
 
         taxSummary = {
-            capitalGains: capitalGainsTaxInfo,
-            crypto: cryptoTaxInfo,
-            grandTotal: capitalGainsTaxInfo.totalTax + cryptoTaxInfo.totalTax,
+            capitalTaxResult,
+            cryptoTaxResult,
+            grandTotal: capitalTaxResult.total + cryptoTaxResult.total,
         };
     }
 
