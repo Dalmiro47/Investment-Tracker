@@ -1,5 +1,5 @@
 
-import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query } from 'firebase/firestore';
+import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues } from './types';
 
@@ -106,7 +106,7 @@ export async function addTransaction(uid: string, invId: string, t: TransactionF
     await runTransaction(db, async (tx) => {
         const invRef = doc(db, 'users', uid, 'investments', invId);
         const txCollectionRef = txCol(uid, invId);
-
+        
         // --- READS FIRST ---
         const invSnap = await tx.get(invRef);
         if (!invSnap.exists()) throw new Error('Investment not found');
@@ -114,7 +114,7 @@ export async function addTransaction(uid: string, invId: string, t: TransactionF
         
         const existingTxSnap = await tx.get(txCollectionRef);
         const allTransactions = existingTxSnap.docs.map(fromTxDoc);
-
+        
         // --- THEN WRITES ---
         const newTxRef = doc(txCollectionRef);
         const isSell = t.type === 'Sell';
