@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Calendar } from "@/components/ui/calendar"
-import { Investment, OldInvestmentFormValues, oldInvestmentSchema, InvestmentType } from "@/lib/types"
+import { Investment, InvestmentFormValues, investmentSchema, InvestmentType } from "@/lib/types"
 import { useEffect, useState } from "react"
 import { cn } from "@/lib/utils"
 import { CalendarIcon } from "lucide-react"
@@ -39,32 +39,24 @@ import { format } from "date-fns"
 interface InvestmentFormProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: OldInvestmentFormValues) => void;
+  onSubmit: (values: InvestmentFormValues) => void;
   investment?: Investment;
 }
 
-const tickerRequiredTypes: InvestmentType[] = ['Stock', 'ETF', 'Crypto'];
-
-const defaultFormValues: Omit<OldInvestmentFormValues, 'status'> = {
+const defaultFormValues: InvestmentFormValues = {
   name: "",
   type: "Stock",
   purchaseDate: new Date(),
-  initialValue: 0,
-  currentValue: null,
-  quantity: 1,
-  dividends: 0,
-  interest: 0,
+  purchaseQuantity: 0,
+  purchasePricePerUnit: 0,
   ticker: "",
 };
 
 
 export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: InvestmentFormProps) {
-  const form = useForm<OldInvestmentFormValues>({
-    resolver: zodResolver(oldInvestmentSchema),
-    defaultValues: {
-      ...defaultFormValues,
-      status: 'Active',
-    },
+  const form = useForm<InvestmentFormValues>({
+    resolver: zodResolver(investmentSchema),
+    defaultValues: defaultFormValues,
   })
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -73,11 +65,6 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
     control: form.control,
     name: "type",
   });
-  
-  const watchedStatus = useWatch({
-    control: form.control,
-    name: "status",
-  });
 
   useEffect(() => {
     if (isOpen) {
@@ -85,19 +72,16 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
             ? {
                 ...investment,
                 purchaseDate: new Date(investment.purchaseDate),
-                currentValue: investment.currentValue ?? null,
                 ticker: investment.ticker ?? "",
-                dividends: investment.dividends ?? 0,
-                interest: investment.interest ?? 0,
               }
-            : { ...defaultFormValues, status: 'Active', purchaseDate: new Date() };
+            : { ...defaultFormValues, purchaseDate: new Date() };
 
         form.reset(valuesToReset);
     }
   }, [investment, form, isOpen]);
 
   const isSubmitting = form.formState.isSubmitting;
-  const isTickerRequired = tickerRequiredTypes.includes(watchedType);
+  const isTickerRequired = ['Stock', 'ETF', 'Crypto'].includes(watchedType);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -216,13 +200,16 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
 
             <FormField
               control={form.control}
-              name="quantity"
+              name="purchaseQuantity"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Quantity / Units</FormLabel>
+                  <FormLabel>Purchase Quantity</FormLabel>
                   <FormControl>
                     <Input type="number" placeholder="e.g. 50" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
                   </FormControl>
+                   <FormDescription>
+                    This is a one-time entry. Sells are added later.
+                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -230,10 +217,10 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
             
             <FormField
               control={form.control}
-              name="initialValue"
+              name="purchasePricePerUnit"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Initial Value (per unit)</FormLabel>
+                  <FormLabel>Purchase Price (per unit)</FormLabel>
                   <FormControl>
                     <Input type="number" placeholder="e.g. 150.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
                   </FormControl>
@@ -242,51 +229,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
               )}
             />
             
-             <FormField
-                control={form.control}
-                name="currentValue"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Current / Sold Value (per unit)</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="e.g. 200.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || null)} value={field.value ?? ''} />
-                    </FormControl>
-                     <FormDescription>For sold items, enter the final sale price.</FormDescription>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-
-            <FormField
-              control={form.control}
-              name="dividends"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Dividends (Total)</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder="e.g. 125.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="interest"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Interest (Total)</FormLabel>
-                  <FormControl>
-                    <Input type="number" placeholder="e.g. 200.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            
-            <div className="md:col-span-2 flex justify-end gap-2">
+            <div className="md:col-span-2 flex justify-end gap-2 pt-4">
               <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
               <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? 'Saving...' : 'Save Investment'}

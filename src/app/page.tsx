@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
-import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues as OldInvestmentFormValues } from '@/lib/types';
+import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
@@ -29,6 +29,7 @@ import { writeBatch } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { doc } from 'firebase/firestore';
 import { TransactionHistoryDialog } from '@/components/transaction-history-dialog';
+import { performancePct } from '@/lib/types';
 
 
 export default function DashboardPage() {
@@ -53,9 +54,15 @@ export default function DashboardPage() {
 
   const fetchInvestments = async (userId: string) => {
     setLoading(true);
-    const userInvestments = await getInvestments(userId);
-    setInvestments(userInvestments);
-    setLoading(false);
+    try {
+      const userInvestments = await getInvestments(userId);
+      setInvestments(userInvestments);
+    } catch(error) {
+       console.error("Error fetching investments:", error);
+       toast({ title: "Error", description: "Could not fetch investments.", variant: "destructive" });
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -82,7 +89,6 @@ export default function DashboardPage() {
 
         await batch.commit();
 
-        // Wait a moment for Firestore to sync before refetching
         await new Promise(resolve => setTimeout(resolve, 300));
         await fetchInvestments(user.uid);
     }
@@ -110,13 +116,13 @@ export default function DashboardPage() {
     return filtered.sort((a, b) => {
       switch (sortKey) {
         case 'performance':
-          const performanceA = a.currentValue && a.initialValue ? (a.currentValue - a.initialValue) / a.initialValue : -Infinity;
-          const performanceB = b.currentValue && b.initialValue ? (b.currentValue - b.initialValue) / b.initialValue : -Infinity;
-          return performanceB - performanceA;
+          return performancePct(b) - performancePct(a);
         case 'totalAmount':
-          const totalA = (a.currentValue ?? 0) * a.quantity;
-          const totalB = (b.currentValue ?? 0) * b.quantity;
-          return totalB - totalA;
+           const availableA = a.purchaseQuantity - (a.totalSoldQty ?? 0);
+           const availableB = b.purchaseQuantity - (b.totalSoldQty ?? 0);
+           const totalA = (a.currentValue ?? 0) * availableA;
+           const totalB = (b.currentValue ?? 0) * availableB;
+           return totalB - totalA;
         case 'purchaseDate':
         default:
           const dateA = a.purchaseDate ? new Date(a.purchaseDate).getTime() : 0;
@@ -157,7 +163,7 @@ export default function DashboardPage() {
   }
 
 
-  const handleFormSubmit = async (values: OldInvestmentFormValues) => {
+  const handleFormSubmit = async (values: InvestmentFormValues) => {
     if (!user) return;
     
     const isEditing = !!editingInvestment;

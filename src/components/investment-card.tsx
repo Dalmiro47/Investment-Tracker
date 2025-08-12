@@ -1,15 +1,13 @@
 
 import { useState, useEffect } from 'react';
-import type { Investment, Transaction } from '@/lib/types';
+import type { Investment } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, ShieldCheck, History, Loader2 } from 'lucide-react';
+import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
-import { useAuth } from '@/hooks/use-auth';
-import { getTransactions } from '@/lib/firestore';
-import { aggregate, Agg } from '@/lib/utils/agg';
+import { format, parseISO } from 'date-fns';
+import { availableQty, unrealizedPnL, performancePct } from '@/lib/types';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -17,13 +15,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Button } from './ui/button';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-
 
 interface InvestmentCardProps {
   investment: Investment;
@@ -43,16 +34,12 @@ const typeIcons: Record<Investment['type'], React.ReactNode> = {
 };
 
 const formatCurrency = (value: number | null | undefined, maximumFractionDigits = 2) => {
-    if (value === null || value === undefined) {
-        return 'N/A';
-    }
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits }).format(value);
+    if (value === null || value === undefined) return 'N/A';
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits }).format(value);
 };
 
 const formatNumber = (value: number | null | undefined, maximumFractionDigits = 4) => {
-  if (value === null || value === undefined) {
-    return 'N/A';
-  }
+  if (value === null || value === undefined) return 'N/A';
   return new Intl.NumberFormat('de-DE', { maximumFractionDigits }).format(value);
 }
 
@@ -62,75 +49,19 @@ const formatPercent = (value: number | null | undefined) => {
 }
 
 export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete, onViewHistory }: InvestmentCardProps) {
-  const { user } = useAuth();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [agg, setAgg] = useState<Agg | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { name, type, status, ticker, purchaseDate, purchaseQuantity, purchasePricePerUnit, currentValue, realizedProceeds, realizedPnL, dividends, interest, totalSoldQty } = investment;
 
-  useEffect(() => {
-    async function fetchData() {
-      if (!user) return;
-      setLoading(true);
-      const fetchedTransactions = await getTransactions(user.uid, investment.id);
-      
-      // Manually add initial "Buy" if not present
-      const hasBuyTransaction = fetchedTransactions.some(t => t.type === 'Buy');
-      if (!hasBuyTransaction) {
-        fetchedTransactions.push({
-          id: 'initial-buy',
-          type: 'Buy',
-          date: investment.purchaseDate,
-          quantity: investment.initialValue > 0 ? (investment.totalCost ?? (investment.initialValue * investment.quantity)) / investment.initialValue : investment.quantity,
-          pricePerUnit: investment.initialValue,
-          totalAmount: investment.totalCost ?? (investment.initialValue * investment.quantity)
-        });
-        fetchedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      }
-      
-      setTransactions(fetchedTransactions);
-      setAgg(aggregate(fetchedTransactions, investment.currentValue));
-      setLoading(false);
-    }
-    fetchData();
-  }, [investment, user]);
+  const avQty = availableQty(investment);
+  const unrlPnL = unrealizedPnL(investment) ?? 0;
+  const totalPnL = realizedPnL + unrlPnL;
+  const perf = performancePct(investment);
+
+  const purchaseValue = purchaseQuantity * purchasePricePerUnit;
+  const marketValue = avQty * (currentValue ?? 0);
   
-
-  const { name, type, status, ticker, purchaseDate, dividends, interest } = investment;
-
-  if (loading || !agg) {
-    return (
-      <Card className="flex flex-col justify-between transition-all">
-        <CardHeader>
-          <div className="flex items-start justify-between">
-            <div className="flex items-center gap-3">
-              <span className="p-2 bg-secondary rounded-md text-primary">{typeIcons[type]}</span>
-              <div>
-                <CardTitle className="font-headline text-xl">{name}</CardTitle>
-                <CardDescription className="font-medium text-primary">{type} {ticker ? `(${ticker})` : ''}</CardDescription>
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant='secondary' className="animate-pulse w-12 h-6"></Badge>
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-            <div className="flex justify-center items-center h-48">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-        </CardContent>
-        {purchaseDate && (
-            <CardFooter className="text-xs text-muted-foreground">
-                Purchased on {format(new Date(purchaseDate), 'dd MMM yyyy')}
-            </CardFooter>
-      )}
-      </Card>
-    );
-  }
-
-  const isGain = agg.totalPL >= 0;
-  const capitalGains = agg.realizedPL;
   const totalIncome = (dividends ?? 0) + (interest ?? 0);
+
+  const avgSellPrice = totalSoldQty > 0 ? realizedProceeds / totalSoldQty : null;
 
   return (
     <Card className="flex flex-col transition-all hover:shadow-lg hover:-translate-y-1">
@@ -175,7 +106,7 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
             <h4 className="font-semibold text-center text-muted-foreground">Tax Report View</h4>
             <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Realized P/L</span>
-              <span className="font-mono font-semibold">{formatCurrency(agg.realizedPL)}</span>
+              <span className="font-mono font-semibold">{formatCurrency(realizedPnL)}</span>
             </div>
              <div className="flex justify-between items-center">
               <span className="text-muted-foreground">Dividends/Interest</span>
@@ -183,34 +114,19 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
             </div>
              <div className="flex justify-between items-center text-primary font-bold">
               <span className="">Total Taxable</span>
-              <span className="font-mono">{formatCurrency(agg.realizedPL + totalIncome)}</span>
+              <span className="font-mono">{formatCurrency(realizedPnL + totalIncome)}</span>
             </div>
           </div>
         ) : (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
+             <div className="grid grid-cols-2 gap-2">
                 <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md">
-                    <span className="text-xs text-muted-foreground">Total Cost</span>
-                    <span className="font-headline text-xl font-bold">{formatCurrency(agg.totalCost)}</span>
+                    <span className="text-xs text-muted-foreground">Purchase Value</span>
+                    <span className="font-headline text-xl font-bold">{formatCurrency(purchaseValue)}</span>
                 </div>
                  <div className="flex flex-col items-center justify-center p-3 bg-primary/10 rounded-md">
-                    <span className="text-xs text-muted-foreground">{status === 'Sold' ? 'Total Proceeds' : 'Market Value'}</span>
-                    <span className="font-headline text-xl font-bold text-primary">{formatCurrency(status === 'Sold' ? agg.proceeds : agg.marketValue)}</span>
-                </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm">
-                <div className="space-y-1">
-                    <p className="text-muted-foreground">Avg. Buy Price</p>
-                    <p className="font-mono font-semibold">{formatCurrency(agg.avgBuyPrice)}</p>
-                </div>
-                <div className="space-y-1">
-                    <p className="text-muted-foreground">Avg. Sell Price</p>
-                    <p className="font-mono font-semibold">{agg.avgSellPrice > 0 ? formatCurrency(agg.avgSellPrice) : 'N/A'}</p>
-                </div>
-                 <div className="space-y-1">
-                    <p className="text-muted-foreground">Current Price</p>
-                    <p className="font-mono font-semibold">{formatCurrency(investment.currentValue)}</p>
+                    <span className="text-xs text-muted-foreground">{status === 'Sold' ? 'Realized Value' : 'Market Value'}</span>
+                    <span className="font-headline text-xl font-bold text-primary">{formatCurrency(status === 'Sold' ? realizedProceeds : marketValue)}</span>
                 </div>
             </div>
 
@@ -218,59 +134,63 @@ export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete
                 <div className="flex justify-around">
                     <div className="text-center">
                         <p className="text-muted-foreground">Bought</p>
-                        <p className="font-mono font-semibold">{formatNumber(agg.buyQty)}</p>
+                        <p className="font-mono font-semibold">{formatNumber(purchaseQuantity)}</p>
                     </div>
                      <div className="text-center">
                         <p className="text-muted-foreground">Sold</p>
-                        <p className="font-mono font-semibold">{formatNumber(agg.sellQty)}</p>
+                        <p className="font-mono font-semibold">{formatNumber(totalSoldQty)}</p>
                     </div>
                      <div className="text-center">
                         <p className="text-muted-foreground">Available</p>
-                        <p className="font-mono font-semibold">{formatNumber(agg.availableQty)}</p>
+                        <p className="font-mono font-semibold">{formatNumber(avQty)}</p>
                     </div>
                 </div>
             </div>
+            
+            <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm">
+                <div className="space-y-1">
+                    <p className="text-muted-foreground">Buy Price</p>
+                    <p className="font-mono font-semibold">{formatCurrency(purchasePricePerUnit)}</p>
+                </div>
+                <div className="space-y-1">
+                    <p className="text-muted-foreground">Avg. Sell Price</p>
+                    <p className="font-mono font-semibold">{avgSellPrice ? formatCurrency(avgSellPrice) : 'N/A'}</p>
+                </div>
+                 <div className="space-y-1">
+                    <p className="text-muted-foreground">Current Price</p>
+                    <p className="font-mono font-semibold">{formatCurrency(currentValue)}</p>
+                </div>
+            </div>
+            
+            <Separator />
 
-            {status === 'Active' ? (
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-sm text-muted-foreground">Unrealized P/L</div>
-                    <div className={cn("flex items-center font-bold text-lg", agg.unrealizedPL >= 0 ? "text-green-600" : "text-destructive")}>
-                      {agg.unrealizedPL >= 0 ? <TrendingUp className="h-5 w-5 mr-1" /> : <TrendingDown className="h-5 w-5 mr-1" />}
-                      {formatCurrency(agg.unrealizedPL)}
-                    </div>
-                  </div>
-                   <div className="text-right">
-                    <div className="text-sm text-muted-foreground">Realized P/L</div>
-                     <div className="font-bold text-lg">{formatCurrency(agg.realizedPL)}</div>
-                  </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-sm text-muted-foreground">Unrealized P/L</div>
+                <div className={cn("flex items-center font-bold text-lg", unrlPnL >= 0 ? "text-green-600" : "text-destructive")}>
+                  {unrlPnL >= 0 ? <TrendingUp className="h-5 w-5 mr-1" /> : <TrendingDown className="h-5 w-5 mr-1" />}
+                  {formatCurrency(unrlPnL)}
                 </div>
-            ) : (
-                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <div className="text-sm text-muted-foreground">Realized P/L</div>
-                    <div className={cn("flex items-center font-bold text-lg", agg.realizedPL >= 0 ? "text-green-600" : "text-destructive")}>
-                      {agg.realizedPL >= 0 ? <TrendingUp className="h-5 w-5 mr-1" /> : <TrendingDown className="h-5 w-5 mr-1" />}
-                      {formatCurrency(agg.realizedPL)}
-                    </div>
-                  </div>
-                   <div className="text-right">
-                    <div className="text-sm text-muted-foreground">Performance</div>
-                     <div className={cn("font-bold text-lg", isGain ? "text-green-600" : "text-destructive")}>
-                        {formatPercent(agg.perfPct)}
-                     </div>
-                  </div>
+              </div>
+               <div className="text-right">
+                <div className="text-sm text-muted-foreground">Realized P/L</div>
+                 <div className={cn("font-bold text-lg", realizedPnL >= 0 ? "text-green-600" : "text-destructive")}>{formatCurrency(realizedPnL)}</div>
+              </div>
+            </div>
+             <div className="text-center pt-2">
+                <div className="text-sm text-muted-foreground">Total P/L</div>
+                <div className={cn("flex items-center justify-center font-bold text-xl", totalPnL >= 0 ? "text-green-600" : "text-destructive")}>
+                  {formatCurrency(totalPnL)} ({formatPercent(perf)})
                 </div>
-            )}
+              </div>
           </div>
         )}
       </CardContent>
       {purchaseDate && (
         <CardFooter className="text-xs text-muted-foreground pt-4">
-            First purchased on {format(new Date(purchaseDate), 'dd MMM yyyy')}
+            Purchased on {format(parseISO(purchaseDate), 'dd MMM yyyy')}
         </CardFooter>
       )}
     </Card>
   );
 }
-
