@@ -43,6 +43,7 @@ export function calculatePositionMetrics(
   
   const soldQtyAll = sells.reduce((sum, t) => add(sum, dec(t.quantity)), dec(0));
   const realizedProceedsAll = sells.reduce((sum, t) => add(sum, dec(t.totalAmount)), dec(0));
+  // If soldQty > buyQty (bad data), use min(soldQty, buyQty) for cost in realized P/L.
   const sellCostBasisAll = mul(soldQtyAll.gt(buyQty) ? buyQty : soldQtyAll, buyPrice);
   const realizedPLAll = sub(realizedProceedsAll, sellCostBasisAll);
   
@@ -107,43 +108,32 @@ export function aggregateByType(
   transactionsMap: Record<string, Transaction[]>,
   filter: YearFilter
 ): SummaryResult {
-  let metricsPerInvestment: PositionMetrics[] = investments
-    .map(inv => {
-      if (!inv.purchaseQuantity || inv.purchaseQuantity <= 0) return null;
-      const txs = transactionsMap[inv.id] ?? [];
-      return calculatePositionMetrics(inv, txs, inv.currentValue, filter);
-    })
-    .filter((p): p is PositionMetrics => p !== null);
+  let metricsPerInvestment: PositionMetrics[] = [];
 
   if (filter.kind === 'year') {
-      const investmentsWithSellsInYear = new Set<string>();
-      
-      Object.entries(transactionsMap).forEach(([invId, txs]) => {
-          const hasSellInYear = txs.some(tx => tx.type === 'Sell' && new Date(tx.date).getFullYear() === filter.year);
-          if(hasSellInYear) {
-              investmentsWithSellsInYear.add(invId);
-          }
-      });
-      
-      // If we are filtering by year, only include investments that either had a sale that year OR still have active holdings.
-      // Correction: The user wants to ONLY see investments with sales in that year.
-      const activeInvestmentIds = new Set(
-          investments.filter(inv => inv.status === 'Active').map(inv => inv.id)
+    const investmentsWithSellsInYear = new Set<string>();
+    Object.entries(transactionsMap).forEach(([invId, txs]) => {
+      const hasSellInYear = txs.some(
+        tx => tx.type === 'Sell' && new Date(tx.date).getFullYear() === filter.year
       );
-      
-      metricsPerInvestment = investments
-        .filter(inv => investmentsWithSellsInYear.has(inv.id) || activeInvestmentIds.has(inv.id))
-        .map(inv => {
-            const txs = transactionsMap[inv.id] ?? [];
-            return calculatePositionMetrics(inv, txs, inv.currentValue, filter);
-        });
+      if (hasSellInYear) investmentsWithSellsInYear.add(invId);
+    });
 
-      // When filtering by year, if an asset type has no realized P/L, don't show it, unless it's still active.
-       metricsPerInvestment = metricsPerInvestment.filter(p => {
-         const hasRealizedActivity = p.realizedPLDisplay !== 0;
-         const isActive = p.availableQty > 0;
-         return filter.kind === 'all' || hasRealizedActivity || isActive;
-       });
+    metricsPerInvestment = investments
+      .filter(inv => investmentsWithSellsInYear.has(inv.id))
+      .map(inv => {
+        const txs = transactionsMap[inv.id] ?? [];
+        return calculatePositionMetrics(inv, txs, inv.currentValue, filter);
+      });
+  } else {
+    // Default 'all' filter logic
+    metricsPerInvestment = investments
+      .map(inv => {
+        if (!inv.purchaseQuantity || inv.purchaseQuantity <= 0) return null;
+        const txs = transactionsMap[inv.id] ?? [];
+        return calculatePositionMetrics(inv, txs, inv.currentValue, filter);
+      })
+      .filter((p): p is PositionMetrics => p !== null);
   }
 
 
