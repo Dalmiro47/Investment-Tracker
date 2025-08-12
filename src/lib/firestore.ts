@@ -70,111 +70,157 @@ export async function getTransactions(uid: string, invId: string): Promise<Trans
   return q.docs.map(fromTxDoc).sort((a,b) => +new Date(b.date) - +new Date(a.date));
 }
 
-const reaggregateAndApply = (
-    tx: any, // Firebase Transaction object
-    investmentRef: any,
-    investment: Investment,
-    transactions: Transaction[]
+export async function addTransaction(uid: string, invId: string, t: TransactionFormValues) {
+  await runTransaction(db, async (tx) => {
+    const invRef = doc(db, 'users', uid, 'investments', invId);
+    const invSnap = await tx.get(invRef);
+    if (!invSnap.exists()) throw new Error('Investment not found');
+
+    const inv = fromInvestmentDoc(invSnap);
+
+    // Current aggregates (defaulting to 0)
+    let totalSoldQty      = inv.totalSoldQty      ?? 0;
+    let realizedProceeds  = inv.realizedProceeds  ?? 0;
+    let realizedPnL       = inv.realizedPnL       ?? 0;
+    let dividends         = inv.dividends         ?? 0;
+    let interest          = inv.interest          ?? 0;
+
+    // Prepare new tx doc
+    const newTxRef = doc(txCol(uid, invId));
+
+    let txQuantity    = 0;
+    let txPricePerUnit = 0;
+    let txTotalAmount = 0;
+
+    if (t.type === 'Sell') {
+      txQuantity     = t.quantity;
+      txPricePerUnit = t.pricePerUnit;
+      txTotalAmount  = t.quantity * t.pricePerUnit;
+
+      // Increment aggregates from SELL
+      totalSoldQty     += t.quantity;
+      realizedProceeds += txTotalAmount;
+      realizedPnL      += (t.pricePerUnit - inv.purchasePricePerUnit) * t.quantity;
+
+    } else if (t.type === 'Dividend') {
+      txTotalAmount = t.amount;
+      dividends    += t.amount;
+
+    } else if (t.type === 'Interest') {
+      txTotalAmount = t.amount;
+      interest     += t.amount;
+    }
+
+    // Recompute status from available qty
+    const availableQty = Math.max(0, (inv.purchaseQuantity ?? 0) - totalSoldQty);
+    const status: Investment['status'] = availableQty > 1e-6 ? 'Active' : 'Sold';
+
+    // 1) Update parent aggregates atomically
+    tx.update(invRef, {
+      totalSoldQty,
+      realizedProceeds,
+      realizedPnL,
+      dividends,
+      interest,
+      status,
+      updatedAt: serverTimestamp(),
+    });
+
+    // 2) Create the tx document
+    tx.set(newTxRef, {
+      type: t.type,
+      date: toTS(t.date),
+      quantity: txQuantity,
+      pricePerUnit: txPricePerUnit,
+      totalAmount: txTotalAmount,
+    });
+  });
+}
+
+const calculateDeltas = (
+  oldTx: Transaction, 
+  newTxData: TransactionFormValues, 
+  purchasePrice: number
 ) => {
-    const sells = transactions.filter(t => t.type === 'Sell');
-    const divs = transactions.filter(t => t.type === 'Dividend');
-    const ints = transactions.filter(t => t.type === 'Interest');
+  const deltas = {
+    soldQty: 0,
+    proceeds: 0,
+    realizedPnL: 0,
+    dividends: 0,
+    interest: 0,
+  };
 
-    const totalSoldQty = sells.reduce((s, x) => s + x.quantity, 0);
-    const realizedProceeds = sells.reduce((s, x) => s + x.totalAmount, 0);
-    const realizedPnL = sells.reduce((s, x) =>
-      s + (x.pricePerUnit - investment.purchasePricePerUnit) * x.quantity, 0);
+  const newTotalAmount = newTxData.type === 'Sell' 
+    ? newTxData.quantity * newTxData.pricePerUnit 
+    : newTxData.amount;
+  
+  // Back out old values
+  if (oldTx.type === 'Sell') {
+    deltas.soldQty -= oldTx.quantity;
+    deltas.proceeds -= oldTx.totalAmount;
+    deltas.realizedPnL -= (oldTx.pricePerUnit - purchasePrice) * oldTx.quantity;
+  } else if (oldTx.type === 'Dividend') {
+    deltas.dividends -= oldTx.totalAmount;
+  } else if (oldTx.type === 'Interest') {
+    deltas.interest -= oldTx.totalAmount;
+  }
+  
+  // Add in new values
+  if (newTxData.type === 'Sell') {
+    deltas.soldQty += newTxData.quantity;
+    deltas.proceeds += newTotalAmount;
+    deltas.realizedPnL += (newTxData.pricePerUnit - purchasePrice) * newTxData.quantity;
+  } else if (newTxData.type === 'Dividend') {
+    deltas.dividends += newTotalAmount;
+  } else if (newTxData.type === 'Interest') {
+    deltas.interest += newTotalAmount;
+  }
 
-    const dividends = divs.reduce((s, x) => s + x.totalAmount, 0);
-    const interest = ints.reduce((s, x) => s + x.totalAmount, 0);
-
-    const availableQty = Math.max(0, investment.purchaseQuantity - totalSoldQty);
-    const status: Investment['status'] = availableQty > 0.000001 ? 'Active' : 'Sold';
-
-    const updateData = {
-        totalSoldQty,
-        realizedProceeds,
-        realizedPnL,
-        dividends,
-        interest,
-        status,
-        updatedAt: serverTimestamp(),
-    };
-    tx.update(investmentRef, updateData);
+  return { deltas, newTotalAmount };
 };
 
 
-export async function addTransaction(uid: string, invId: string, t: TransactionFormValues) {
-    await runTransaction(db, async (tx) => {
-        const invRef = doc(db, 'users', uid, 'investments', invId);
-        const txCollectionRef = collection(db, 'users', uid, 'investments', invId, 'transactions');
-        
-        // --- READS FIRST ---
-        const invSnap = await tx.get(invRef);
-        if (!invSnap.exists()) throw new Error('Investment not found');
-        const investment = fromInvestmentDoc(invSnap);
-        
-        const existingTxSnap = await tx.get(txCollectionRef);
-        const allTransactions = existingTxSnap.docs.map(fromTxDoc);
-        
-        // --- THEN WRITES ---
-        const newTxRef = doc(txCollectionRef);
-        const isSell = t.type === 'Sell';
-        const totalAmount = isSell ? t.quantity * t.pricePerUnit : t.amount;
-
-        const newTransactionData: Omit<Transaction, 'id' | 'date'> & { date: Date } = {
-            type: t.type,
-            date: t.date,
-            quantity: isSell ? t.quantity : 0,
-            pricePerUnit: isSell ? t.pricePerUnit : 0,
-            totalAmount,
-        };
-        
-        // Add the newly-created-in-memory transaction to the list for aggregation
-        const updatedTransactions = [...allTransactions, { ...newTransactionData, id: newTxRef.id, date: t.date.toISOString() }]
-        
-        // Write 1: Update aggregates on parent investment
-        reaggregateAndApply(tx, invRef, investment, updatedTransactions);
-        
-        // Write 2: Create the new transaction document
-        tx.set(newTxRef, { ...newTransactionData, date: toTS(t.date) });
-    });
-}
-
-export async function updateTransaction(uid: string, invId: string, txId: string, t: TransactionFormValues) {
+export async function updateTransaction(uid: string, invId: string, txId: string, newTxData: TransactionFormValues) {
   await runTransaction(db, async (transaction) => {
     const invRef = doc(db, 'users', uid, 'investments', invId);
     const txRef = doc(db, 'users', uid, 'investments', invId, 'transactions', txId);
-    const txCollectionRef = collection(db, 'users', uid, 'investments', invId, 'transactions');
 
-    // --- READS ---
+    // READS
     const invSnap = await transaction.get(invRef);
     if (!invSnap.exists()) throw new Error('Investment not found');
-    const investment = fromInvestmentDoc(invSnap);
+    const inv = fromInvestmentDoc(invSnap);
 
-    const existingTxSnap = await transaction.get(txCollectionRef);
-    const allTransactions = existingTxSnap.docs.map(fromTxDoc);
-
-    // --- WRITES ---
-    const isSell = t.type === 'Sell';
-    const totalAmount = isSell ? t.quantity * t.pricePerUnit : t.amount;
-    const updatedTxData: Omit<Transaction, 'id' | 'date'> & { date: Date } = {
-        type: t.type,
-        date: t.date,
-        quantity: isSell ? t.quantity : 0,
-        pricePerUnit: isSell ? t.pricePerUnit : 0,
-        totalAmount,
-    };
+    const oldTxSnap = await transaction.get(txRef);
+    if (!oldTxSnap.exists()) throw new Error('Transaction to update not found');
+    const oldTx = fromTxDoc(oldTxSnap);
     
-    // Create the list of transactions for re-aggregation, replacing the old version with the new
-    const updatedTransactions = allTransactions.map(existingTx => 
-      existingTx.id === txId 
-        ? { ...updatedTxData, id: txId, date: t.date.toISOString() }
-        : existingTx
-    );
+    // CALCULATE
+    const { deltas, newTotalAmount } = calculateDeltas(oldTx, newTxData, inv.purchasePricePerUnit);
 
-    reaggregateAndApply(transaction, invRef, investment, updatedTransactions);
-    transaction.update(txRef, { ...updatedTxData, date: toTS(t.date) });
+    const totalSoldQty = (inv.totalSoldQty ?? 0) + deltas.soldQty;
+    const availableQty = Math.max(0, inv.purchaseQuantity - totalSoldQty);
+    const status: Investment['status'] = availableQty > 1e-6 ? 'Active' : 'Sold';
+    
+    // WRITES
+    // 1) Update parent investment with deltas
+    transaction.update(invRef, {
+      totalSoldQty,
+      realizedProceeds: (inv.realizedProceeds ?? 0) + deltas.proceeds,
+      realizedPnL: (inv.realizedPnL ?? 0) + deltas.realizedPnL,
+      dividends: (inv.dividends ?? 0) + deltas.dividends,
+      interest: (inv.interest ?? 0) + deltas.interest,
+      status,
+      updatedAt: serverTimestamp(),
+    });
+
+    // 2) Update the transaction document itself
+    transaction.update(txRef, {
+      type: newTxData.type,
+      date: toTS(newTxData.date),
+      quantity: newTxData.type === 'Sell' ? newTxData.quantity : 0,
+      pricePerUnit: newTxData.type === 'Sell' ? newTxData.pricePerUnit : 0,
+      totalAmount: newTotalAmount,
+    });
   });
 }
 
@@ -182,20 +228,36 @@ export async function deleteTransaction(uid: string, invId: string, txId: string
     await runTransaction(db, async (transaction) => {
         const invRef = doc(db, 'users', uid, 'investments', invId);
         const txRef = doc(db, 'users', uid, 'investments', invId, 'transactions', txId);
-        const txCollectionRef = collection(db, 'users', uid, 'investments', invId, 'transactions');
 
-        // --- READS ---
+        // READS
         const invSnap = await transaction.get(invRef);
         if (!invSnap.exists()) throw new Error('Investment not found');
-        const investment = fromInvestmentDoc(invSnap);
+        const inv = fromInvestmentDoc(invSnap);
+        
+        const txToDeleteSnap = await transaction.get(txRef);
+        if (!txToDeleteSnap.exists()) return; // Already deleted, nothing to do.
+        const txToDelete = fromTxDoc(txToDeleteSnap);
 
-        const existingTxSnap = await transaction.get(txCollectionRef);
-        const allTransactions = existingTxSnap.docs.map(fromTxDoc);
+        // CALCULATE
+        const { deltas } = calculateDeltas(txToDelete, { type: 'Sell', date: new Date(), quantity: 0, pricePerUnit: 0, amount: 0 }, inv.purchasePricePerUnit);
 
-        // --- WRITES ---
-        const remainingTransactions = allTransactions.filter(tx => tx.id !== txId);
+        const totalSoldQty = (inv.totalSoldQty ?? 0) + deltas.soldQty;
+        const availableQty = Math.max(0, inv.purchaseQuantity - totalSoldQty);
+        const status: Investment['status'] = availableQty > 1e-6 ? 'Active' : 'Sold';
 
-        reaggregateAndApply(transaction, invRef, investment, remainingTransactions);
+        // WRITES
+        // 1) Update parent investment by subtracting the old transaction's values
+        transaction.update(invRef, {
+            totalSoldQty,
+            realizedProceeds: (inv.realizedProceeds ?? 0) + deltas.proceeds,
+            realizedPnL: (inv.realizedPnL ?? 0) + deltas.realizedPnL,
+            dividends: (inv.dividends ?? 0) + deltas.dividends,
+            interest: (inv.interest ?? 0) + deltas.interest,
+            status,
+            updatedAt: serverTimestamp(),
+        });
+
+        // 2) Delete the actual transaction document
         transaction.delete(txRef);
     });
 }
