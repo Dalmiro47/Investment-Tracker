@@ -1,4 +1,5 @@
-import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp } from 'firebase/firestore';
+
+import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues } from './types';
 
@@ -68,8 +69,8 @@ export async function getTransactions(uid: string, invId: string): Promise<Trans
   return q.docs.map(fromTxDoc).sort((a,b) => +new Date(b.date) - +new Date(a.date));
 }
 
-const reaggregateAndBatchUpdate = (
-    batch: any,
+const reaggregateAndApply = (
+    tx: any, // Firebase Transaction object
     investmentRef: any,
     investment: Investment,
     transactions: Transaction[]
@@ -97,7 +98,7 @@ const reaggregateAndBatchUpdate = (
         status,
         updatedAt: serverTimestamp(),
     };
-    batch.update(investmentRef, updateData);
+    tx.update(investmentRef, updateData);
 };
 
 
@@ -122,13 +123,14 @@ export async function addTransaction(uid: string, invId: string, t: TransactionF
         
         tx.set(newTxRef, { ...newTransactionData, date: toTS(t.date) });
 
-        const txCollection = txCol(uid, invId);
-        const existingTxSnap = await getDocsFromServer(txCollection);
+        const txCollectionRef = txCol(uid, invId);
+        // IMPORTANT: Read from the transaction, not from the server directly
+        const existingTxSnap = await tx.get(query(txCollectionRef));
         const allTransactions = existingTxSnap.docs.map(fromTxDoc);
+
+        // Manually add the newly-created-in-memory transaction to the list for aggregation
         allTransactions.push({ ...newTransactionData, id: newTxRef.id, date: t.date.toISOString() });
         
-        const batch = writeBatch(db); 
-        reaggregateAndBatchUpdate(batch, invRef, investment, allTransactions);
-        await batch.commit();
+        reaggregateAndApply(tx, invRef, investment, allTransactions);
     });
 }
