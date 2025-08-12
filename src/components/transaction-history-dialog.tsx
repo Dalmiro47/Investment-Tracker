@@ -56,7 +56,7 @@ function TransactionForm({ investmentId, onFormSubmit, onCancel }: TransactionFo
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
     defaultValues: {
-      type: "Buy",
+      type: "Sell",
       date: new Date(),
       quantity: 0,
       pricePerUnit: 0,
@@ -91,7 +91,6 @@ function TransactionForm({ investmentId, onFormSubmit, onCancel }: TransactionFo
                   <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="Buy">Buy</SelectItem>
                   <SelectItem value="Sell">Sell</SelectItem>
                   <SelectItem value="Dividend">Dividend</SelectItem>
                   <SelectItem value="Interest">Interest</SelectItem>
@@ -138,7 +137,7 @@ function TransactionForm({ investmentId, onFormSubmit, onCancel }: TransactionFo
             <FormItem>
               <FormLabel>Quantity</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="e.g. 10" {...field} />
+                <Input type="number" placeholder="e.g. 10" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
               </FormControl>
             </FormItem>
           )}
@@ -150,7 +149,7 @@ function TransactionForm({ investmentId, onFormSubmit, onCancel }: TransactionFo
             <FormItem>
               <FormLabel>Price per Unit (€)</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="e.g. 150.50" {...field} />
+                <Input type="number" placeholder="e.g. 150.50" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
               </FormControl>
             </FormItem>
           )}
