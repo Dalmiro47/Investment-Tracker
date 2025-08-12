@@ -45,11 +45,12 @@ import { format } from "date-fns";
 // --- TransactionForm ---
 interface TransactionFormProps {
   investmentId: string;
+  availableQuantity: number;
   onFormSubmit: () => void;
   onCancel: () => void;
 }
 
-function TransactionForm({ investmentId, onFormSubmit, onCancel }: TransactionFormProps) {
+function TransactionForm({ investmentId, availableQuantity, onFormSubmit, onCancel }: TransactionFormProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   
@@ -58,7 +59,7 @@ function TransactionForm({ investmentId, onFormSubmit, onCancel }: TransactionFo
     defaultValues: {
       type: "Sell",
       date: new Date(),
-      quantity: 0,
+      quantity: availableQuantity, // Pre-fill with available quantity
       pricePerUnit: 0,
     },
   });
@@ -236,6 +237,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
         {isAdding ? (
           <TransactionForm 
             investmentId={investment.id}
+            availableQuantity={investment.quantity}
             onFormSubmit={handleFormSubmit}
             onCancel={() => setIsAdding(false)}
           />
