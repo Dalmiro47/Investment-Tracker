@@ -111,8 +111,8 @@ export async function addTransaction(uid: string, invId: string, t: TransactionF
         const invSnap = await tx.get(invRef);
         if (!invSnap.exists()) throw new Error('Investment not found');
         const investment = fromInvestmentDoc(invSnap);
-
-        const existingTxSnap = await tx.get(query(txCollectionRef));
+        
+        const existingTxSnap = await tx.get(txCollectionRef);
         const allTransactions = existingTxSnap.docs.map(fromTxDoc);
 
         // --- THEN WRITES ---
