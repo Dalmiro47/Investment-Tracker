@@ -47,8 +47,13 @@ const formatQuantity = (value: number | null | undefined) => {
 
 export default function InvestmentCard({ investment, isTaxView, onEdit, onDelete, onViewHistory }: InvestmentCardProps) {
   const { name, type, status, purchaseDate, initialValue, currentValue, quantity, dividends, interest, ticker } = investment;
-  const initialTotal = initialValue * quantity;
-  const currentTotal = currentValue ? currentValue * quantity : null;
+  
+  // Use the new aggregated fields if they exist, otherwise fallback to old structure for compatibility
+  const initialTotal = investment.totalCost ?? (initialValue * quantity);
+  const currentTotal = status === 'Sold' 
+    ? investment.totalSaleValue ?? (currentValue ? currentValue * quantity : 0)
+    : currentValue ? currentValue * quantity : null;
+
   const gainLoss = currentTotal !== null ? currentTotal - initialTotal : null;
   const gainLossPercent = initialTotal === 0 || gainLoss === null ? 0 : (gainLoss / initialTotal) * 100;
   const isGain = gainLoss !== null ? gainLoss >= 0 : true;

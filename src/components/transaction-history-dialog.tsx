@@ -189,23 +189,22 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
       
       let fetchedTransactions = await getTransactions(user.uid, investment.id);
       
-      // Migration logic: If no "Buy" transactions exist, create a synthetic one from the original investment data.
       const hasBuyTransaction = fetchedTransactions.some(tx => tx.type === 'Buy');
       
-      if (!hasBuyTransaction && investment.initialValue > 0 && investment.quantity > 0) {
+      // The synthetic "Buy" was created from the original investment. This should always exist
+      // even if the real transaction list is empty.
+      if (!hasBuyTransaction && investment.initialValue > 0 && investment.purchaseDate) {
           const syntheticInitialBuy: Transaction = {
               id: 'synthetic-initial-buy',
               type: 'Buy',
               date: investment.purchaseDate,
-              quantity: investment.quantity,
+              quantity: investment.quantity, // This is the original quantity
               pricePerUnit: investment.initialValue,
               totalAmount: investment.initialValue * investment.quantity
           };
-          // Prepend the synthetic transaction to the list
           fetchedTransactions = [syntheticInitialBuy, ...fetchedTransactions];
       }
 
-      // Sort all transactions by date descending to ensure correct order
       fetchedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
       setTransactions(fetchedTransactions);
@@ -215,7 +214,6 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
   useEffect(() => {
     if (isOpen) {
       fetchTransactions();
-      // Reset the 'add' form view when dialog is opened
       setIsAdding(false);
     }
   }, [isOpen, user, investment.id]);
@@ -223,7 +221,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
   const handleFormSubmit = () => {
     setIsAdding(false);
     fetchTransactions();
-    onTransactionAdded(); // Notify parent to refetch all investments
+    onTransactionAdded();
   }
 
   return (

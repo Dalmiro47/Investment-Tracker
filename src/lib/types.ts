@@ -13,7 +13,7 @@ export interface Transaction {
   id: string;
   type: TransactionType;
   date: string; // ISO 8601 format
-  quantity: number; // Can be negative for 'Sell'
+  quantity: number;
   pricePerUnit: number;
   totalAmount: number;
 }
@@ -24,18 +24,18 @@ export interface Investment {
   type: InvestmentType;
   ticker?: string;
   // Aggregated values from transactions
-  totalQuantity: number;
+  totalQuantity: number; // This might be deprecated by just 'quantity'
   totalCost: number;
+  totalSaleValue?: number; // Total value from all sales
   averageBuyPrice: number;
   currentValue: number | null; // Current market price per unit
-  // Direct fields
-  status: InvestmentStatus; // This is derived from totalQuantity
-  dividends?: number; // Might be replaced by Dividend transactions
-  interest?: number; // Might be replaced by Interest transactions
-  // Deprecated fields, to be removed later
-  purchaseDate: string; // Will be replaced by first transaction date
-  initialValue: number; // Will be replaced by averageBuyPrice
-  quantity: number; // Will be replaced by totalQuantity
+  status: InvestmentStatus; 
+  dividends?: number; // Sum of all dividend transactions
+  interest?: number; // Sum of all interest transactions
+  // Original fields, kept for initial buy transaction and backwards compatibility
+  purchaseDate: string; 
+  initialValue: number; 
+  quantity: number; 
 }
 
 // Schema for adding/editing the main investment properties
@@ -58,7 +58,7 @@ export type InvestmentFormValues = z.infer<typeof investmentSchema>;
 
 // Schema for adding a new transaction
 export const transactionSchema = z.object({
-    type: z.enum(['Buy', 'Sell', 'Dividend', 'Interest']),
+    type: z.enum(['Sell', 'Dividend', 'Interest']),
     date: z.date(),
     quantity: z.coerce.number().min(0.000001, { message: 'Quantity must be greater than 0.' }),
     pricePerUnit: z.coerce.number().min(0, { message: 'Price must be positive.' }),
@@ -72,8 +72,6 @@ export const oldInvestmentSchema = z.object({
     message: "Name must be at least 2 characters.",
   }),
   type: z.enum(['Stock', 'Bond', 'Crypto', 'Real Estate', 'ETF', 'Savings']),
-  // Status is no longer directly editable
-  status: z.enum(['Active', 'Sold']).readonly(), 
   purchaseDate: z.date(),
   initialValue: z.coerce.number().min(0, { message: 'Initial value must be positive.' }),
   currentValue: z.coerce.number().min(0, { message: 'Value must be positive.' }).nullable(),
@@ -90,6 +88,5 @@ export const oldInvestmentSchema = z.object({
             path: ["ticker"],
         });
     }
-    // No need to check for currentValue on 'Sold' status anymore, as status is not user-editable.
 });
 export type OldInvestmentFormValues = z.infer<typeof oldInvestmentSchema>;
