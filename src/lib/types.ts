@@ -23,19 +23,25 @@ export interface Investment {
   name: string;
   type: InvestmentType;
   ticker?: string;
-  // Aggregated values from transactions
-  totalQuantity: number; // This might be deprecated by just 'quantity'
-  totalCost: number;
-  totalSaleValue?: number; // Total value from all sales
-  averageBuyPrice: number;
+  
+  // Aggregated values from transactions, stored in Firestore
+  quantity: number; // availableQty
+  totalBuyQty?: number;
+  totalSellQty?: number;
+  averageBuyPrice?: number;
+  averageSellPrice?: number;
+  totalCost?: number; // total cost of all buys
+  totalProceeds?: number; // total proceeds from all sells
+  realizedPL?: number;
+
   currentValue: number | null; // Current market price per unit
   status: InvestmentStatus; 
   dividends?: number; // Sum of all dividend transactions
   interest?: number; // Sum of all interest transactions
+  
   // Original fields, kept for initial buy transaction and backwards compatibility
   purchaseDate: string; 
   initialValue: number; 
-  quantity: number; 
 }
 
 // Schema for adding/editing the main investment properties

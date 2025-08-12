@@ -2,7 +2,7 @@
 "use client";
 
 import { useMemo } from 'react';
-import type { Investment, InvestmentType } from '@/lib/types';
+import type { Investment } from '@/lib/types';
 import { summarizeByType } from '@/lib/utils/summary';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
@@ -63,8 +63,8 @@ export default function PortfolioSummary({ investments }: { investments: Investm
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Asset Type</TableHead>
-                                    <TableHead className="text-right">Initial Investment</TableHead>
-                                    <TableHead className="text-right">Current Value</TableHead>
+                                    <TableHead className="text-right">Total Cost</TableHead>
+                                    <TableHead className="text-right">Market Value</TableHead>
                                     <TableHead className="text-right">Profit / Loss</TableHead>
                                     <TableHead className="text-right">Performance</TableHead>
                                     <TableHead className="text-right">% of Portfolio</TableHead>

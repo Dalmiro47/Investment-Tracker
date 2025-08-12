@@ -1,18 +1,19 @@
 
+
 import type { Investment, InvestmentType } from '@/lib/types';
 
 export interface SummaryItem {
     type: InvestmentType;
-    initialValue: number;
-    currentValue: number;
+    initialValue: number; // Represents totalCost for this summary
+    currentValue: number; // Represents total marketValue for this summary
     gainLoss: number;
     gainLossPercent: number;
     portfolioPercentage: number;
 }
 
 export interface SummaryTotals {
-    initialValue: number;
-    currentValue: number;
+    initialValue: number; // Represents totalCost
+    currentValue: number; // Represents total marketValue
     gainLoss: number;
     gainLossPercent: number;
 }
@@ -33,14 +34,17 @@ export function summarizeByType(investments: Investment[]): PortfolioSummaryData
         if (!summary[type]) {
             summary[type] = {
                 type,
-                initialValue: 0,
-                currentValue: 0,
+                initialValue: 0, // Will be totalCost
+                currentValue: 0, // Will be marketValue
             };
         }
-        const initialTotal = inv.initialValue * inv.quantity;
-        const currentTotal = (inv.currentValue ?? inv.initialValue) * inv.quantity;
+        
+        // Use aggregated totalCost if available, otherwise calculate from initial values
+        const costBasisForAvailableQty = (inv.averageBuyPrice ?? inv.initialValue) * inv.quantity;
+        summary[type].initialValue += costBasisForAvailableQty;
 
-        summary[type].initialValue += initialTotal;
+        // Calculate current market value based on available quantity
+        const currentTotal = (inv.currentValue ?? (inv.averageBuyPrice ?? inv.initialValue)) * inv.quantity;
         summary[type].currentValue += currentTotal;
     });
 
