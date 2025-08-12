@@ -220,12 +220,16 @@ export const deleteTransaction = async (userId: string, investmentId: string, tr
         .filter(doc => doc.id !== transactionId)
         .map(transactionFromFirestore);
     
-    if (remainingTransactions.length === 0) {
-        throw new Error("Cannot delete the last transaction. Please delete the investment instead.");
-    }
-
     const batch = writeBatch(db);
-    batch.delete(transactionRef);
-    reaggregateAndBatchUpdate(batch, investmentRef, remainingTransactions);
+    
+    if (remainingTransactions.length === 0) {
+        // If this was the last transaction, delete the investment itself.
+        batch.delete(transactionRef);
+        batch.delete(investmentRef);
+    } else {
+        batch.delete(transactionRef);
+        reaggregateAndBatchUpdate(batch, investmentRef, remainingTransactions);
+    }
+    
     await batch.commit();
 }
