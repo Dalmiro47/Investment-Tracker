@@ -191,16 +191,18 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
       
       const hasBuyTransaction = fetchedTransactions.some(tx => tx.type === 'Buy');
       
-      // The synthetic "Buy" was created from the original investment. This should always exist
-      // even if the real transaction list is empty.
       if (!hasBuyTransaction && investment.initialValue > 0 && investment.purchaseDate) {
+          const totalCost = investment.totalCost ?? (investment.initialValue * investment.quantity);
+          // If totalCost is zero, it might be a new item with no transactions yet, so we use initial values.
+          const initialQty = investment.initialValue > 0 ? totalCost / investment.initialValue : investment.quantity;
+
           const syntheticInitialBuy: Transaction = {
               id: 'synthetic-initial-buy',
               type: 'Buy',
               date: investment.purchaseDate,
-              quantity: investment.quantity, // This is the original quantity
+              quantity: initialQty, 
               pricePerUnit: investment.initialValue,
-              totalAmount: investment.initialValue * investment.quantity
+              totalAmount: totalCost
           };
           fetchedTransactions = [syntheticInitialBuy, ...fetchedTransactions];
       }
