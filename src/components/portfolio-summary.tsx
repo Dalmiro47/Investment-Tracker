@@ -13,6 +13,8 @@ import { formatCurrency, formatPercent, toNum } from '@/lib/money';
 import { aggregateByType, SummaryResult } from '@/lib/portfolio';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Skeleton } from './ui/skeleton';
+import { Button } from './ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from './ui/dialog';
 
 
 const CHART_COLORS = [
@@ -76,8 +78,60 @@ export default function PortfolioSummary({ investments, transactionsMap }: { inv
 
     return (
         <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="font-headline text-2xl">Portfolio Summary</CardTitle>
+                 <Dialog>
+                    <DialogTrigger asChild>
+                        <Button variant="ghost" size="icon">
+                            <Info className="h-5 w-5" />
+                            <span className="sr-only">Show Explanations</span>
+                        </Button>
+                    </DialogTrigger>
+                    <DialogContent className="max-w-2xl">
+                        <DialogHeader>
+                            <DialogTitle>Summary Column Explanations</DialogTitle>
+                            <DialogDescription>How each value in the summary table is calculated.</DialogDescription>
+                        </DialogHeader>
+                        <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4">
+                            <div>
+                                <h4 className="font-semibold">Cost Basis</h4>
+                                <p className="text-muted-foreground">The original purchase price of the assets you currently still own. It ignores the cost of shares you've already sold. <br/><code className="text-xs">Formula: Available Quantity × Original Purchase Price per Unit</code></p>
+                            </div>
+                             <div>
+                                <h4 className="font-semibold">Market Value</h4>
+                                <p className="text-muted-foreground">The current value of the assets you currently still own. <br/><code className="text-xs">Formula: Available Quantity × Current Price per Unit</code></p>
+                            </div>
+                             <div>
+                                <h4 className="font-semibold">Realized P/L (Profit/Loss)</h4>
+                                <p className="text-muted-foreground">Your "locked-in" profit or loss from all sales you have made. This value is not affected by current price fluctuations. <br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
+                            </div>
+                             <div>
+                                <h4 className="font-semibold">Unrealized P/L (Profit/Loss)</h4>
+                                <p className="text-muted-foreground">Your "paper" profit or loss on the assets you still hold. It's the difference between what they are worth now and what you paid for them.<br/><code className="text-xs">Formula: Market Value - Cost Basis</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Total P/L (Profit/Loss)</h4>
+                                <p className="text-muted-foreground">The complete picture of your profit or loss, combining both realized (from sales) and unrealized (paper) gains/losses.<br/><code className="text-xs">Formula: Realized P/L + Unrealized P/L</code></p>
+                            </div>
+                             <div>
+                                <h4 className="font-semibold">Performance</h4>
+                                <p className="text-muted-foreground">The total percentage return on your entire original investment for this asset class, including the performance of shares you've already sold.<br/><code className="text-xs">Formula: (Total P/L / Original Purchase Value) × 100</code></p>
+                            </div>
+                             <div>
+                                <h4 className="font-semibold">% of Portfolio (Donut Chart)</h4>
+                                <p className="text-muted-foreground">This shows the allocation of your portfolio's value. It has two modes:</p>
+                                <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
+                                    <li><span className="font-semibold text-foreground">Market Value Mode:</span> Shows the percentage based on the current market value of what you own.</li>
+                                    <li><span className="font-semibold text-foreground">Economic Value Mode:</span> Shows a broader view, including your realized gains. The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>
+                                </ul>
+                            </div>
+                             <div className="pt-2">
+                                <h4 className="font-semibold">Total Row</h4>
+                                <p className="text-muted-foreground">The "Total" row sums the numeric columns from the rows above it. The "Performance" percentage is then re-calculated based on the grand totals to provide a true weighted-average performance for your entire portfolio.</p>
+                            </div>
+                        </div>
+                    </DialogContent>
+                </Dialog>
             </CardHeader>
             <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
