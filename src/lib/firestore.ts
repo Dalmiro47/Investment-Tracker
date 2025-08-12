@@ -221,12 +221,21 @@ export const deleteTransaction = async (userId: string, investmentId: string, tr
         .map(transactionFromFirestore);
     
     const batch = writeBatch(db);
+
+    // Check if any "Buy" transactions remain. If not, the investment becomes invalid.
+    const hasRemainingBuy = remainingTransactions.some(t => t.type === 'Buy');
     
-    if (remainingTransactions.length === 0) {
-        // If this was the last transaction, delete the investment itself.
+    if (!hasRemainingBuy) {
+        // If deleting this transaction removes the last 'Buy', delete the entire investment.
+        // This prevents orphaned investments.
+        remainingTransactions.forEach(tx => {
+             const txRef = doc(db, 'users', userId, 'investments', investmentId, 'transactions', tx.id);
+             batch.delete(txRef);
+        });
         batch.delete(transactionRef);
         batch.delete(investmentRef);
     } else {
+        // Otherwise, just delete the one transaction and re-aggregate.
         batch.delete(transactionRef);
         reaggregateAndBatchUpdate(batch, investmentRef, remainingTransactions);
     }
