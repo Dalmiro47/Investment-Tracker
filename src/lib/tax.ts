@@ -83,10 +83,11 @@ export function calcCryptoTax(i: CryptoTaxInput): CryptoTaxResult {
  * Checks if a specific crypto sale is tax-free based on its holding period.
  */
 export function isCryptoSellTaxFree(
-  purchaseDate: string,
+  purchaseDate: string | null | undefined,
   sellDate: string,
   stakingOrLending: boolean
 ): boolean {
+  if (!purchaseDate) return true; // Cannot determine, assume not taxable
   const pDate = parseISO(purchaseDate);
   const sDate = parseISO(sellDate);
   const minYears = stakingOrLending ? 10 : 1;
@@ -142,3 +143,5 @@ export function estimateCardTax(
 
   return { taxBase: base, taxRate: base > 0 ? total / base : 0, tax: capTax, soli, church: churchTax, total, isTaxFree: false };
 }
+
+    
