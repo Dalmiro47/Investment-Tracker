@@ -1,4 +1,6 @@
 
+"use client";
+
 import { useState, useEffect } from 'react';
 import type { Investment } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';

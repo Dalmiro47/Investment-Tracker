@@ -1,4 +1,4 @@
-'use server';
+
 import { addYears, differenceInCalendarDays, isAfter, isSameDay, parseISO } from 'date-fns';
 import type { Investment } from '@/lib/types';
 
