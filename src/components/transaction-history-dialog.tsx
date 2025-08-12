@@ -1,10 +1,11 @@
 
+
 "use client"
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { getTransactions, addTransaction } from "@/lib/firestore";
+import { getTransactions, addTransaction, updateTransaction, deleteTransaction } from "@/lib/firestore";
 import type { Investment, Transaction, TransactionFormValues } from "@/lib/types";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
@@ -19,13 +20,21 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Form,
   FormControl,
-  FormDescription,
   FormField,
   FormItem,
   FormLabel,
-  FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import {
@@ -38,45 +47,83 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils";
-import { CalendarIcon, PlusCircle, Loader2 } from "lucide-react";
+import { CalendarIcon, PlusCircle, Loader2, MoreHorizontal, Edit, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { aggregate } from "@/lib/utils/agg";
 
 // --- TransactionForm ---
 interface TransactionFormProps {
-  investmentId: string;
-  availableQuantity: number;
+  investment: Investment;
+  editingTransaction?: Transaction;
   onFormSubmit: () => void;
   onCancel: () => void;
 }
 
-function TransactionForm({ investmentId, availableQuantity, onFormSubmit, onCancel }: TransactionFormProps) {
+function TransactionForm({ investment, editingTransaction, onFormSubmit, onCancel }: TransactionFormProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
-    defaultValues: {
-      type: "Sell",
-      date: new Date(),
-      quantity: availableQuantity, // Pre-fill with available quantity
-      pricePerUnit: 0,
-    },
+    defaultValues: editingTransaction 
+      ? { ...editingTransaction, date: new Date(editingTransaction.date) }
+      : {
+          type: "Sell",
+          date: new Date(),
+          quantity: 0,
+          pricePerUnit: 0,
+        },
   });
+
+  useEffect(() => {
+    async function setupForm() {
+        if (editingTransaction) {
+            form.reset({
+                ...editingTransaction,
+                date: new Date(editingTransaction.date),
+            });
+        } else if (user) {
+            const fetchedTransactions = await getTransactions(user.uid, investment.id);
+            const agg = aggregate(fetchedTransactions, investment.currentValue);
+             form.reset({
+                type: "Sell",
+                date: new Date(),
+                quantity: agg.availableQty,
+                pricePerUnit: investment.currentValue ?? 0,
+             });
+        }
+    }
+    setupForm();
+  }, [editingTransaction, investment, user, form])
+
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
 
   const handleSubmit = async (values: TransactionFormValues) => {
     if (!user) return;
     try {
-      await addTransaction(user.uid, investmentId, values);
-      toast({ title: "Success", description: "Transaction added successfully." });
+      if (editingTransaction) {
+        await updateTransaction(user.uid, investment.id, editingTransaction.id, values);
+        toast({ title: "Success", description: "Transaction updated successfully." });
+      } else {
+        await addTransaction(user.uid, investment.id, values);
+        toast({ title: "Success", description: "Transaction added successfully." });
+      }
       onFormSubmit();
     } catch (error) {
-      console.error("Failed to add transaction:", error);
-      toast({ title: "Error", description: "Failed to add transaction.", variant: "destructive" });
+      console.error("Failed to save transaction:", error);
+      toast({ title: "Error", description: `Failed to save transaction: ${(error as Error).message}`, variant: "destructive" });
     }
   };
+
+  const isInitialBuy = editingTransaction?.id === 'synthetic-initial-buy';
 
   return (
     <Form {...form}>
@@ -87,12 +134,13 @@ function TransactionForm({ investmentId, availableQuantity, onFormSubmit, onCanc
           render={({ field }) => (
             <FormItem>
               <FormLabel>Type</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isInitialBuy}>
                 <FormControl>
                   <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="Sell">Sell</SelectItem>
+                  {!isInitialBuy && <SelectItem value="Sell">Sell</SelectItem>}
+                  <SelectItem value="Buy">Buy</SelectItem>
                   <SelectItem value="Dividend">Dividend</SelectItem>
                   <SelectItem value="Interest">Interest</SelectItem>
                 </SelectContent>
@@ -138,7 +186,7 @@ function TransactionForm({ investmentId, availableQuantity, onFormSubmit, onCanc
             <FormItem>
               <FormLabel>Quantity</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="e.g. 10" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
+                <Input type="number" step="any" placeholder="e.g. 10" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
               </FormControl>
             </FormItem>
           )}
@@ -150,7 +198,7 @@ function TransactionForm({ investmentId, availableQuantity, onFormSubmit, onCanc
             <FormItem>
               <FormLabel>Price per Unit (€)</FormLabel>
               <FormControl>
-                <Input type="number" placeholder="e.g. 150.50" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
+                <Input type="number" step="any" placeholder="e.g. 150.50" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
               </FormControl>
             </FormItem>
           )}
@@ -175,13 +223,16 @@ interface TransactionHistoryDialogProps {
 }
 
 const formatCurrency = (value: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(value);
-const formatQuantity = (value: number) => new Intl.NumberFormat('de-DE', { maximumFractionDigits: 4 }).format(value);
+const formatQuantity = (value: number) => new Intl.NumberFormat('de-DE', { maximumFractionDigits: 8 }).format(value);
 
 export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onTransactionAdded }: TransactionHistoryDialogProps) {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
-  const [isAdding, setIsAdding] = useState(false);
+  const [view, setView] = useState<'list' | 'form'>('list');
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>(undefined);
+  const [deletingTransactionId, setDeletingTransactionId] = useState<string | null>(null);
 
   const fetchTransactions = async () => {
       if (!user) return;
@@ -193,8 +244,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
       
       if (!hasBuyTransaction && investment.initialValue > 0 && investment.purchaseDate) {
           const totalCost = investment.totalCost ?? (investment.initialValue * investment.quantity);
-          // If totalCost is zero, it might be a new item with no transactions yet, so we use initial values.
-          const initialQty = investment.initialValue > 0 ? totalCost / investment.initialValue : investment.quantity;
+          const initialQty = investment.averageBuyPrice && investment.averageBuyPrice > 0 ? totalCost / investment.averageBuyPrice : investment.quantity;
 
           const syntheticInitialBuy: Transaction = {
               id: 'synthetic-initial-buy',
@@ -216,84 +266,159 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
   useEffect(() => {
     if (isOpen) {
       fetchTransactions();
-      setIsAdding(false);
+      setView('list');
     }
   }, [isOpen, user, investment.id]);
 
   const handleFormSubmit = () => {
-    setIsAdding(false);
+    setView('list');
     fetchTransactions();
-    onTransactionAdded();
+    onTransactionAdded(); // This should trigger a refetch on the main page
+  }
+  
+  const handleAddClick = () => {
+    setEditingTransaction(undefined);
+    setView('form');
   }
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl">
-        <DialogHeader>
-          <DialogTitle>Transaction History: {investment.name}</DialogTitle>
-          <DialogDescription>View and manage all transactions for this investment.</DialogDescription>
-        </DialogHeader>
+  const handleEditClick = (tx: Transaction) => {
+    setEditingTransaction(tx);
+    setView('form');
+  }
 
-        {isAdding ? (
-          <TransactionForm 
-            investmentId={investment.id}
-            availableQuantity={investment.quantity}
-            onFormSubmit={handleFormSubmit}
-            onCancel={() => setIsAdding(false)}
-          />
-        ) : (
-          <>
-            <div className="max-h-[60vh] overflow-y-auto pr-2">
-              {loading ? (
-                <div className="flex justify-center items-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-              ) : transactions.length > 0 ? (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Date</TableHead>
-                      <TableHead className="text-right">Quantity</TableHead>
-                      <TableHead className="text-right">Price/Unit</TableHead>
-                      <TableHead className="text-right">Total Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {transactions.map((tx) => (
-                      <TableRow key={tx.id}>
-                        <TableCell>
-                          <span className={cn(
-                              'font-semibold',
-                              tx.type === 'Buy' && 'text-green-500',
-                              tx.type === 'Sell' && 'text-red-500',
-                              tx.type === 'Dividend' && 'text-blue-500',
-                              tx.type === 'Interest' && 'text-purple-500',
-                          )}>
-                            {tx.type}
-                          </span>
-                        </TableCell>
-                        <TableCell>{format(new Date(tx.date), 'dd MMM yyyy')}</TableCell>
-                        <TableCell className="text-right font-mono">{formatQuantity(tx.quantity)}</TableCell>
-                        <TableCell className="text-right font-mono">{formatCurrency(tx.pricePerUnit)}</TableCell>
-                        <TableCell className="text-right font-mono">{formatCurrency(tx.totalAmount)}</TableCell>
+  const handleDeleteClick = (id: string) => {
+    setDeletingTransactionId(id);
+  }
+
+  const confirmDelete = async () => {
+    if (!deletingTransactionId || !user) return;
+    try {
+      await deleteTransaction(user.uid, investment.id, deletingTransactionId);
+      toast({ title: "Success", description: "Transaction deleted." });
+      fetchTransactions(); // Refetch after delete
+      onTransactionAdded();
+    } catch (error) {
+      console.error("Failed to delete transaction", error);
+      toast({ title: "Error", description: `Failed to delete transaction: ${(error as Error).message}`, variant: "destructive" });
+    } finally {
+      setDeletingTransactionId(null);
+    }
+  }
+
+
+  return (
+    <>
+      <Dialog open={isOpen} onOpenChange={onOpenChange}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>
+              {view === 'form' 
+                ? (editingTransaction ? 'Edit Transaction' : 'Add Transaction') 
+                : `Transaction History: ${investment.name}`}
+            </DialogTitle>
+            <DialogDescription>
+              {view === 'form' 
+                ? 'Update the details for this transaction.'
+                : 'View and manage all transactions for this investment.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {view === 'form' ? (
+            <TransactionForm 
+              investment={investment}
+              editingTransaction={editingTransaction}
+              onFormSubmit={handleFormSubmit}
+              onCancel={() => setView('list')}
+            />
+          ) : (
+            <>
+              <div className="max-h-[60vh] overflow-y-auto pr-2">
+                {loading ? (
+                  <div className="flex justify-center items-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                ) : transactions.length > 0 ? (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Type</TableHead>
+                        <TableHead>Date</TableHead>
+                        <TableHead className="text-right">Quantity</TableHead>
+                        <TableHead className="text-right">Price/Unit</TableHead>
+                        <TableHead className="text-right">Total Amount</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              ) : (
-                <div className="text-center py-16">
-                  <p className="text-muted-foreground">No transactions recorded yet.</p>
-                </div>
-              )}
-            </div>
-            <DialogFooter>
-              <Button onClick={() => setIsAdding(true)}>
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Add Transaction
-              </Button>
-            </DialogFooter>
-          </>
-        )}
-      </DialogContent>
-    </Dialog>
+                    </TableHeader>
+                    <TableBody>
+                      {transactions.map((tx) => (
+                        <TableRow key={tx.id}>
+                          <TableCell>
+                            <span className={cn(
+                                'font-semibold',
+                                tx.type === 'Buy' && 'text-green-500',
+                                tx.type === 'Sell' && 'text-red-500',
+                                tx.type === 'Dividend' && 'text-blue-500',
+                                tx.type === 'Interest' && 'text-purple-500',
+                            )}>
+                              {tx.type}
+                            </span>
+                          </TableCell>
+                          <TableCell>{format(new Date(tx.date), 'dd MMM yyyy')}</TableCell>
+                          <TableCell className="text-right font-mono">{formatQuantity(tx.quantity)}</TableCell>
+                          <TableCell className="text-right font-mono">{formatCurrency(tx.pricePerUnit)}</TableCell>
+                          <TableCell className="text-right font-mono">{formatCurrency(tx.totalAmount)}</TableCell>
+                          <TableCell className="text-right">
+                             {tx.id !== 'synthetic-initial-buy' && (
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                                            <MoreHorizontal className="h-4 w-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent align="end">
+                                        <DropdownMenuItem onClick={() => handleEditClick(tx)}>
+                                            <Edit className="mr-2 h-4 w-4" /> Edit
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => handleDeleteClick(tx.id)} className="text-destructive focus:text-destructive">
+                                            <Trash2 className="mr-2 h-4 w-4" /> Delete
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                             )}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                ) : (
+                  <div className="text-center py-16">
+                    <p className="text-muted-foreground">No transactions recorded yet.</p>
+                  </div>
+                )}
+              </div>
+              <DialogFooter>
+                <Button onClick={handleAddClick}>
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Add Transaction
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+      
+      <AlertDialog open={!!deletingTransactionId} onOpenChange={(open) => !open && setDeletingTransactionId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete this transaction and recalculate your investment summary.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 }

@@ -1,6 +1,6 @@
 
 
-import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, getDoc, runTransaction, getDocs } from 'firebase/firestore';
+import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, getDoc, runTransaction, getDocs, serverTimestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, OldInvestmentFormValues, Transaction, TransactionFormValues } from './types';
 
@@ -44,6 +44,44 @@ const toFirestore = (data: any) => {
     }
     return firestoreData;
 }
+
+
+const reaggregateAndBatchUpdate = (
+    batch: any,
+    investmentRef: any,
+    transactions: Omit<Transaction, 'id'>[]
+) => {
+    const buys = transactions.filter(t => t.type === 'Buy');
+    const sells = transactions.filter(t => t.type === 'Sell');
+
+    const totalBuyQty = buys.reduce((s, t) => s + t.quantity, 0);
+    const totalSellQty = sells.reduce((s, t) => s + t.quantity, 0);
+    const totalCost = buys.reduce((s, t) => s + t.totalAmount, 0);
+    const totalProceeds = sells.reduce((s, t) => s + t.totalAmount, 0);
+
+    const avgBuyPrice = totalBuyQty > 0 ? totalCost / totalBuyQty : 0;
+    const avgSellPrice = totalSellQty > 0 ? totalProceeds / totalSellQty : 0;
+    const availableQty = Math.max(0, totalBuyQty - totalSellQty);
+    const status: Investment['status'] = availableQty > 0.000001 ? 'Active' : 'Sold';
+
+    const realizedPL = totalProceeds - avgBuyPrice * totalSellQty;
+    
+    const updateData: any = {
+      quantity: availableQty,
+      totalBuyQty,
+      totalSellQty,
+      totalCost,
+      totalProceeds,
+      averageBuyPrice: avgBuyPrice,
+      averageSellPrice: avgSellPrice,
+      realizedPL,
+      status,
+      updatedAt: serverTimestamp(),
+    };
+    
+    batch.update(investmentRef, updateData);
+}
+
 
 // === Investment Functions ===
 export const getInvestments = async (userId: string): Promise<Investment[]> => {
@@ -123,66 +161,71 @@ export const getTransactions = async (userId: string, investmentId: string): Pro
 export const addTransaction = async (userId: string, investmentId: string, transactionData: TransactionFormValues): Promise<void> => {
     const investmentRef = doc(db, 'users', userId, 'investments', investmentId);
     
-    await runTransaction(db, async (transaction) => {
-        const investmentDoc = await transaction.get(investmentRef);
-        if (!investmentDoc.exists()) {
-            throw new Error("Investment document does not exist!");
-        }
+    const existingTransactionsSnapshot = await getDocsFromServer(getTransactionsCollection(userId, investmentId));
+    const existingTransactions = existingTransactionsSnapshot.docs.map(transactionFromFirestore);
+    
+    const newTransactionData = {
+        ...transactionData,
+        totalAmount: transactionData.quantity * transactionData.pricePerUnit
+    };
 
-        // Firestore transactions require us to fetch all documents first.
-        // So we get all existing transactions for this investment.
-        const existingTransactionsSnapshot = await getDocs(getTransactionsCollection(userId, investmentId));
-        const existingTransactions = existingTransactionsSnapshot.docs.map(transactionFromFirestore);
-        
-        // Prepare the new transaction data
-        const newTransactionData = {
-            ...transactionData,
-            totalAmount: transactionData.quantity * transactionData.pricePerUnit
-        };
+    const allTransactions = [...existingTransactions, newTransactionData];
 
-        const allTransactions: Transaction[] = [...existingTransactions, { id: 'new', ...newTransactionData, date: newTransactionData.date.toISOString() }];
-        
-        // --- Start Aggregation ---
-        const buys  = allTransactions.filter(t => t.type === 'Buy');
-        const sells = allTransactions.filter(t => t.type === 'Sell');
+    const batch = writeBatch(db);
+    
+    const newTransactionRef = doc(getTransactionsCollection(userId, investmentId));
+    batch.set(newTransactionRef, toFirestore(newTransactionData));
 
-        const totalBuyQty = buys.reduce((s,t)=>s+t.quantity,0);
-        const totalSellQty = sells.reduce((s,t)=>s+t.quantity,0);
-        const totalBuyCost = buys.reduce((s,t)=>s+t.totalAmount,0);
-        const totalProceeds = sells.reduce((s,t)=>s+t.totalAmount,0);
+    reaggregateAndBatchUpdate(batch, investmentRef, allTransactions);
 
-        const avgBuyPrice  = totalBuyQty  > 0 ? totalBuyCost / totalBuyQty  : 0;
-        const avgSellPrice = totalSellQty > 0 ? totalProceeds / totalSellQty : 0;
-        const availableQty = Math.max(0, totalBuyQty - totalSellQty);
-        const status: Investment['status'] = availableQty > 0.000001 ? 'Active' : 'Sold';
+    await batch.commit();
+};
 
-        // realized P/L using average-cost method
-        const realizedPL = totalProceeds - avgBuyPrice * totalSellQty;
-        
-        const updateData: any = {
-          quantity: availableQty, // This is the available quantity
-          totalBuyQty,
-          totalSellQty,
-          totalCost: totalBuyCost,
-          totalProceeds,
-          averageBuyPrice: avgBuyPrice,
-          averageSellPrice: avgSellPrice,
-          realizedPL,
-          status,
-        };
+export const updateTransaction = async (userId: string, investmentId: string, transactionId: string, transactionData: TransactionFormValues) => {
+    const investmentRef = doc(db, 'users', userId, 'investments', investmentId);
+    const transactionRef = doc(db, 'users', userId, 'investments', investmentId, 'transactions', transactionId);
 
-        if (status === 'Sold') {
-            const lastSell = sells.sort((a,b) => new Date(b.date).getTime() - new Date(a.date).getTime())[0];
-            if(lastSell) {
-                updateData.currentValue = lastSell.pricePerUnit;
-            } else if (transactionData.type === 'Sell') {
-                 updateData.currentValue = transactionData.pricePerUnit;
+    const existingTransactionsSnapshot = await getDocsFromServer(getTransactionsCollection(userId, investmentId));
+
+    const updatedTransactions = existingTransactionsSnapshot.docs.map(doc => {
+        if(doc.id === transactionId) {
+            return {
+                ...transactionData,
+                totalAmount: transactionData.quantity * transactionData.pricePerUnit
             }
         }
-        
-        // Now we can perform the writes
-        const newTransactionRef = doc(getTransactionsCollection(userId, investmentId));
-        transaction.set(newTransactionRef, toFirestore(newTransactionData));
-        transaction.update(investmentRef, updateData);
+        return transactionFromFirestore(doc);
     });
-};
+    
+    const updatedTransactionData = {
+        ...transactionData,
+        totalAmount: transactionData.quantity * transactionData.pricePerUnit
+    };
+
+    const batch = writeBatch(db);
+    batch.update(transactionRef, toFirestore(updatedTransactionData));
+    reaggregateAndBatchUpdate(batch, investmentRef, updatedTransactions);
+    await batch.commit();
+}
+
+export const deleteTransaction = async (userId: string, investmentId: string, transactionId: string) => {
+    if (transactionId === 'synthetic-initial-buy') {
+        throw new Error("Cannot delete the initial buy transaction. Please edit the investment details instead.");
+    }
+    const investmentRef = doc(db, 'users', userId, 'investments', investmentId);
+    const transactionRef = doc(db, 'users', userId, 'investments', investmentId, 'transactions', transactionId);
+
+    const existingTransactionsSnapshot = await getDocsFromServer(getTransactionsCollection(userId, investmentId));
+    const remainingTransactions = existingTransactionsSnapshot.docs
+        .filter(doc => doc.id !== transactionId)
+        .map(transactionFromFirestore);
+    
+    if (remainingTransactions.length === 0) {
+        throw new Error("Cannot delete the last transaction. Please delete the investment instead.");
+    }
+
+    const batch = writeBatch(db);
+    batch.delete(transactionRef);
+    reaggregateAndBatchUpdate(batch, investmentRef, remainingTransactions);
+    await batch.commit();
+}
