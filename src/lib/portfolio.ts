@@ -65,7 +65,15 @@ export function calculatePositionMetrics(
   const marketValue = mul(availableQty, dec(currentPrice ?? 0));
   const unrealizedPL = sub(marketValue, costBasis);
 
-  const realizedPLDisplay = filter.kind === 'all' ? realizedPLAll : realizedPLYear;
+  let realizedPLDisplay = realizedPLAll;
+    if (filter.kind === 'year') {
+        if (filter.mode === 'realized' || filter.mode === 'combined') {
+            realizedPLDisplay = realizedPLYear;
+        } else if (filter.mode === 'holdings') {
+            realizedPLDisplay = dec(0);
+        }
+    }
+
   const totalPLDisplay = add(realizedPLDisplay, unrealizedPL);
   const performancePct = purchaseValue.gt(0) ? div(totalPLDisplay, purchaseValue) : dec(0);
 
@@ -110,31 +118,51 @@ export function aggregateByType(
 ): SummaryResult {
   let metricsPerInvestment: PositionMetrics[] = [];
 
-  if (filter.kind === 'year') {
-    const investmentsWithSellsInYear = new Set<string>();
-    Object.entries(transactionsMap).forEach(([invId, txs]) => {
-      const hasSellInYear = txs.some(
-        tx => tx.type === 'Sell' && new Date(tx.date).getFullYear() === filter.year
-      );
-      if (hasSellInYear) investmentsWithSellsInYear.add(invId);
-    });
+    if (filter.kind === 'year') {
+        const investmentsWithSellsInYear = new Set<string>();
+        Object.entries(transactionsMap).forEach(([invId, txs]) => {
+            const hasSellInYear = txs.some(
+                tx => tx.type === 'Sell' && new Date(tx.date).getFullYear() === filter.year
+            );
+            if (hasSellInYear) investmentsWithSellsInYear.add(invId);
+        });
 
-    metricsPerInvestment = investments
-      .filter(inv => investmentsWithSellsInYear.has(inv.id))
-      .map(inv => {
-        const txs = transactionsMap[inv.id] ?? [];
-        return calculatePositionMetrics(inv, txs, inv.currentValue, filter);
-      });
-  } else {
-    // Default 'all' filter logic
-    metricsPerInvestment = investments
-      .map(inv => {
-        if (!inv.purchaseQuantity || inv.purchaseQuantity <= 0) return null;
-        const txs = transactionsMap[inv.id] ?? [];
-        return calculatePositionMetrics(inv, txs, inv.currentValue, filter);
-      })
-      .filter((p): p is PositionMetrics => p !== null);
-  }
+        const isActive = (inv: Investment, txs: Transaction[]) => {
+            const soldQty = txs.filter(t => t.type === 'Sell').reduce((sum, t) => sum + t.quantity, 0);
+            return (inv.purchaseQuantity ?? 0) > soldQty;
+        };
+
+        let include: (inv: Investment) => boolean;
+
+        switch (filter.mode) {
+            case 'realized':
+                include = (inv) => investmentsWithSellsInYear.has(inv.id);
+                break;
+            case 'holdings':
+                include = (inv) => isActive(inv, transactionsMap[inv.id] ?? []);
+                break;
+            case 'combined':
+            default:
+                include = (inv) => investmentsWithSellsInYear.has(inv.id) || isActive(inv, transactionsMap[inv.id] ?? []);
+                break;
+        }
+
+        metricsPerInvestment = investments
+            .filter(include)
+            .map(inv => {
+                const txs = transactionsMap[inv.id] ?? [];
+                return calculatePositionMetrics(inv, txs, inv.currentValue, filter);
+            });
+    } else {
+        // 'all' kind
+        metricsPerInvestment = investments
+            .map(inv => {
+                if (!inv.purchaseQuantity || inv.purchaseQuantity <= 0) return null;
+                const txs = transactionsMap[inv.id] ?? [];
+                return calculatePositionMetrics(inv, txs, inv.currentValue, filter);
+            })
+            .filter((p): p is PositionMetrics => p !== null);
+    }
 
 
   const byType: Record<string, any> = {};

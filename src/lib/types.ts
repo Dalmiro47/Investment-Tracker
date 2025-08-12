@@ -7,7 +7,9 @@ export type SortKey = 'purchaseDate' | 'performance' | 'totalAmount';
 
 export type TransactionType = 'Sell' | 'Dividend' | 'Interest';
 
-export type YearFilter = { kind: 'all' } | { kind: 'year'; year: number };
+export type YearFilter =
+  | { kind: 'all' }
+  | { kind: 'year'; year: number; mode: 'combined' | 'realized' | 'holdings' };
 
 
 export interface Transaction {

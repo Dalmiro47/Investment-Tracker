@@ -25,11 +25,19 @@ const CHART_COLORS = [
 ];
 
 type DonutMode = 'market' | 'economic';
+type YearViewMode = 'combined' | 'realized' | 'holdings';
 
 export default function PortfolioSummary({ investments, transactionsMap, sellYears }: { investments: Investment[], transactionsMap: Record<string, Transaction[]>, sellYears: number[] }) {
     
     const [donutMode, setDonutMode] = useState<DonutMode>('market');
     const [yearFilter, setYearFilter] = useState<YearFilter>({ kind: 'all' });
+    const [yearViewMode, setYearViewMode] = useState<YearViewMode>('combined');
+
+    useEffect(() => {
+        if (yearFilter.kind === 'year') {
+            setYearFilter({ ...yearFilter, mode: yearViewMode });
+        }
+    }, [yearViewMode]);
 
     const summaryData: SummaryResult | null = useMemo(() => {
         if (investments.length === 0 || Object.keys(transactionsMap).length === 0) {
@@ -66,7 +74,7 @@ export default function PortfolioSummary({ investments, transactionsMap, sellYea
         if (value === 'all') {
             setYearFilter({ kind: 'all' });
         } else {
-            setYearFilter({ kind: 'year', year: parseInt(value) });
+            setYearFilter({ kind: 'year', year: parseInt(value), mode: yearViewMode });
         }
     };
 
@@ -120,8 +128,13 @@ export default function PortfolioSummary({ investments, transactionsMap, sellYea
                                 </DialogHeader>
                                 <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4">
                                     <div>
-                                        <h4 className="font-semibold">Tax Year Filter</h4>
-                                        <p className="text-muted-foreground">This filter allows you to see your realized gains for a specific tax year. Realized P/L is calculated using only sales from the selected year. All other metrics (Market Value, Unrealized P/L) are always based on current prices and holdings.</p>
+                                        <h4 className="font-semibold">Tax Year Filter &amp; View Mode</h4>
+                                        <p className="text-muted-foreground">The filter restricts calculations to a specific year. The view mode changes which investments are included.</p>
+                                        <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
+                                            <li><span className="font-semibold text-foreground">Combined:</span> (Default) Shows all currently open positions PLUS any positions that had a sale in the selected year. Realized P/L is year-specific.</li>
+                                            <li><span className="font-semibold text-foreground">Realized (Tax):</span> Shows ONLY positions that had a sale in the selected year. This is a pure tax-reporting view.</li>
+                                            <li><span className="font-semibold text-foreground">Holdings:</span> Shows ONLY currently open positions. Realized P/L is shown as zero.</li>
+                                        </ul>
                                     </div>
                                     <div>
                                         <h4 className="font-semibold">Cost Basis</h4>
@@ -133,7 +146,7 @@ export default function PortfolioSummary({ investments, transactionsMap, sellYea
                                     </div>
                                     <div>
                                         <h4 className="font-semibold">Realized P/L (Profit/Loss)</h4>
-                                        <p className="text-muted-foreground">Your "locked-in" profit or loss from sales. This value is filtered by the selected "Tax Year". <br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
+                                        <p className="text-muted-foreground">Your "locked-in" profit or loss from sales. This value is filtered by the selected "Tax Year" and "View Mode". <br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
                                     </div>
                                     <div>
                                         <h4 className="font-semibold">Unrealized P/L (Profit/Loss)</h4>
@@ -145,9 +158,8 @@ export default function PortfolioSummary({ investments, transactionsMap, sellYea
                                     </div>
                                     <div>
                                         <h4 className="font-semibold">Performance</h4>
-                                        <p className="text-muted-foreground">The total percentage return on your investment, including the performance of shares you've already sold. It's calculated against the full original purchase value to give a true measure of success. This value updates based on the selected tax year.</p>
+                                        <p className="text-muted-foreground">The total percentage return, calculated against the full original purchase value to give a true measure of an investment's success from its inception. It's based on the displayed (and therefore filtered) Total P/L.</p>
                                         <p className="text-muted-foreground mt-1"><code className="text-xs">Formula: (Total P/L / Original Purchase Value) × 100</code></p>
-                                        <p className="text-muted-foreground text-xs mt-1">Note: "Original Purchase Value" is the total cost of your first buy and does not decrease as you sell shares.</p>
                                     </div>
                                     <div>
                                         <h4 className="font-semibold">% of Portfolio (Donut Chart)</h4>
@@ -166,8 +178,19 @@ export default function PortfolioSummary({ investments, transactionsMap, sellYea
                         </Dialog>
                     </div>
                 </div>
+                <div className="flex items-center gap-4 mt-2 mb-4">
+                    {yearFilter.kind === 'year' && (
+                        <Tabs value={yearViewMode} onValueChange={(v) => setYearViewMode(v as YearViewMode)}>
+                            <TabsList>
+                                <TabsTrigger value="combined">Combined</TabsTrigger>
+                                <TabsTrigger value="realized">Realized (Tax)</TabsTrigger>
+                                <TabsTrigger value="holdings">Holdings</TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                    )}
+                </div>
                  <p className="text-xs text-muted-foreground mt-1">
-                    Realized P/L reflects the selected year. Market &amp; unrealized values are based on current prices.
+                    Realized P/L reflects the selected year and view mode. Market &amp; unrealized values are based on current prices.
                 </p>
             </CardHeader>
             <CardContent>
@@ -277,7 +300,7 @@ export default function PortfolioSummary({ investments, transactionsMap, sellYea
                                 <div className="flex flex-col items-center justify-center text-center h-full">
                                     <Info className="h-8 w-8 text-muted-foreground mb-2"/>
                                     <p className="text-sm text-muted-foreground">No data to display in chart.</p>
-                                    <p className="text-xs text-muted-foreground">This may be because all assets have been sold.</p>
+                                    <p className="text-xs text-muted-foreground">This may be because all assets have been sold or the filter resulted in no data.</p>
                                 </div>
                             )}
                         </ChartContainer>
