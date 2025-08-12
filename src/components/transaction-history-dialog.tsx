@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
-import { getTransactions, addTransaction } from "@/lib/firestore";
+import { getTransactions, addTransaction, deleteTransaction, updateTransaction } from "@/lib/firestore";
 import type { Investment, Transaction, TransactionFormValues } from "@/lib/types";
 import { availableQty } from "@/lib/types";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -19,6 +19,23 @@ import {
   DialogTitle,
   DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+
 import {
   Form,
   FormControl,
@@ -39,7 +56,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { CalendarIcon, PlusCircle, Loader2 } from "lucide-react";
+import { CalendarIcon, PlusCircle, Loader2, MoreVertical, Edit, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 // --- TransactionForm ---
@@ -47,22 +64,35 @@ interface TransactionFormProps {
   investment: Investment;
   onFormSubmit: () => void;
   onCancel: () => void;
+  editingTransaction?: Transaction;
 }
 
-function TransactionForm({ investment, onFormSubmit, onCancel }: TransactionFormProps) {
+function TransactionForm({ investment, onFormSubmit, onCancel, editingTransaction }: TransactionFormProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
-    defaultValues: {
-      type: "Sell",
-      date: new Date(),
-      quantity: availableQty(investment),
-      pricePerUnit: investment.currentValue ?? 0,
-      amount: 0,
-    },
   });
+
+  useEffect(() => {
+    if (editingTransaction) {
+      form.reset({
+        ...editingTransaction,
+        date: parseISO(editingTransaction.date),
+        amount: editingTransaction.type !== 'Sell' ? editingTransaction.totalAmount : 0,
+      });
+    } else {
+      form.reset({
+        type: "Sell",
+        date: new Date(),
+        quantity: availableQty(investment),
+        pricePerUnit: investment.currentValue ?? 0,
+        amount: 0,
+      });
+    }
+  }, [editingTransaction, form, investment]);
+
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const watchedType = useWatch({ control: form.control, name: "type" });
@@ -71,8 +101,13 @@ function TransactionForm({ investment, onFormSubmit, onCancel }: TransactionForm
   const handleSubmit = async (values: TransactionFormValues) => {
     if (!user) return;
     try {
-      await addTransaction(user.uid, investment.id, values);
-      toast({ title: "Success", description: "Transaction added successfully." });
+      if (editingTransaction) {
+        await updateTransaction(user.uid, investment.id, editingTransaction.id, values);
+        toast({ title: "Success", description: "Transaction updated successfully." });
+      } else {
+        await addTransaction(user.uid, investment.id, values);
+        toast({ title: "Success", description: "Transaction added successfully." });
+      }
       onFormSubmit();
     } catch (error) {
       console.error("Failed to save transaction:", error);
@@ -90,7 +125,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel }: TransactionForm
             render={({ field }) => (
                 <FormItem>
                 <FormLabel>Type</FormLabel>
-                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <Select onValueChange={field.onChange} value={field.value}>
                     <FormControl>
                     <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                     </FormControl>
@@ -187,7 +222,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel }: TransactionForm
         <div className="flex justify-end gap-2 pt-4">
           <Button type="button" variant="ghost" onClick={onCancel} disabled={form.formState.isSubmitting}>Cancel</Button>
           <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Transaction'}
+            {form.formState.isSubmitting ? 'Saving...' : 'Save Transaction'}
           </Button>
         </div>
       </form>
@@ -211,6 +246,8 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState<'list' | 'form'>('list');
+  const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
+  const [deletingTransactionId, setDeletingTransactionId] = useState<string | null>(null);
 
   const fetchTransactions = async () => {
       if (!user) return;
@@ -222,31 +259,49 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
 
   useEffect(() => {
     if (isOpen) {
-      fetchTransactions();
       setView('list');
+      setEditingTransaction(undefined);
     }
-  }, [isOpen, user, investment.id]);
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (isOpen) {
+      fetchTransactions();
+    }
+  }, [isOpen, user, investment]); // Refetch when investment object changes
 
   const handleFormSubmit = () => {
     setView('list');
-    fetchTransactions();
-    onTransactionAdded(); // This should trigger a refetch on the main page
+    setEditingTransaction(undefined);
+    onTransactionAdded(); // This should trigger a refetch on the main page, which then triggers the fetch in this component
   }
   
   const handleAddClick = () => {
+    setEditingTransaction(undefined);
     setView('form');
   }
 
+  const handleEditClick = (tx: Transaction) => {
+    setEditingTransaction(tx);
+    setView('form');
+  };
+
+  const handleDeleteClick = (txId: string) => {
+    setDeletingTransactionId(txId);
+  };
+
+  const confirmDelete = async () => {
+    if (!user || !deletingTransactionId) return;
+    try {
+      await deleteTransaction(user.uid, investment.id, deletingTransactionId);
+      onTransactionAdded(); // Refetch
+      setDeletingTransactionId(null);
+    } catch (error) {
+       console.error("Failed to delete transaction:", error);
+    }
+  };
+
   const allTransactionsForDisplay: (Transaction & { isInitial?: boolean })[] = [
-    {
-      id: 'initial-purchase',
-      type: 'Sell', // A fake type to satisfy the model, won't be shown
-      isInitial: true,
-      date: investment.purchaseDate,
-      quantity: investment.purchaseQuantity,
-      pricePerUnit: investment.purchasePricePerUnit,
-      totalAmount: investment.purchaseQuantity * investment.purchasePricePerUnit
-    },
     ...transactions,
   ].sort((a,b) => +new Date(b.date) - +new Date(a.date));
 
@@ -258,7 +313,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
           <DialogHeader>
             <DialogTitle>
               {view === 'form' 
-                ? 'Add Transaction'
+                ? editingTransaction ? 'Edit Transaction' : 'Add Transaction'
                 : `Transaction History: ${investment.name}`}
             </DialogTitle>
             <DialogDescription>
@@ -272,14 +327,15 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
             <TransactionForm 
               investment={investment}
               onFormSubmit={handleFormSubmit}
-              onCancel={() => setView('list')}
+              onCancel={() => { setView('list'); setEditingTransaction(undefined); }}
+              editingTransaction={editingTransaction}
             />
           ) : (
             <>
               <div className="max-h-[60vh] overflow-y-auto pr-2">
                 {loading ? (
                   <div className="flex justify-center items-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
-                ) : allTransactionsForDisplay.length > 0 ? (
+                ) : (
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -288,34 +344,67 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                         <TableHead className="text-right">Quantity</TableHead>
                         <TableHead className="text-right">Price/Unit</TableHead>
                         <TableHead className="text-right">Total Amount</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
+                        {/* Initial Purchase Row */}
+                       <TableRow className="bg-muted/30">
+                          <TableCell><span className="font-semibold text-green-500">Buy</span></TableCell>
+                          <TableCell>{format(parseISO(investment.purchaseDate), 'dd MMM yyyy')}</TableCell>
+                          <TableCell className="text-right font-mono">{formatQuantity(investment.purchaseQuantity)}</TableCell>
+                          <TableCell className="text-right font-mono">{formatCurrency(investment.purchasePricePerUnit)}</TableCell>
+                          <TableCell className="text-right font-mono">{formatCurrency(investment.purchaseQuantity * investment.purchasePricePerUnit)}</TableCell>
+                          <TableCell></TableCell>
+                       </TableRow>
+                       
+                       {/* Other Transactions */}
                       {allTransactionsForDisplay.map((tx) => (
                         <TableRow key={tx.id}>
                           <TableCell>
                             <span className={cn(
                                 'font-semibold',
-                                tx.isInitial && 'text-green-500',
                                 tx.type === 'Sell' && 'text-red-500',
                                 tx.type === 'Dividend' && 'text-blue-500',
                                 tx.type === 'Interest' && 'text-purple-500',
                             )}>
-                              {tx.isInitial ? 'Buy' : tx.type}
+                              {tx.type}
                             </span>
                           </TableCell>
                           <TableCell>{format(parseISO(tx.date), 'dd MMM yyyy')}</TableCell>
-                          <TableCell className="text-right font-mono">{formatQuantity(tx.quantity)}</TableCell>
-                          <TableCell className="text-right font-mono">{formatCurrency(tx.pricePerUnit)}</TableCell>
+                          <TableCell className="text-right font-mono">{tx.type === 'Sell' ? formatQuantity(tx.quantity) : '-'}</TableCell>
+                          <TableCell className="text-right font-mono">{tx.type === 'Sell' ? formatCurrency(tx.pricePerUnit) : '-'}</TableCell>
                           <TableCell className="text-right font-mono">{formatCurrency(tx.totalAmount)}</TableCell>
+                          <TableCell className="text-right">
+                             <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                  <MoreVertical className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => handleEditClick(tx)}>
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleDeleteClick(tx.id)} className="text-destructive focus:text-destructive">
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  Delete
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </TableCell>
                         </TableRow>
                       ))}
+                      {allTransactionsForDisplay.length === 0 && (
+                        <TableRow>
+                            <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
+                                No other transactions recorded yet.
+                            </TableCell>
+                        </TableRow>
+                      )}
                     </TableBody>
                   </Table>
-                ) : (
-                  <div className="text-center py-16">
-                    <p className="text-muted-foreground">No transactions recorded yet.</p>
-                  </div>
                 )}
               </div>
               <DialogFooter>
@@ -328,6 +417,21 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
           )}
         </DialogContent>
       </Dialog>
+      
+      <AlertDialog open={!!deletingTransactionId} onOpenChange={(open) => !open && setDeletingTransactionId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete the transaction. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive hover:bg-destructive/90">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

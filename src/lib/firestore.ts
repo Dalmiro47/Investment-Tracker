@@ -1,5 +1,6 @@
 
-import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp } from 'firebase/firestore';
+
+import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues } from './types';
 
@@ -81,7 +82,8 @@ const reaggregateAndApply = (
 
     const totalSoldQty = sells.reduce((s, x) => s + x.quantity, 0);
     const realizedProceeds = sells.reduce((s, x) => s + x.totalAmount, 0);
-    const realizedPnL = sells.reduce((s, x) => s + (x.pricePerUnit - investment.purchasePricePerUnit) * x.quantity, 0);
+    const realizedPnL = sells.reduce((s, x) =>
+      s + (x.pricePerUnit - investment.purchasePricePerUnit) * x.quantity, 0);
 
     const dividends = divs.reduce((s, x) => s + x.totalAmount, 0);
     const interest = ints.reduce((s, x) => s + x.totalAmount, 0);
@@ -105,7 +107,7 @@ const reaggregateAndApply = (
 export async function addTransaction(uid: string, invId: string, t: TransactionFormValues) {
     await runTransaction(db, async (tx) => {
         const invRef = doc(db, 'users', uid, 'investments', invId);
-        const txCollectionRef = txCol(uid, invId);
+        const txCollectionRef = collection(db, 'users', uid, 'investments', invId, 'transactions');
         
         // --- READS FIRST ---
         const invSnap = await tx.get(invRef);
@@ -128,13 +130,72 @@ export async function addTransaction(uid: string, invId: string, t: TransactionF
             totalAmount,
         };
         
-        // Manually add the newly-created-in-memory transaction to the list for aggregation
-        allTransactions.push({ ...newTransactionData, id: newTxRef.id, date: t.date.toISOString() });
+        // Add the newly-created-in-memory transaction to the list for aggregation
+        const updatedTransactions = [...allTransactions, { ...newTransactionData, id: newTxRef.id, date: t.date.toISOString() }]
         
         // Write 1: Update aggregates on parent investment
-        reaggregateAndApply(tx, invRef, investment, allTransactions);
+        reaggregateAndApply(tx, invRef, investment, updatedTransactions);
         
         // Write 2: Create the new transaction document
         tx.set(newTxRef, { ...newTransactionData, date: toTS(t.date) });
+    });
+}
+
+export async function updateTransaction(uid: string, invId: string, txId: string, t: TransactionFormValues) {
+  await runTransaction(db, async (transaction) => {
+    const invRef = doc(db, 'users', uid, 'investments', invId);
+    const txRef = doc(db, 'users', uid, 'investments', invId, 'transactions', txId);
+    const txCollectionRef = collection(db, 'users', uid, 'investments', invId, 'transactions');
+
+    // --- READS ---
+    const invSnap = await transaction.get(invRef);
+    if (!invSnap.exists()) throw new Error('Investment not found');
+    const investment = fromInvestmentDoc(invSnap);
+
+    const existingTxSnap = await transaction.get(txCollectionRef);
+    const allTransactions = existingTxSnap.docs.map(fromTxDoc);
+
+    // --- WRITES ---
+    const isSell = t.type === 'Sell';
+    const totalAmount = isSell ? t.quantity * t.pricePerUnit : t.amount;
+    const updatedTxData: Omit<Transaction, 'id' | 'date'> & { date: Date } = {
+        type: t.type,
+        date: t.date,
+        quantity: isSell ? t.quantity : 0,
+        pricePerUnit: isSell ? t.pricePerUnit : 0,
+        totalAmount,
+    };
+    
+    // Create the list of transactions for re-aggregation, replacing the old version with the new
+    const updatedTransactions = allTransactions.map(existingTx => 
+      existingTx.id === txId 
+        ? { ...updatedTxData, id: txId, date: t.date.toISOString() }
+        : existingTx
+    );
+
+    reaggregateAndApply(transaction, invRef, investment, updatedTransactions);
+    transaction.update(txRef, { ...updatedTxData, date: toTS(t.date) });
+  });
+}
+
+export async function deleteTransaction(uid: string, invId: string, txId: string) {
+    await runTransaction(db, async (transaction) => {
+        const invRef = doc(db, 'users', uid, 'investments', invId);
+        const txRef = doc(db, 'users', uid, 'investments', invId, 'transactions', txId);
+        const txCollectionRef = collection(db, 'users', uid, 'investments', invId, 'transactions');
+
+        // --- READS ---
+        const invSnap = await transaction.get(invRef);
+        if (!invSnap.exists()) throw new Error('Investment not found');
+        const investment = fromInvestmentDoc(invSnap);
+
+        const existingTxSnap = await transaction.get(txCollectionRef);
+        const allTransactions = existingTxSnap.docs.map(fromTxDoc);
+
+        // --- WRITES ---
+        const remainingTransactions = allTransactions.filter(tx => tx.id !== txId);
+
+        reaggregateAndApply(transaction, invRef, investment, remainingTransactions);
+        transaction.delete(txRef);
     });
 }
