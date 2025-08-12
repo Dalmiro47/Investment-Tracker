@@ -105,11 +105,18 @@ const reaggregateAndApply = (
 export async function addTransaction(uid: string, invId: string, t: TransactionFormValues) {
     await runTransaction(db, async (tx) => {
         const invRef = doc(db, 'users', uid, 'investments', invId);
+        const txCollectionRef = txCol(uid, invId);
+
+        // --- READS FIRST ---
         const invSnap = await tx.get(invRef);
         if (!invSnap.exists()) throw new Error('Investment not found');
         const investment = fromInvestmentDoc(invSnap);
 
-        const newTxRef = doc(txCol(uid, invId));
+        const existingTxSnap = await tx.get(query(txCollectionRef));
+        const allTransactions = existingTxSnap.docs.map(fromTxDoc);
+
+        // --- THEN WRITES ---
+        const newTxRef = doc(txCollectionRef);
         const isSell = t.type === 'Sell';
         const totalAmount = isSell ? t.quantity * t.pricePerUnit : t.amount;
 
@@ -121,16 +128,13 @@ export async function addTransaction(uid: string, invId: string, t: TransactionF
             totalAmount,
         };
         
-        tx.set(newTxRef, { ...newTransactionData, date: toTS(t.date) });
-
-        const txCollectionRef = txCol(uid, invId);
-        // IMPORTANT: Read from the transaction, not from the server directly
-        const existingTxSnap = await tx.get(query(txCollectionRef));
-        const allTransactions = existingTxSnap.docs.map(fromTxDoc);
-
         // Manually add the newly-created-in-memory transaction to the list for aggregation
         allTransactions.push({ ...newTransactionData, id: newTxRef.id, date: t.date.toISOString() });
         
+        // Write 1: Update aggregates on parent investment
         reaggregateAndApply(tx, invRef, investment, allTransactions);
+        
+        // Write 2: Create the new transaction document
+        tx.set(newTxRef, { ...newTransactionData, date: toTS(t.date) });
     });
 }
