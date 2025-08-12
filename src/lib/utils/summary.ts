@@ -1,23 +1,28 @@
 
+
 import { availableQty } from '../types';
 import type { Investment, InvestmentType } from '@/lib/types';
+import { dec, add, sub, mul, div, toNum } from '../money';
 
 export interface SummaryItem {
     type: InvestmentType;
     totalCost: number;
-    currentValue: number; // Represents total marketValue + realized proceeds for this summary
+    currentValue: number; // Represents total marketValue for this summary
     totalReturnValue: number;
-    gainLoss: number;
-    gainLossPercent: number;
+    realizedPnl: number;
+    unrealizedPnl: number;
+    totalPnl: number;
+    performance: number;
     portfolioPercentage: number;
 }
 
 export interface SummaryTotals {
     totalCost: number; 
-    currentValue: number; // Represents total marketValue + realized proceeds for this summary
-    totalReturnValue: number;
-    gainLoss: number;
-    gainLossPercent: number;
+    currentValue: number; 
+    realizedPnl: number;
+    unrealizedPnl: number;
+    totalPnl: number;
+    performance: number;
 }
 
 export interface PortfolioSummaryData {
@@ -33,51 +38,57 @@ export function summarizeByType(investments: Investment[]): PortfolioSummaryData
         if (!summary[type]) {
             summary[type] = {
                 type,
-                totalCost: 0,
-                currentValue: 0,
-                realizedProceeds: 0,
+                costBasisOfActive: dec(0), // Cost basis of what's *left*
+                marketValue: dec(0),      // Market value of what's *left*
+                realizedPnl: dec(0),
+                totalOriginalCost: dec(0),
             };
         }
         
-        const avQty = availableQty(inv);
+        const avQty = dec(availableQty(inv));
+        const purchasePrice = dec(inv.purchasePricePerUnit);
 
-        // Total original cost of all shares ever purchased for this investment
-        summary[type].totalCost += inv.purchasePricePerUnit * inv.purchaseQuantity;
-
-        // Current market value of the remaining (available) quantity
-        const marketValue = (inv.currentValue ?? 0) * avQty;
+        const costOfActiveShares = mul(avQty, purchasePrice);
+        const marketValue = mul(avQty, dec(inv.currentValue ?? 0));
         
-        // Total value = what we got from selling + what we have left
-        summary[type].currentValue += marketValue + inv.realizedProceeds;
-        summary[type].realizedProceeds += inv.realizedProceeds;
+        summary[type].costBasisOfActive = add(summary[type].costBasisOfActive, costOfActiveShares);
+        summary[type].marketValue = add(summary[type].marketValue, marketValue);
+        summary[type].realizedPnl = add(summary[type].realizedPnl, dec(inv.realizedPnL));
+        summary[type].totalOriginalCost = add(summary[type].totalOriginalCost, mul(dec(inv.purchaseQuantity), purchasePrice));
     });
 
-    const totals: SummaryTotals = {
-        totalCost: 0,
-        currentValue: 0,
-        totalReturnValue: 0,
-        gainLoss: 0,
-        gainLossPercent: 0,
-    };
+    const totalPortfolioMarketValue = Object.values(summary).reduce((acc, s) => add(acc, s.marketValue), dec(0));
+
+    const finalSummary: Record<string, SummaryItem> = {};
 
     Object.values(summary).forEach(typeSum => {
-        totals.totalCost += typeSum.totalCost;
-        totals.currentValue += typeSum.currentValue;
+        const unrealizedPnl = sub(typeSum.marketValue, typeSum.costBasisOfActive);
+        const totalPnl = add(unrealizedPnl, typeSum.realizedPnl);
+        const performance = typeSum.totalOriginalCost.eq(0) ? dec(0) : div(totalPnl, typeSum.totalOriginalCost);
+
+        finalSummary[typeSum.type] = {
+            type: typeSum.type,
+            totalCost: toNum(typeSum.totalOriginalCost),
+            currentValue: toNum(typeSum.marketValue),
+            realizedPnl: toNum(typeSum.realizedPnl),
+            unrealizedPnl: toNum(unrealizedPnl),
+            totalPnl: toNum(totalPnl),
+            performance: toNum(performance, 4),
+            portfolioPercentage: totalPortfolioMarketValue.eq(0) ? 0 : toNum(div(typeSum.marketValue, totalPortfolioMarketValue), 4),
+            totalReturnValue: 0 // This can be deprecated or redefined
+        };
     });
+
+    const totals = Object.values(finalSummary).reduce((acc, s) => {
+        acc.totalCost += s.totalCost;
+        acc.currentValue += s.currentValue;
+        acc.realizedPnl += s.realizedPnl;
+        acc.unrealizedPnl += s.unrealizedPnl;
+        acc.totalPnl += s.totalPnl;
+        return acc;
+    }, { totalCost: 0, currentValue: 0, realizedPnl: 0, unrealizedPnl: 0, totalPnl: 0, performance: 0 });
     
-    // Now calculate percentages and gain/loss after we have totals
-    Object.values(summary).forEach(typeSum => {
-        typeSum.gainLoss = typeSum.currentValue - typeSum.totalCost;
-        typeSum.gainLossPercent = typeSum.totalCost > 0 ? (typeSum.gainLoss / typeSum.totalCost) * 100 : 0;
-        // Portfolio percentage should be based on the current market value of ACTIVE assets, not total return value.
-        const activeMarketValue = typeSum.currentValue - typeSum.realizedProceeds;
-        const totalActiveMarketValue = totals.currentValue - Object.values(summary).reduce((acc, s) => acc + (s.realizedProceeds ?? 0), 0);
-        typeSum.portfolioPercentage = totalActiveMarketValue > 0 ? (activeMarketValue / totalActiveMarketValue) * 100 : 0;
-    });
+    totals.performance = totals.totalCost > 0 ? totals.totalPnl / totals.totalCost : 0;
 
-    totals.gainLoss = totals.currentValue - totals.totalCost;
-    totals.gainLossPercent = totals.totalCost > 0 ? (totals.gainLoss / totals.totalCost) * 100 : 0;
-
-
-    return { summary, totals };
+    return { summary: finalSummary, totals };
 }

@@ -1,6 +1,6 @@
 
 
-import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query } from 'firebase/firestore';
+import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query, where, getDocs, collectionGroup } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues } from './types';
 
@@ -30,12 +30,12 @@ const fromTxDoc = (snap: any): Transaction => {
 };
 
 export async function getInvestments(uid: string): Promise<Investment[]> {
-  const q = await getDocsFromServer(investmentsCol(uid));
+  const q = await getDocsFromServer(query(investmentsCol(uid)));
   return q.docs.map(fromInvestmentDoc);
 }
 
 export async function addInvestment(uid: string, data: InvestmentFormValues) {
-  await addDoc(investmentsCol(uid), {
+  const investmentData = {
     ...data,
     purchaseDate: toTS(data.purchaseDate),
     currentValue: data.purchasePricePerUnit, // Start with the purchase price
@@ -46,7 +46,9 @@ export async function addInvestment(uid: string, data: InvestmentFormValues) {
     interest: 0,
     status: 'Active',
     createdAt: serverTimestamp(),
-  });
+  };
+
+  await addDoc(investmentsCol(uid), investmentData);
 }
 
 export async function updateInvestment(uid: string, invId: string, patch: Partial<InvestmentFormValues>) {
@@ -66,8 +68,24 @@ export async function deleteInvestment(uid: string, invId: string) {
 }
 
 export async function getTransactions(uid: string, invId: string): Promise<Transaction[]> {
-  const q = await getDocsFromServer(txCol(uid, invId));
+  const q = await getDocsFromServer(query(txCol(uid, invId)));
   return q.docs.map(fromTxDoc).sort((a,b) => +new Date(b.date) - +new Date(a.date));
+}
+
+// Fetch all transactions for a given list of investments in parallel
+export async function getAllTransactionsForInvestments(
+  userId: string,
+  investments: Investment[],
+): Promise<Record<string, Transaction[]>> {
+  const transactionPromises = investments.map(inv => getTransactions(userId, inv.id));
+  const transactionsArrays = await Promise.all(transactionPromises);
+
+  const transactionsMap: Record<string, Transaction[]> = {};
+  investments.forEach((inv, index) => {
+    transactionsMap[inv.id] = transactionsArrays[index];
+  });
+  
+  return transactionsMap;
 }
 
 export async function addTransaction(uid: string, invId: string, t: TransactionFormValues) {

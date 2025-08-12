@@ -1,50 +1,78 @@
 
 "use client";
 
-import { useMemo } from 'react';
-import type { Investment } from '@/lib/types';
-import { summarizeByType } from '@/lib/utils/summary';
+import { useState, useMemo, useEffect } from 'react';
+import type { Investment, Transaction } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
-import { TrendingUp, TrendingDown } from 'lucide-react';
+import { TrendingUp, TrendingDown, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatCurrency, formatPercent } from '@/lib/money';
+import { formatCurrency, formatPercent, toNum } from '@/lib/money';
+import { aggregateByType, SummaryResult } from '@/lib/portfolio';
+import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
+import { Skeleton } from './ui/skeleton';
 
 
 const CHART_COLORS = [
-    'hsl(var(--chart-1))',
-    'hsl(var(--chart-2))',
-    'hsl(var(--chart-3))',
-    'hsl(var(--chart-4))',
-    'hsl(var(--chart-5))',
-    'hsl(220 70% 50%)',
+    'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
+    'hsl(var(--chart-4))', 'hsl(var(--chart-5))', 'hsl(220 70% 50%)',
     'hsl(30 80% 55%)'
 ];
 
-export default function PortfolioSummary({ investments }: { investments: Investment[] }) {
-    const { summary, totals } = useMemo(() => summarizeByType(investments), [investments]);
+type DonutMode = 'market' | 'economic';
 
+export default function PortfolioSummary({ investments, transactionsMap }: { investments: Investment[], transactionsMap: Record<string, Transaction[]> }) {
+    
+    const [donutMode, setDonutMode] = useState<DonutMode>('market');
+
+    const summaryData: SummaryResult | null = useMemo(() => {
+        if (investments.length === 0 || Object.keys(transactionsMap).length === 0) {
+            return null;
+        }
+        return aggregateByType(investments, transactionsMap);
+    }, [investments, transactionsMap]);
+    
     const chartData = useMemo(() => {
-        // Chart should represent the composition of the *current active* portfolio value.
-        const activeInvestments = investments.filter(inv => inv.status === 'Active');
-        const activeSummary = summarizeByType(activeInvestments);
+        if (!summaryData) return [];
 
-        return Object.values(activeSummary.summary)
-            .filter(item => (item.currentValue - item.realizedProceeds) > 0)
-            .map(item => ({
-                name: item.type,
-                value: item.currentValue - item.realizedProceeds,
-                portfolioPercentage: item.portfolioPercentage,
-                fill: CHART_COLORS[Object.keys(summary).indexOf(item.type) % CHART_COLORS.length]
-            }))
+        const totalValue = donutMode === 'market'
+            ? summaryData.totals.marketValue
+            : summaryData.totals.economicValue;
+        
+        if (totalValue === 0) return [];
+
+        return summaryData.rows
+            .map(row => {
+                const value = donutMode === 'market' ? row.marketValue : row.economicValue;
+                return {
+                    name: row.type,
+                    value: value,
+                    percentage: totalValue > 0 ? (value / totalValue) * 100 : 0,
+                    fill: CHART_COLORS[summaryData.rows.findIndex(r => r.type === row.type) % CHART_COLORS.length]
+                };
+            })
+            .filter(item => item.value > 0)
             .sort((a, b) => b.value - a.value);
-    }, [investments, summary]);
+
+    }, [summaryData, donutMode]);
 
     if (investments.length === 0) {
         return null;
     }
+
+    if (!summaryData) {
+        return (
+            <Card>
+                <CardHeader><CardTitle className="font-headline text-2xl">Portfolio Summary</CardTitle></CardHeader>
+                <CardContent><Skeleton className="h-48 w-full" /></CardContent>
+            </Card>
+        )
+    }
+
+    const { rows, totals } = summaryData;
+    const totalPortfolioValue = donutMode === 'market' ? totals.marketValue : totals.economicValue;
 
     return (
         <Card>
@@ -58,73 +86,89 @@ export default function PortfolioSummary({ investments }: { investments: Investm
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Asset Type</TableHead>
-                                    <TableHead className="text-right">Total Cost</TableHead>
-                                    <TableHead className="text-right">Total Value</TableHead>
+                                    <TableHead className="text-right">Cost Basis</TableHead>
+                                    <TableHead className="text-right">Market Value</TableHead>
+                                    <TableHead className="text-right">Realized P/L</TableHead>
+                                    <TableHead className="text-right">Unrealized P/L</TableHead>
                                     <TableHead className="text-right">Total P/L</TableHead>
                                     <TableHead className="text-right">Performance</TableHead>
                                     <TableHead className="text-right">% of Portfolio</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {Object.values(summary).map(item => (
+                                {rows.map(item => {
+                                    const portfolioPercentage = totalPortfolioValue > 0 
+                                      ? ((donutMode === 'market' ? item.marketValue : item.economicValue) / totalPortfolioValue)
+                                      : 0;
+
+                                    return (
                                     <TableRow key={item.type}>
                                         <TableCell className="font-medium">{item.type}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(item.totalCost)}</TableCell>
-                                        <TableCell className="text-right font-mono font-bold">{formatCurrency(item.currentValue)}</TableCell>
-                                        <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", item.gainLoss >= 0 ? "text-green-500" : "text-destructive")}>
-                                          {item.gainLoss >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-                                          {formatCurrency(item.gainLoss)}
+                                        <TableCell className="text-right font-mono">{formatCurrency(item.costBasis)}</TableCell>
+                                        <TableCell className="text-right font-mono font-bold">{formatCurrency(item.marketValue)}</TableCell>
+                                        <TableCell className={cn("text-right font-mono", item.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>{formatCurrency(item.realizedPL)}</TableCell>
+                                        <TableCell className={cn("text-right font-mono", item.unrealizedPL >= 0 ? "text-green-500" : "text-destructive")}>{formatCurrency(item.unrealizedPL)}</TableCell>
+                                        <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", item.totalPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                          {item.totalPL >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                                          {formatCurrency(item.totalPL)}
                                         </TableCell>
-                                        <TableCell className={cn("text-right font-mono", item.gainLossPercent >= 0 ? "text-green-500" : "text-destructive")}>{formatPercent(item.gainLossPercent / 100)}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatPercent(item.portfolioPercentage / 100)}</TableCell>
+                                        <TableCell className={cn("text-right font-mono", item.performancePct >= 0 ? "text-green-500" : "text-destructive")}>{formatPercent(item.performancePct)}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatPercent(portfolioPercentage)}</TableCell>
                                     </TableRow>
-                                ))}
+                                )})}
                             </TableBody>
                             <TableFooter>
                                 <TableRow className="bg-muted/50 font-bold">
                                     <TableCell>Total</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(totals.totalCost)}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(totals.currentValue)}</TableCell>
-                                    <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", totals.gainLoss >= 0 ? "text-green-500" : "text-destructive")}>
-                                        {totals.gainLoss >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-                                        {formatCurrency(totals.gainLoss)}
+                                    <TableCell className="text-right font-mono">{formatCurrency(totals.costBasis)}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(totals.marketValue)}</TableCell>
+                                    <TableCell className={cn("text-right font-mono", totals.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>{formatCurrency(totals.realizedPL)}</TableCell>
+                                    <TableCell className={cn("text-right font-mono", totals.unrealizedPL >= 0 ? "text-green-500" : "text-destructive")}>{formatCurrency(totals.unrealizedPL)}</TableCell>
+                                    <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", totals.totalPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                        {totals.totalPL >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
+                                        {formatCurrency(totals.totalPL)}
                                     </TableCell>
-                                    <TableCell className={cn("text-right font-mono", totals.gainLossPercent >= 0 ? "text-green-500" : "text-destructive")}>{formatPercent(totals.gainLossPercent / 100)}</TableCell>
+                                    <TableCell className={cn("text-right font-mono", totals.performancePct >= 0 ? "text-green-500" : "text-destructive")}>{formatPercent(totals.performancePct)}</TableCell>
                                     <TableCell className="text-right font-mono">{formatPercent(1)}</TableCell>
                                 </TableRow>
                             </TableFooter>
                         </Table>
                     </div>
                     <div className="flex flex-col items-center justify-center">
+                        <Tabs value={donutMode} onValueChange={(v) => setDonutMode(v as DonutMode)} className='mb-2'>
+                           <TabsList>
+                                <TabsTrigger value="market">Market Value</TabsTrigger>
+                                <TabsTrigger value="economic">Economic Value</TabsTrigger>
+                           </TabsList>
+                        </Tabs>
+
                         <ChartContainer config={{}} className="aspect-square h-[250px] w-full">
+                           {chartData.length > 0 ? (
                             <PieChart>
                                 <Tooltip
                                     cursor={false}
-                                    content={<ChartTooltipContent hideLabel nameKey="name" />}
-                                    formatter={(value, name, props) => (
-                                        <div className="flex flex-col">
-                                            <span className="font-bold">{props.payload.name}</span>
-                                            <span>{formatCurrency(props.payload.value as number)}</span>
-                                            <span className="text-muted-foreground">{formatPercent((props.payload.payload as any).portfolioPercentage / 100)} of portfolio</span>
-                                        </div>
-                                    )}
+                                    content={<ChartTooltipContent 
+                                        hideLabel
+                                        formatter={(value, name, props) => (
+                                            <div className="flex flex-col">
+                                                <span className="font-bold">{props.payload.name}</span>
+                                                <span>{formatCurrency(props.payload.value as number)}</span>
+                                                <span className="text-muted-foreground">{formatPercent((props.payload.payload as any).percentage / 100)} of portfolio</span>
+                                            </div>
+                                        )}
+                                    />}
                                 />
                                 <Pie
-                                    data={chartData}
-                                    dataKey="value"
-                                    nameKey="name"
-                                    cx="50%"
-                                    cy="50%"
-                                    outerRadius={100}
-                                    innerRadius={60}
-                                    paddingAngle={2}
-                                    labelLine={false}
+                                    data={chartData} dataKey="value" nameKey="name"
+                                    cx="50%" cy="50%" outerRadius={100} innerRadius={60}
+                                    paddingAngle={2} labelLine={false}
                                     label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
                                         const RADIAN = Math.PI / 180;
                                         const radius = innerRadius + (outerRadius - innerRadius) * 1.25;
                                         const x = cx + radius * Math.cos(-midAngle * RADIAN);
                                         const y = cy + radius * Math.sin(-midAngle * RADIAN);
                                         const percentage = (percent * 100).toFixed(0);
+                                        if (parseInt(percentage) < 5) return null; // Don't render small labels
 
                                         return (
                                              <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-xs font-semibold">
@@ -133,11 +177,16 @@ export default function PortfolioSummary({ investments }: { investments: Investm
                                         );
                                     }}
                                 >
-                                    {chartData.map((entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={entry.fill} />
-                                    ))}
+                                    {chartData.map((entry, index) => ( <Cell key={`cell-${index}`} fill={entry.fill} /> ))}
                                 </Pie>
                             </PieChart>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center text-center h-full">
+                                    <Info className="h-8 w-8 text-muted-foreground mb-2"/>
+                                    <p className="text-sm text-muted-foreground">No data to display in chart.</p>
+                                    <p className="text-xs text-muted-foreground">This may be because all assets have been sold.</p>
+                                </div>
+                            )}
                         </ChartContainer>
                          <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-4 text-xs">
                             {chartData.map((entry, index) => (

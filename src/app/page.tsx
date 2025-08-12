@@ -2,8 +2,8 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
-import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues } from '@/lib/types';
-import { addInvestment, deleteInvestment, getInvestments, updateInvestment } from '@/lib/firestore';
+import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction } from '@/lib/types';
+import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
@@ -36,6 +36,7 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [investments, setInvestments] = useState<Investment[]>([]);
+  const [transactionsMap, setTransactionsMap] = useState<Record<string, Transaction[]>>({});
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isTaxView, setIsTaxView] = useState(false);
@@ -52,11 +53,17 @@ export default function DashboardPage() {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [viewingHistoryInvestment, setViewingHistoryInvestment] = useState<Investment | undefined>(undefined);
 
-  const fetchInvestments = async (userId: string) => {
+  const fetchAllData = async (userId: string) => {
     setLoading(true);
     try {
       const userInvestments = await getInvestments(userId);
       setInvestments(userInvestments);
+      if (userInvestments.length > 0) {
+        const txMap = await getAllTransactionsForInvestments(userId, userInvestments);
+        setTransactionsMap(txMap);
+      } else {
+        setTransactionsMap({});
+      }
     } catch(error) {
        console.error("Error fetching investments:", error);
        toast({ title: "Error", description: "Could not fetch investments.", variant: "destructive" });
@@ -65,9 +72,10 @@ export default function DashboardPage() {
     }
   };
 
+
   useEffect(() => {
     if (user) {
-      fetchInvestments(user.uid);
+      fetchAllData(user.uid);
     }
   }, [user]);
 
@@ -90,7 +98,7 @@ export default function DashboardPage() {
         await batch.commit();
 
         await new Promise(resolve => setTimeout(resolve, 300));
-        await fetchInvestments(user.uid);
+        await fetchAllData(user.uid);
     }
 
     toast({
@@ -155,7 +163,7 @@ export default function DashboardPage() {
   const confirmDelete = async () => {
     if (deletingInvestmentId && user) {
       await deleteInvestment(user.uid, deletingInvestmentId);
-      await fetchInvestments(user.uid);
+      await fetchAllData(user.uid);
       toast({ title: "Success", description: "Investment deleted successfully." });
     }
     setIsDeleteDialogOpen(false);
@@ -173,7 +181,7 @@ export default function DashboardPage() {
         } else {
           await addInvestment(user.uid, values);
         }
-        await fetchInvestments(user.uid);
+        await fetchAllData(user.uid);
         setIsFormOpen(false);
         setEditingInvestment(undefined);
         toast({
@@ -192,7 +200,7 @@ export default function DashboardPage() {
 
   const onTransactionAdded = async () => {
     if(user) {
-        await fetchInvestments(user.uid);
+        await fetchAllData(user.uid);
     }
   }
   
@@ -205,7 +213,7 @@ export default function DashboardPage() {
       <div className="min-h-screen w-full bg-background">
         <DashboardHeader isTaxView={isTaxView} onTaxViewChange={setIsTaxView} />
         <main className="p-4 sm:p-6 lg:p-8">
-          <PortfolioSummary investments={investments} />
+          <PortfolioSummary investments={investments} transactionsMap={transactionsMap} />
           <div className="mt-8 mb-8 p-4 bg-card/50 rounded-lg shadow-sm">
             <div className="flex flex-col sm:flex-row items-center gap-4">
               <div className="flex items-center gap-2">
