@@ -7,10 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { PieChart, Pie, Cell, Tooltip } from 'recharts';
-import { TrendingUp, TrendingDown, Info } from 'lucide-react';
+import { TrendingUp, TrendingDown, Info, Scale } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatPercent, toNum } from '@/lib/money';
-import { aggregateByType, AggregatedSummary } from '@/lib/portfolio';
+import { aggregateByType, AggregatedSummary, TaxSummary } from '@/lib/portfolio';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Skeleton } from './ui/skeleton';
 import { Button } from './ui/button';
@@ -26,6 +26,63 @@ const CHART_COLORS = [
 
 type DonutMode = 'market' | 'economic';
 type YearViewMode = 'combined' | 'realized' | 'holdings';
+
+interface TaxEstimateDialogProps {
+    isOpen: boolean;
+    onOpenChange: (open: boolean) => void;
+    taxSummary: TaxSummary | null;
+    year: number;
+    taxSettings: TaxSettings | null;
+}
+
+function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings }: TaxEstimateDialogProps) {
+    if (!taxSummary || !taxSettings) return null;
+
+    return (
+        <Dialog open={isOpen} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-md">
+                 <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Scale /> Estimated Taxes for {year}
+                    </DialogTitle>
+                    <DialogDescription>
+                        This is an estimate for informational purposes only and not professional tax advice.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-4 text-sm py-4">
+                    {/* Capital Gains */}
+                    <div className="p-3 rounded-md bg-muted/50 border">
+                        <h4 className="font-semibold mb-2">Capital Income (Stocks, ETFs, Interest)</h4>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Taxable Income</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.taxable)}</span></div>
+                        <div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Allowance Used</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.allowanceUsed)}</span></div>
+                        <div className="border-t my-2"></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Base Tax (25%)</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.baseTax)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.soli)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.church)}</span></div>
+                        <div className="flex justify-between font-bold mt-1"><span className="">Total Capital Tax</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.totalTax)}</span></div>
+                    </div>
+
+                    {/* Crypto */}
+                    <div className="p-3 rounded-md bg-muted/50 border">
+                        <h4 className="font-semibold mb-2">Crypto Private Sales</h4>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Taxable Gains</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.taxable)}</span></div>
+                        <div className="text-xs text-muted-foreground pl-2">After €600 threshold</div>
+                        <div className="border-t my-2"></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Base Tax ({formatPercent(taxSettings.cryptoMarginalRate)})</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.baseTax)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.soli)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.church)}</span></div>
+                        <div className="flex justify-between font-bold mt-1"><span className="">Total Crypto Tax</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.totalTax)}</span></div>
+                    </div>
+                    
+                    {/* Grand Total */}
+                    <div className="pt-2 border-t mt-2">
+                            <div className="flex justify-between font-bold text-base text-primary"><span className="">Grand Total Estimated Tax</span> <span className="font-mono">{formatCurrency(taxSummary.grandTotal)}</span></div>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
 
 interface PortfolioSummaryProps {
     investments: Investment[];
@@ -48,12 +105,12 @@ export default function PortfolioSummary({
 }: PortfolioSummaryProps) {
     
     const [donutMode, setDonutMode] = useState<DonutMode>('market');
+    const [isTaxEstimateOpen, setIsTaxEstimateOpen] = useState(false);
     
     const handleYearChange = (value: string) => {
         if (value === 'all') {
             onYearFilterChange({ kind: 'all' });
         } else {
-            // When changing year, keep the current mode or default to 'combined'
             const currentMode = yearFilter.kind === 'year' ? yearFilter.mode : 'combined';
             onYearFilterChange({ kind: 'year', year: parseInt(value), mode: currentMode });
         }
@@ -111,9 +168,10 @@ export default function PortfolioSummary({
 
     const { rows, totals, taxSummary } = summaryData;
     const totalPortfolioValue = donutMode === 'market' ? totals.marketValue : totals.economicValue;
-    const showTaxEstimator = isTaxView && taxSummary && yearFilter.kind === 'year';
+    const showTaxEstimatorButton = isTaxView && taxSummary && yearFilter.kind === 'year';
 
     return (
+        <>
         <Card>
             <CardHeader>
                <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
@@ -197,7 +255,7 @@ export default function PortfolioSummary({
                         </Dialog>
                     </div>
                 </div>
-                <div className="flex items-center gap-4 mt-2 mb-4">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-2 mb-4">
                     {yearFilter.kind === 'year' && (
                         <Tabs value={yearFilter.mode} onValueChange={(v) => handleModeChange(v as YearViewMode)}>
                             <TabsList>
@@ -207,6 +265,13 @@ export default function PortfolioSummary({
                             </TabsList>
                         </Tabs>
                     )}
+                    <div className="flex-grow"/>
+                    {showTaxEstimatorButton && (
+                        <Button variant="outline" size="sm" onClick={() => setIsTaxEstimateOpen(true)}>
+                            <Scale className="mr-2 h-4 w-4" />
+                            View Tax Estimate for {yearFilter.year}
+                        </Button>
+                    )}
                 </div>
                  <p className="text-xs text-muted-foreground mt-1">
                     Realized P/L reflects the selected year and view mode. Market & unrealized values are based on current prices.
@@ -214,7 +279,7 @@ export default function PortfolioSummary({
             </CardHeader>
             <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div className={cn("overflow-x-auto", showTaxEstimator ? "lg:col-span-2" : "lg:col-span-3")}>
+                    <div className="lg:col-span-2 overflow-x-auto">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -267,108 +332,79 @@ export default function PortfolioSummary({
                             </TableFooter>
                         </Table>
                     </div>
-                    {showTaxEstimator ? (
-                        <div className="lg:col-span-1 p-4 rounded-lg bg-muted/30 border">
-                             <h3 className="font-headline text-lg font-semibold mb-3 text-center">Estimated Taxes ({yearFilter.year})</h3>
-                             <div className="space-y-4 text-sm">
-                                {/* Capital Gains */}
-                                <div className="p-3 rounded-md bg-background/50">
-                                    <h4 className="font-semibold mb-2">Capital Income (Stocks, ETFs, Interest)</h4>
-                                    <div className="flex justify-between"><span className="text-muted-foreground">Taxable Income</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.taxable)}</span></div>
-                                    <div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Allowance Used</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.allowanceUsed)}</span></div>
-                                    <div className="border-t my-2"></div>
-                                    <div className="flex justify-between"><span className="text-muted-foreground">Base Tax (25%)</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.baseTax)}</span></div>
-                                    <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.soli)}</span></div>
-                                    <div className="flex justify-between"><span className="text-muted-foreground">Church Tax</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.church)}</span></div>
-                                    <div className="flex justify-between font-bold mt-1"><span className="">Total Capital Tax</span> <span className="font-mono">{formatCurrency(taxSummary.capitalGains.totalTax)}</span></div>
-                                </div>
+                    <div className="flex flex-col items-center justify-center lg:col-span-1">
+                        <Tabs value={donutMode} onValueChange={(v) => setDonutMode(v as DonutMode)} className='mb-2'>
+                            <TabsList>
+                                <TabsTrigger value="market">Market Value</TabsTrigger>
+                                <TabsTrigger value="economic">Economic Value</TabsTrigger>
+                            </TabsList>
+                        </Tabs>
+                        <ChartContainer config={{}} className="aspect-square h-[250px] w-full">
+                            {chartData.length > 0 ? (
+                            <PieChart>
+                                <Tooltip
+                                    cursor={false}
+                                    content={<ChartTooltipContent 
+                                        hideLabel
+                                        formatter={(value, name, props) => (
+                                            <div className="flex flex-col">
+                                                <span className="font-bold">{props.payload.name}</span>
+                                                <span>{formatCurrency(props.payload.value as number)}</span>
+                                                <span className="text-muted-foreground">{formatPercent((props.payload.payload as any).percentage / 100)} of portfolio</span>
+                                            </div>
+                                        )}
+                                    />}
+                                />
+                                <Pie
+                                    data={chartData} dataKey="value" nameKey="name"
+                                    cx="50%" cy="50%" outerRadius={100} innerRadius={60}
+                                    paddingAngle={2} labelLine={false}
+                                    label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
+                                        const RADIAN = Math.PI / 180;
+                                        const radius = innerRadius + (outerRadius - innerRadius) * 1.25;
+                                        const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                                        const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                                        const percentage = (percent * 100).toFixed(0);
+                                        if (parseInt(percentage) < 5) return null;
 
-                                {/* Crypto */}
-                                <div className="p-3 rounded-md bg-background/50">
-                                    <h4 className="font-semibold mb-2">Crypto Private Sales</h4>
-                                    <div className="flex justify-between"><span className="text-muted-foreground">Taxable Gains</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.taxable)}</span></div>
-                                    <div className="text-xs text-muted-foreground pl-2">After €600 threshold</div>
-                                    <div className="border-t my-2"></div>
-                                    <div className="flex justify-between"><span className="text-muted-foreground">Base Tax ({formatPercent(taxSettings!.cryptoMarginalRate)})</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.baseTax)}</span></div>
-                                    <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.soli)}</span></div>
-                                    <div className="flex justify-between"><span className="text-muted-foreground">Church Tax</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.church)}</span></div>
-                                    <div className="flex justify-between font-bold mt-1"><span className="">Total Crypto Tax</span> <span className="font-mono">{formatCurrency(taxSummary.crypto.totalTax)}</span></div>
+                                        return (
+                                                <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-xs font-semibold">
+                                                {`${chartData[index].name} (${percentage}%)`}
+                                            </text>
+                                        );
+                                    }}
+                                >
+                                    {chartData.map((entry, index) => ( <Cell key={`cell-${index}`} fill={entry.fill} /> ))}
+                                </Pie>
+                            </PieChart>
+                            ) : (
+                                <div className="flex flex-col items-center justify-center text-center h-full">
+                                    <Info className="h-8 w-8 text-muted-foreground mb-2"/>
+                                    <p className="text-sm text-muted-foreground">No data to display in chart.</p>
                                 </div>
-                                
-                                {/* Grand Total */}
-                                <div className="pt-2 border-t mt-4">
-                                     <div className="flex justify-between font-bold text-base text-primary"><span className="">Grand Total Estimated Tax</span> <span className="font-mono">{formatCurrency(taxSummary.grandTotal)}</span></div>
+                            )}
+                        </ChartContainer>
+                            <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-4 text-xs">
+                            {chartData.map((entry, index) => (
+                                <div key={`legend-${index}`} className="flex items-center gap-2">
+                                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.fill }} />
+                                    <span>{entry.name}</span>
                                 </div>
-                                <p className="text-xs text-center text-muted-foreground pt-2">This is an estimate for informational purposes only and not professional tax advice.</p>
-                             </div>
+                            ))}
                         </div>
-                    ) : (
-                        <div className="flex flex-col items-center justify-center lg:col-span-1">
-                            <Tabs value={donutMode} onValueChange={(v) => setDonutMode(v as DonutMode)} className='mb-2'>
-                               <TabsList>
-                                    <TabsTrigger value="market">Market Value</TabsTrigger>
-                                    <TabsTrigger value="economic">Economic Value</TabsTrigger>
-                               </TabsList>
-                            </Tabs>
-                            <ChartContainer config={{}} className="aspect-square h-[250px] w-full">
-                               {chartData.length > 0 ? (
-                                <PieChart>
-                                    <Tooltip
-                                        cursor={false}
-                                        content={<ChartTooltipContent 
-                                            hideLabel
-                                            formatter={(value, name, props) => (
-                                                <div className="flex flex-col">
-                                                    <span className="font-bold">{props.payload.name}</span>
-                                                    <span>{formatCurrency(props.payload.value as number)}</span>
-                                                    <span className="text-muted-foreground">{formatPercent((props.payload.payload as any).percentage / 100)} of portfolio</span>
-                                                </div>
-                                            )}
-                                        />}
-                                    />
-                                    <Pie
-                                        data={chartData} dataKey="value" nameKey="name"
-                                        cx="50%" cy="50%" outerRadius={100} innerRadius={60}
-                                        paddingAngle={2} labelLine={false}
-                                        label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
-                                            const RADIAN = Math.PI / 180;
-                                            const radius = innerRadius + (outerRadius - innerRadius) * 1.25;
-                                            const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                                            const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                                            const percentage = (percent * 100).toFixed(0);
-                                            if (parseInt(percentage) < 5) return null;
-
-                                            return (
-                                                 <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-xs font-semibold">
-                                                    {`${chartData[index].name} (${percentage}%)`}
-                                                </text>
-                                            );
-                                        }}
-                                    >
-                                        {chartData.map((entry, index) => ( <Cell key={`cell-${index}`} fill={entry.fill} /> ))}
-                                    </Pie>
-                                </PieChart>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center text-center h-full">
-                                        <Info className="h-8 w-8 text-muted-foreground mb-2"/>
-                                        <p className="text-sm text-muted-foreground">No data to display in chart.</p>
-                                    </div>
-                                )}
-                            </ChartContainer>
-                             <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-4 text-xs">
-                                {chartData.map((entry, index) => (
-                                    <div key={`legend-${index}`} className="flex items-center gap-2">
-                                        <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.fill }} />
-                                        <span>{entry.name}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
+                    </div>
                 </div>
             </CardContent>
         </Card>
+        {yearFilter.kind === 'year' && (
+            <TaxEstimateDialog 
+                isOpen={isTaxEstimateOpen}
+                onOpenChange={setIsTaxEstimateOpen}
+                taxSummary={taxSummary}
+                year={yearFilter.year}
+                taxSettings={taxSettings}
+            />
+        )}
+        </>
     );
 }
-
-    
