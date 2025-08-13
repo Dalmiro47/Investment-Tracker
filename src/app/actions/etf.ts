@@ -3,7 +3,7 @@
 import { getPricePoints, getFXRates } from '@/lib/firestore.etf';
 import { simulatePlan } from '@/lib/etf/engine';
 import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
-import { endOfMonth, format } from 'date-fns';
+import { endOfMonth, format, startOfMonth, parseISO } from 'date-fns';
 import { refreshEtfPlanPrices } from './prices';
 
 
@@ -13,7 +13,7 @@ export async function refreshEtfData(uid: string, planId: string, components: ET
 
 
 export async function runPlan(uid: string, plan: ETFPlan, components: ETFComponent[]) {
-  const start = plan.startDate;
+  const start = format(startOfMonth(parseISO(plan.startDate)), 'yyyy-MM-dd');
   const end = format(endOfMonth(new Date()), 'yyyy-MM-dd');
 
   // fetch all time-series for each component

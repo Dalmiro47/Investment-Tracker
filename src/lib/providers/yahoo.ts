@@ -1,6 +1,6 @@
 
 import type { ETFPricePoint } from '@/lib/types.etf';
-import axios from 'axios';
+import { http } from '@/lib/http';
 import { format, parseISO, startOfMonth } from 'date-fns';
 
 const defaultTickerMap: Record<string, Record<string, string>> = {
@@ -21,7 +21,7 @@ export async function fetchYahooMonthly(symbol: string, sinceISO: string): Promi
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1mo&range=10y`;
 
     try {
-        const response = await axios.get(url);
+        const response = await http.get(url);
         const result = response.data?.chart?.result?.[0];
         if (!result) {
             console.warn(`No chart data found for symbol: ${symbol}`);
@@ -62,7 +62,7 @@ export async function fetchYahooLast(symbol: string): Promise<ETFPricePoint | nu
     if (!symbol) return null;
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=3mo`;
     try {
-        const { data } = await axios.get(url);
+        const { data } = await http.get(url);
         const result = data?.chart?.result?.[0];
         if (!result) return null;
         const { timestamp, indicators, meta } = result;

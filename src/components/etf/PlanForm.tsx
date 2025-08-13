@@ -54,6 +54,10 @@ const planSchema = z.object({
         message: "Total target weight must be exactly 1 (or 100%).",
         path: ["components"],
     })
+    .refine(cs => {
+      const keys = cs.map(c => (c.ticker || c.isin).trim().toUpperCase());
+      return new Set(keys).size === keys.length;
+    }, { path: ['components'], message: 'Duplicate tickers/ISINs are not allowed.' })
 });
 
 export type PlanFormValues = z.infer<typeof planSchema>;
@@ -88,8 +92,8 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
   
   const components = form.watch('components');
   const totalWeight = useMemo(() => {
-    return components.reduce((sum, c) => sum + (c.targetWeight || 0), 0);
-  }, [components]);
+    return (fields as PlanFormValues['components']).reduce((sum, c) => sum + (c.targetWeight || 0), 0);
+  }, [fields]);
 
   useEffect(() => {
     if (plan) {

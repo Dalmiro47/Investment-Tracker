@@ -1,7 +1,6 @@
 
-
 import type { FXRatePoint } from '@/lib/types.etf';
-import axios from 'axios';
+import { getWithRetry } from '@/lib/http';
 import { format, eachMonthOfInterval, endOfMonth, parseISO } from 'date-fns';
 
 const SUPPORTED_CURRENCIES = ['USD', 'JPY', 'BGN', 'CZK', 'DKK', 'GBP', 'HUF', 'PLN', 'RON', 'SEK', 'CHF', 'ISK', 'NOK', 'TRY', 'AUD', 'BRL', 'CAD', 'CNY', 'HKD', 'IDR', 'ILS', 'INR', 'KRW', 'MXN', 'MYR', 'NZD', 'PHP', 'SGD', 'THB', 'ZAR'];
@@ -17,12 +16,12 @@ export async function fetchECBMonthlyEUR(sinceISO: string): Promise<FXRatePoint[
         const dateStr = format(date, 'yyyy-MM-dd');
         const url = `https://api.exchangerate.host/${dateStr}?base=EUR&symbols=${SUPPORTED_CURRENCIES.join(',')}`;
         try {
-            const response = await axios.get(url);
-            if (response.data?.success && response.data?.rates) {
+            const responseData = await getWithRetry<{ success: boolean, rates: Record<string, number> }>(url);
+            if (responseData?.success && responseData?.rates) {
                 return {
                     date: dateStr,
                     base: 'EUR' as const,
-                    rates: response.data.rates,
+                    rates: responseData.rates,
                 };
             }
         } catch (error) {
