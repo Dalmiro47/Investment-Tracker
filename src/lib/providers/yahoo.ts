@@ -13,7 +13,9 @@ const defaultTickerMap: Record<string, Record<string, string>> = {
 
 export function defaultTickerForISIN(isin: string, exch: 'XETRA' | 'LSE' | 'MIL' | 'AMS' = 'LSE'): string {
     if (!isin) return '';
-    return defaultTickerMap[isin]?.[exch] ?? '';
+    const m = defaultTickerMap[isin]; 
+    if (!m) return '';
+    return m[exch] ?? m.XETRA ?? m.LSE ?? '';
 }
 
 export async function fetchYahooMonthly(symbol: string, sinceISO: string): Promise<ETFPricePoint[]> {
@@ -81,3 +83,5 @@ export async function fetchYahooLast(symbol: string): Promise<ETFPricePoint | nu
         return null;
     }
 }
+
+    

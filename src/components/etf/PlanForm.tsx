@@ -50,7 +50,7 @@ const planSchema = z.object({
     .refine(components => {
         const totalWeight = components.reduce((sum, c) => sum + (c.targetWeight || 0), 0);
         // Use a small tolerance for floating point comparisons
-        return Math.abs(totalWeight - 1) < 1e-9;
+        return Math.abs(totalWeight - 1) < 0.001;
     }, {
         message: "Total target weight must be exactly 100%.",
         path: ["components"],
@@ -91,11 +91,15 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
   });
   
   const componentValues = form.watch('components');
-  const totalWeight = useMemo(() => {
-    return componentValues.reduce((sum, c) => sum + (Number(c.targetWeight) || 0), 0);
+  
+  const { totalWeight, hasUnresolvedTickers } = useMemo(() => {
+    const weight = componentValues.reduce((sum, c) => sum + (Number(c.targetWeight) || 0), 0);
+    const unresolved = componentValues.some(c => !(c.ticker || defaultTickerForISIN(c.isin, c.preferredExchange)));
+    return { totalWeight: weight, hasUnresolvedTickers: unresolved };
   }, [componentValues]);
 
-  const isSaveDisabled = isSubmitting || Math.abs(totalWeight - 1) > 1e-9;
+
+  const isSaveDisabled = isSubmitting || Math.abs(totalWeight - 1) > 0.001 || hasUnresolvedTickers;
 
   useEffect(() => {
     if (plan) {
@@ -202,7 +206,11 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {fields.map((field, index) => (
+                {fields.map((field, index) => {
+                  const resolvedTicker = form.watch(`components.${index}.ticker`) || defaultTickerForISIN(form.watch(`components.${index}.isin`), form.watch(`components.${index}.preferredExchange`));
+                  const cannotResolve = !resolvedTicker;
+
+                  return (
                   <TableRow key={field.id} className="align-top">
                     <TableCell>
                       <Controller
@@ -235,7 +243,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                           )}
                         />
                     </TableCell>
-                    <TableCell>
+                    <TableCell className="align-top">
                        <div className="flex flex-col">
                            <Controller
                             control={form.control}
@@ -244,9 +252,10 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                                 <Input {...field} placeholder="Optional override" />
                             )}
                           />
-                            <FormDescription className="text-xs mt-1">
-                                Using: {form.watch(`components.${index}.ticker`) || defaultTickerForISIN(form.watch(`components.${index}.isin`), form.watch(`components.${index}.preferredExchange`)) || 'N/A'}
-                            </FormDescription>
+                           <FormDescription className={cn("text-xs mt-1", cannotResolve && "text-destructive")}>
+                              {cannotResolve ? "No known ticker for this ISIN+exchange. Enter a ticker override."
+                                          : `Using: ${resolvedTicker}`}
+                           </FormDescription>
                         </div>
                     </TableCell>
                     <TableCell>
@@ -256,11 +265,9 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                             render={({ field }) => (
                                 <Input 
                                     type="number" 
-                                    step="0.01"
                                     className="text-right" 
                                     onChange={e => {
                                         const value = e.target.value;
-                                        // Regex to allow numbers with up to 2 decimal places
                                         const regex = /^\d*(\.\d{0,2})?$/;
                                         if (value === "" || value === null) {
                                             field.onChange(null);
@@ -283,7 +290,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                       </Button>
                     </TableCell>
                   </TableRow>
-                ))}
+                )})}
               </TableBody>
             </Table>
           </div>
@@ -296,7 +303,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                 >
                     <PlusCircle className="mr-2 h-4 w-4" /> Add Component
                 </Button>
-                <div className={cn("text-sm font-medium", Math.abs(totalWeight - 1) > 1e-9 ? "text-destructive" : "text-green-600")}>
+                <div className={cn("text-sm font-medium", Math.abs(totalWeight - 1) > 0.001 ? "text-destructive" : "text-green-600")}>
                     Total Weight: {(totalWeight * 100).toFixed(2)}%
                 </div>
             </div>
@@ -316,7 +323,5 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
     </Form>
   );
 }
-
-    
 
     
