@@ -66,15 +66,16 @@ export default function InvestmentCard({
   const purchaseQty = dec(investment.purchaseQuantity);
   const soldQty = dec(investment.totalSoldQty);
   
-  const availableQty = sub(purchaseQty, soldQty);
+  // Fix: Round availableQty to handle floating point inaccuracies
+  const availableQty = sub(purchaseQty, soldQty).round(8);
   const costBasis = mul(availableQty, purchasePrice);
   
   const marketValue = mul(availableQty, currentPrice);
 
-  const unrealizedPL = sub(availableQty, sub(currentPrice, purchasePrice));
+  const unrealizedPL = availableQty.eq(0) ? dec(0) : sub(marketValue, costBasis);
   const totalPL = add(unrealizedPL, dec(realizedPnL));
   
-  const performance = div(totalPL, costBasis);
+  const performance = div(totalPL, mul(purchaseQty, purchasePrice));
 
   const avgSellPrice = div(dec(investment.realizedProceeds), soldQty);
   
