@@ -30,19 +30,63 @@ import { cn } from "@/lib/utils";
 import { CalendarIcon, PlusCircle, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { ETFPlan, ETFComponent } from "@/lib/types.etf";
-import { useEffect, useMemo } from "react";
+import React, { useEffect, useMemo } from "react";
 import { defaultTickerForISIN } from "@/lib/providers/yahoo";
 
-// Percent input helpers
-const twoDec = (v: string) => (Number.isFinite(Number(v)) ? Number(v).toFixed(2) : v);
-const clampPct = (n: number) => Math.max(0, Math.min(100, n));
-const pctStringToUnit = (s: string) => {
-  const n = Number(s.replace(',', '.'));
-  if (!Number.isFinite(n)) return null;
-  return clampPct(n) / 100; // 0..1
-};
-const unitToPctString = (u?: number | null) =>
-  u === null || u === undefined ? '' : (u * 100).toFixed(2);
+function PercentInput({
+  value,            // 0..1 | null
+  onChange,         // (unit: number|null) => void
+  placeholder,
+  className,
+}: {
+  value: number | null | undefined;
+  onChange: (unit: number | null) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const [text, setText] = React.useState<string>(value == null ? "" : (value * 100).toFixed(2));
+
+  // keep local text in sync when RHF resets/loads
+  React.useEffect(() => {
+    setText(value == null ? "" : (value * 100).toFixed(2));
+  }, [value]);
+
+  // allow: "", "7", "7.", "7.1", "7.12" (up to 2 decimals), max 100
+  const re = /^\d{0,3}(\.\d{0,2})?$/;
+
+  return (
+    <Input
+      inputMode="decimal"
+      className={className}
+      placeholder={placeholder}
+      value={text}
+      onChange={(e) => {
+        const raw = e.target.value.replace(",", ".");
+        if (raw === "") {
+          setText("");
+          onChange(null);
+          return;
+        }
+        if (!re.test(raw)) return;                // refuse invalid keystrokes
+        // show the raw text while typing
+        setText(raw);
+        const n = Number(raw);
+        if (!Number.isFinite(n)) return;
+        const clamped = Math.max(0, Math.min(100, n));
+        onChange(clamped / 100);
+      }}
+      onBlur={() => {
+        // normalize to two decimals on blur
+        if (text === "") return;
+        const n = Number(text);
+        const clamped = Math.max(0, Math.min(100, n));
+        const norm = clamped.toFixed(2);
+        setText(norm);
+        onChange(clamped / 100);
+      }}
+    />
+  );
+}
 
 
 const planSchema = z.object({
@@ -268,65 +312,38 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                           const resolved = override || defaultTickerForISIN(isin, exch);
                           const unresolved = !resolved;
 
-                          return unresolved ? (
-                            <span className="text-xs text-destructive">
-                              No known ticker for this ISIN + exchange. Enter an override.
-                            </span>
-                          ) : (
-                            <div className="text-xs text-muted-foreground">
-                              Using:&nbsp;
-                              <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs">
-                                {override ? 'Override: ' : ''}{resolved}
-                              </span>
+                          return (
+                            <div className="min-h-[20px] text-xs">
+                              {unresolved ? (
+                                <span className="text-destructive">
+                                  No known ticker for this ISIN + exchange. Enter an override.
+                                </span>
+                              ) : (
+                                <span className="text-muted-foreground">
+                                  Using:&nbsp;
+                                  <span className="inline-flex items-center rounded border px-2 py-0.5">
+                                    {override ? "Override: " : ""}
+                                    {resolved}
+                                  </span>
+                                </span>
+                              )}
                             </div>
                           );
                         })()}
                       </div>
                     </TableCell>
                     <TableCell className="align-top">
-                       <Controller
+                      <Controller
                         control={form.control}
                         name={`components.${index}.targetWeight`}
-                        render={({ field }) => {
-                          const pctStr = unitToPctString(field.value);
-
-                          return (
-                            <Input
-                              inputMode="decimal"
-                              pattern="^\\d{1,3}([.,]\\d{0,2})?$"
-                              className="text-right"
-                              placeholder="Weight"
-                              value={pctStr}
-                              onChange={(e) => {
-                                const raw = e.target.value.replace(',', '.');
-                                // Allow empty input to let user clear
-                                if (raw === '') {
-                                  field.onChange(null);
-                                  return;
-                                }
-                                // Only allow up to 2 decimals and max 3 digits before decimal
-                                const ok = /^\\d{1,3}(\\.\\d{0,2})?$/.test(raw);
-                                if (!ok) return;
-
-                                // Clamp 0..100 immediately, but keep typed decimals
-                                const clamped = clampPct(Number(raw));
-                                field.onChange(clamped / 100);
-                              }}
-                              onBlur={(e) => {
-                                const raw = e.target.value.replace(',', '.');
-                                const n = Number(raw);
-                                if (!Number.isFinite(n)) {
-                                  field.onChange(null);
-                                  return;
-                                }
-                                const clamped = clampPct(n);
-                                // normalize to 2 decimals on blur
-                                field.onChange(clamped / 100);
-                                e.target.value = twoDec(String(clamped));
-                              }}
-                            />
-                          );
-                        }}
+                        render={({ field }) => (
+                          <PercentInput
+                            value={field.value}
+                            onChange={(unit) => field.onChange(unit)}
+                            placeholder="Weight"
+                            className="text-right"
+                          />
+                        )}
                       />
                     </TableCell>
                     <TableCell>
@@ -368,6 +385,3 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
     </Form>
   );
 }
-
-    
-    
