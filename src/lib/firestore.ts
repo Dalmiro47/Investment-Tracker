@@ -3,12 +3,15 @@
 
 
 
-import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query, where, getDocs, collectionGroup } from 'firebase/firestore';
+
+import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query, where, getDocs, collectionGroup, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues } from './types';
+import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues, TaxSettings } from './types';
 
 const investmentsCol = (uid: string) => collection(db, 'users', uid, 'investments');
 const txCol = (uid: string, invId: string) => collection(db, 'users', uid, 'investments', invId, 'transactions');
+const settingsDoc = (uid: string, docId: string) => doc(db, 'users', uid, 'settings', docId);
+
 
 const toTS = (d: Date) => Timestamp.fromDate(d);
 
@@ -309,4 +312,21 @@ export async function deleteTransaction(uid: string, invId: string, txId: string
         // 2) Delete the actual transaction document
         transaction.delete(txRef);
     });
+}
+
+
+// --- TAX SETTINGS ---
+
+export async function getTaxSettings(uid: string): Promise<TaxSettings | null> {
+  const ref = settingsDoc(uid, 'tax');
+  const snap = await getDoc(ref);
+  if (snap.exists()) {
+    return snap.data() as TaxSettings;
+  }
+  return null;
+}
+
+export async function updateTaxSettings(uid: string, settings: TaxSettings) {
+  const ref = settingsDoc(uid, 'tax');
+  await setDoc(ref, settings, { merge: true });
 }

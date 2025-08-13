@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings } from '@/lib/types';
-import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears } from '@/lib/firestore';
+import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
@@ -59,9 +59,9 @@ export default function DashboardPage() {
 
   const [isTaxSettingsOpen, setIsTaxSettingsOpen] = useState(false);
   const [taxSettings, setTaxSettings] = useState<TaxSettings>({
-    churchTaxRate: 0,
     filingStatus: 'single',
-    cryptoMarginalRate: 0.30,
+    churchTaxRate: 0,
+    cryptoMarginalRate: 0.42, // Default to a higher rate
   });
 
   const [yearFilter, setYearFilter] = useState<YearFilter>({ kind: 'all' });
@@ -70,13 +70,17 @@ export default function DashboardPage() {
   const fetchAllData = async (userId: string) => {
     setLoading(true);
     try {
-      const [userInvestments, years] = await Promise.all([
+      const [userInvestments, years, settings] = await Promise.all([
         getInvestments(userId),
         getSellYears(userId),
+        getTaxSettings(userId),
       ]);
       
       setInvestments(userInvestments);
       setSellYears(years);
+      if (settings) {
+        setTaxSettings(settings);
+      }
 
       if (userInvestments.length > 0) {
         const txMap = await getAllTransactionsForInvestments(userId, userInvestments);
@@ -241,6 +245,19 @@ export default function DashboardPage() {
         await fetchAllData(user.uid);
     }
   }
+
+  const handleSaveTaxSettings = async (newSettings: TaxSettings) => {
+    if (!user) return;
+    try {
+        await updateTaxSettings(user.uid, newSettings);
+        setTaxSettings(newSettings);
+        setIsTaxSettingsOpen(false);
+        toast({ title: "Success", description: "Tax settings saved." });
+    } catch (error) {
+        toast({ title: "Error", description: "Could not save tax settings.", variant: "destructive" });
+        console.error("Failed to save tax settings:", error);
+    }
+  };
   
   if (!user) {
     return null; // AuthProvider handles redirects
@@ -369,11 +386,7 @@ export default function DashboardPage() {
         isOpen={isTaxSettingsOpen}
         onOpenChange={setIsTaxSettingsOpen}
         currentSettings={taxSettings}
-        onSave={(newSettings) => {
-            setTaxSettings(newSettings);
-            setIsTaxSettingsOpen(false);
-            toast({ title: "Success", description: "Tax settings updated." });
-        }}
+        onSave={handleSaveTaxSettings}
       />
        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
         <AlertDialogContent>
@@ -401,5 +414,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-    
