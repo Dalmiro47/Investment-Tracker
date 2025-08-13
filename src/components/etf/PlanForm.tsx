@@ -46,9 +46,14 @@ function PercentInput({
 }) {
   const [text, setText] = React.useState<string>(value == null ? "" : (value * 100).toFixed(2));
 
-  // keep local text in sync when RHF resets/loads
-  React.useEffect(() => {
-    setText(value == null ? "" : (value * 100).toFixed(2));
+  // keep local text in sync when RHF resets/loads from external source, but not on own changes
+  useEffect(() => {
+    const currentValue = value == null ? null : (value * 100);
+    const textAsNumber = text === "" ? null : Number(text.replace(",", "."));
+
+    if (currentValue !== textAsNumber) {
+       setText(value == null ? "" : (value * 100).toFixed(2));
+    }
   }, [value]);
 
   // allow: "", "7", "7.", "7.1", "7.12" (up to 2 decimals), max 100
