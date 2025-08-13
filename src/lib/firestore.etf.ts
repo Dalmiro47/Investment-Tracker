@@ -8,6 +8,7 @@ async function commitInChunks<T>(
     items: T[], 
     writeFn: (batch: WriteBatch, item: T) => void
 ) {
+    if (items.length === 0) return;
     let batch = writeBatch(db);
     let count = 0;
     for (const item of items) {

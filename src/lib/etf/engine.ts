@@ -29,9 +29,26 @@ export function simulatePlan(
   monthly: PriceMap,
   fx: FXMap
 ): PlanRow[] {
+  const toMonthKey = (isoOrDate: string | Date) => format(endOfMonth(typeof isoOrDate === 'string' ? parseISO(isoOrDate) : isoOrDate), 'yyyy-MM');
+
+  // Remap prices to symbol -> 'YYYY-MM' -> point for alignment
+  const monthlyByMonth: Record<string, Record<string, ETFPricePoint>> = {};
+  for (const [symbol, byDate] of Object.entries(monthly)) {
+    monthlyByMonth[symbol] = {};
+    Object.values(byDate).forEach(p => {
+      monthlyByMonth[symbol][toMonthKey(p.date)] = p;
+    });
+  }
+
+  // Remap FX to 'YYYY-MM' -> point for alignment
+  const fxByMonth: Record<string, FXRatePoint> = {};
+  Object.values(fx).forEach(pt => {
+    fxByMonth[toMonthKey(pt.date)] = pt;
+  });
+
   const start = endOfMonth(parseISO(plan.startDate));
   const end = endOfMonth(new Date());
-  const months = eachMonthOfInterval({ start, end }).map(d => format(d, 'yyyy-MM-dd'));
+  const months = eachMonthOfInterval({ start, end });
 
   // running state: units per symbol
   const units: Record<string, number> = {};
@@ -39,19 +56,22 @@ export function simulatePlan(
 
   const rows: PlanRow[] = [];
 
-  for (const date of months) {
-    const fxPoint = fx[date];
+  for (const monthDate of months) {
+    const monthKey = toMonthKey(monthDate);
+    const fxPoint = fxByMonth[monthKey];
     let preValue = 0;
 
     // --- Calculate value with previous month's units and this month's prices ---
     const initialPositions = components.map(c => {
       const symbol = c.ticker ?? c.isin;
-      const p = monthly[symbol]?.[date];
+      const p = monthlyByMonth[symbol]?.[monthKey];
       if (!p) return null;
 
       // Convert CCY->EUR: price_EUR = price_CCY / (EUR→CCY rate)
       const fxRate = p.currency === 'EUR' ? 1 : (fxPoint?.rates?.[p.currency] ?? null);
-      const priceEUR = fxRate ? p.close / fxRate : p.close; // pass-through if unknown fx
+      if (p.currency !== 'EUR' && !fxRate) return null; // Skip if FX rate is missing
+      
+      const priceEUR = fxRate ? p.close / fxRate : p.close;
       const valueEUR = (units[symbol] ?? 0) * priceEUR;
       preValue += valueEUR;
 
@@ -96,12 +116,13 @@ export function simulatePlan(
         });
       } else { // if no drift, or all negative drift, allocate by target
         components.forEach(c => {
+          const symbol = c.ticker ?? c.isin;
           const allocShare = c.targetWeight;
           const cashForSymbol = cashToInvest * allocShare;
-          const priceInfo = initialPositions.find(p => (p.symbol) === (c.ticker ?? c.isin));
+          const priceInfo = initialPositions.find(p => p.symbol === symbol);
           if (priceInfo && priceInfo.priceEUR > 0) {
               const buyUnits = cashForSymbol / priceInfo.priceEUR;
-              units[c.symbol] = (units[c.symbol] ?? 0) + buyUnits;
+              units[symbol] = (units[symbol] ?? 0) + buyUnits;
           }
         });
       }
@@ -109,11 +130,12 @@ export function simulatePlan(
     } else {
       // Proportional to targets if not rebalancing or if it's the first month
       components.forEach(c => {
+        const symbol = c.ticker ?? c.isin;
         const cashForSymbol = cashToInvest * c.targetWeight;
-        const priceInfo = initialPositions.find(p => (p.symbol) === (c.ticker ?? c.isin));
+        const priceInfo = initialPositions.find(p => p.symbol === symbol);
         if (priceInfo && priceInfo.priceEUR > 0) {
             const buyUnits = cashForSymbol / priceInfo.priceEUR;
-            units[c.symbol] = (units[c.symbol] ?? 0) + buyUnits;
+            units[symbol] = (units[symbol] ?? 0) + buyUnits;
         }
       });
     }
@@ -121,9 +143,12 @@ export function simulatePlan(
     // --- Recompute final position values after buying ---
     const finalPositions = components.map(c => {
       const symbol = c.ticker ?? c.isin;
-      const p = monthly[symbol]?.[date];
+      const p = monthlyByMonth[symbol]?.[monthKey];
       if (!p) return null;
-      const fxRate = p.currency === 'EUR' ? 1 : (fx[date]?.rates?.[p.currency] ?? null);
+      
+      const fxRate = p.currency === 'EUR' ? 1 : (fxByMonth[monthKey]?.rates?.[p.currency] ?? null);
+      if (p.currency !== 'EUR' && !fxRate) return null;
+      
       const priceEUR = fxRate ? p.close / fxRate : p.close;
       const valueEUR = (units[symbol] ?? 0) * priceEUR;
       return {
@@ -148,7 +173,7 @@ export function simulatePlan(
     });
 
     rows.push({
-      date,
+      date: format(monthDate, 'yyyy-MM-dd'),
       contribution: plan.monthContribution,
       fees: fee,
       portfolioValue,
