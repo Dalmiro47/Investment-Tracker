@@ -1,40 +1,55 @@
 
 import { db } from './firebase';
-import { collection, doc, writeBatch, getDocs, query, where, Timestamp } from 'firebase/firestore';
+import { collection, doc, writeBatch, getDocs, query, where, Timestamp, WriteBatch } from 'firebase/firestore';
 import type { ETFPricePoint, FXRatePoint } from './types.etf';
 
-const fxCol = () => collection(db, 'fx', 'eur_monthly', 'points');
-const pricesCol = (planId: string, symbol: string) => collection(db, 'etfPlans', planId, 'prices', symbol, 'points');
-
-export async function cachePrices(uid: string, planId: string, monthlyBySymbol: Record<string, ETFPricePoint[]>) {
-    const batch = writeBatch(db);
-
-    for (const symbol in monthlyBySymbol) {
-        const points = monthlyBySymbol[symbol];
-        points.forEach(point => {
-            const dateId = point.date; // YYYY-MM-DD
-            const pointRef = doc(db, 'users', uid, 'etfPlans', planId, 'prices', symbol, 'points', dateId);
-            batch.set(pointRef, {
-                ...point,
-                date: Timestamp.fromDate(new Date(point.date))
-            });
-        });
+// Helper to commit writes in chunks to avoid 500-document limit
+async function commitInChunks<T>(
+    items: T[], 
+    writeFn: (batch: WriteBatch, item: T) => void
+) {
+    let batch = writeBatch(db);
+    let count = 0;
+    for (const item of items) {
+        writeFn(batch, item);
+        count++;
+        // 499 is a safe buffer below the 500 limit
+        if (count === 499) {
+            await batch.commit();
+            batch = writeBatch(db);
+            count = 0;
+        }
     }
-
-    await batch.commit();
+    if (count > 0) {
+        await batch.commit();
+    }
 }
 
+export async function cachePrices(uid: string, planId: string, monthlyBySymbol: Record<string, ETFPricePoint[]>) {
+    const allPoints = Object.entries(monthlyBySymbol).flatMap(([symbol, points]) => 
+        points.map(point => ({ symbol, point }))
+    );
+
+    await commitInChunks(allPoints, (batch, { symbol, point }) => {
+        const dateId = point.date; // YYYY-MM-DD
+        const pointRef = doc(db, 'users', uid, 'etfPlans', planId, 'prices', symbol, 'points', dateId);
+        batch.set(pointRef, {
+            ...point,
+            date: Timestamp.fromDate(new Date(point.date))
+        });
+    });
+}
+
+
 export async function cacheFX(uid: string, points: FXRatePoint[]) {
-    const batch = writeBatch(db);
-    points.forEach(point => {
-        const dateId = point.date; // YYYY-MM-28 (or other day)
+    await commitInChunks(points, (batch, point) => {
+        const dateId = point.date; // YYYY-MM-DD
         const pointRef = doc(db, 'users', uid, 'fx', 'monthly', dateId);
         batch.set(pointRef, {
             ...point,
             date: Timestamp.fromDate(new Date(point.date))
         });
     });
-    await batch.commit();
 }
 
 export async function getFXRates(uid: string, startDate: string, endDate: string): Promise<Record<string, FXRatePoint>> {

@@ -1,7 +1,7 @@
 
 import type { ETFPricePoint } from '@/lib/types.etf';
 import axios from 'axios';
-import { format, parse, startOfMonth } from 'date-fns';
+import { format, parseISO, startOfMonth } from 'date-fns';
 
 const defaultTickerMap: Record<string, Record<string, string>> = {
     'IE00B4K48X80': { 'LSE': 'SWDA.L', 'XETRA': 'EUNL.DE' }, // MSCI World
@@ -59,17 +59,23 @@ export async function fetchYahooMonthly(symbol: string, sinceISO: string): Promi
 
 export async function fetchYahooLast(symbol: string): Promise<ETFPricePoint | null> {
     if (!symbol) return null;
-
-    // We can reuse the monthly fetch and just take the last point.
-    // A dedicated '1d' fetch could also work but might be less efficient if called with monthly.
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1d&range=3mo`;
     try {
-        const monthlyData = await fetchYahooMonthly(symbol, format(new Date(), 'yyyy-MM-dd'));
-        if (monthlyData.length > 0) {
-            return monthlyData[monthlyData.length - 1];
+        const { data } = await axios.get(url);
+        const result = data?.chart?.result?.[0];
+        if (!result) return null;
+        const { timestamp, indicators, meta } = result;
+        const closes = indicators?.adjclose?.[0]?.adjclose ?? indicators?.quote?.[0]?.close;
+        if (!timestamp || !closes) return null;
+
+        for (let i = timestamp.length - 1; i >= 0; i--) {
+            if (closes[i] != null) {
+                const d = new Date(timestamp[i] * 1000);
+                return { symbol, date: format(d, 'yyyy-MM-dd'), close: closes[i], currency: meta?.currency ?? 'EUR' };
+            }
         }
         return null;
-    } catch (error) {
-        console.error(`Failed to fetch last price for ${symbol}:`, error);
+    } catch {
         return null;
     }
 }
