@@ -253,7 +253,23 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                         <Controller
                             control={form.control}
                             name={`components.${index}.targetWeight`}
-                            render={({ field }) => <Input type="number" className="text-right" {...field} onChange={e => field.onChange(Number(e.target.value) / 100)} value={field.value === null || field.value === undefined ? '' : field.value * 100} placeholder="Weight"/>}
+                            render={({ field }) => (
+                                <Input 
+                                    type="number" 
+                                    className="text-right" 
+                                    {...field} 
+                                    onChange={e => {
+                                        const value = e.target.value;
+                                        if (value === "") {
+                                            field.onChange(null);
+                                        } else {
+                                            field.onChange(parseFloat(value) / 100);
+                                        }
+                                    }} 
+                                    value={field.value === null || field.value === undefined ? '' : field.value * 100} 
+                                    placeholder="Weight"
+                                />
+                            )}
                         />
                     </TableCell>
                     <TableCell>
@@ -295,5 +311,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
     </Form>
   );
 }
+
+    
 
     
