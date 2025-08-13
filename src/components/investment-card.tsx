@@ -291,9 +291,9 @@ export default function InvestmentCard({
                     {formatCurrency(displayUnrealizedPL)}
                   </div>
               </div>
-               <div className="text-center">
+               <div>
                   <div className="text-sm text-muted-foreground">Realized P/L</div>
-                  <div className={cn("font-bold text-lg text-center w-full", displayRealizedPL >= 0 ? "text-green-600" : "text-destructive")}>{formatCurrency(displayRealizedPL)}</div>
+                  <div className={cn("font-bold text-lg text-right w-full pr-4", displayRealizedPL >= 0 ? "text-green-600" : "text-destructive")}>{formatCurrency(displayRealizedPL)}</div>
               </div>
               <div></div>
             </div>
