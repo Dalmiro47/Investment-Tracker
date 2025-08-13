@@ -149,6 +149,7 @@ export interface YearTaxSummary {
   capitalTaxResult: CapitalTaxResult;
   cryptoTaxResult: CryptoTaxResult;
   grandTotal: number;
+  totalShortTermGains: number;
 }
 
 
@@ -286,6 +287,7 @@ export function aggregateByType(
             capitalTaxResult,
             cryptoTaxResult,
             grandTotal: capitalTaxResult.total + cryptoTaxResult.total,
+            totalShortTermGains: shortTermCryptoGains,
         };
     }
 
