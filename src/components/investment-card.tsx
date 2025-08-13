@@ -67,19 +67,19 @@ export default function InvestmentCard({
   const soldQty = dec(investment.totalSoldQty);
   
   const availableQty = sub(purchaseQty, soldQty);
-  const totalCost = mul(purchaseQty, purchasePrice);
+  const costBasis = mul(availableQty, purchasePrice);
   
   const marketValue = mul(availableQty, currentPrice);
 
-  const unrealizedPL = mul(availableQty, sub(currentPrice, purchasePrice));
+  const unrealizedPL = sub(availableQty, sub(currentPrice, purchasePrice));
   const totalPL = add(unrealizedPL, dec(realizedPnL));
   
-  const performance = div(totalPL, totalCost);
+  const performance = div(totalPL, costBasis);
 
   const avgSellPrice = div(dec(investment.realizedProceeds), soldQty);
   
   // --- Display-ready values (rounded) ---
-  const displayTotalCost = toNum(totalCost);
+  const displayCostBasis = toNum(costBasis);
   const displayMarketValue = toNum(marketValue);
   const displayRealizedValue = toNum(dec(investment.realizedProceeds));
   const displayUnrealizedPL = toNum(unrealizedPL);
@@ -130,8 +130,8 @@ export default function InvestmentCard({
                     </DialogHeader>
                     <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4">
                         <div>
-                            <h4 className="font-semibold">Total Cost</h4>
-                            <p className="text-muted-foreground">The full original amount you paid for this investment. <br/><code className="text-xs">Formula: Initial Quantity × Initial Price per Unit</code></p>
+                            <h4 className="font-semibold">Cost Basis</h4>
+                            <p className="text-muted-foreground">The original purchase price of the assets you currently still own. It ignores the cost of shares you've already sold. <br/><code className="text-xs">Formula: Available Quantity × Original Purchase Price per Unit</code></p>
                         </div>
                          <div>
                             <h4 className="font-semibold">Market Value</h4>
@@ -240,8 +240,8 @@ export default function InvestmentCard({
           <div className="space-y-4">
              <div className="grid grid-cols-2 gap-2">
                 <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md">
-                    <span className="text-xs text-muted-foreground">Total Cost</span>
-                    <span className="font-headline text-xl font-bold">{formatCurrency(displayTotalCost)}</span>
+                    <span className="text-xs text-muted-foreground">Cost Basis</span>
+                    <span className="font-headline text-xl font-bold">{formatCurrency(displayCostBasis)}</span>
                 </div>
                  <div className="flex flex-col items-center justify-center p-3 bg-primary/10 rounded-md">
                     <span className="text-xs text-muted-foreground">{status === 'Sold' ? 'Realized Value' : 'Market Value'}</span>
