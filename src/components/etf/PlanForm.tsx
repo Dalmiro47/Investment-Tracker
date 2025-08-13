@@ -33,6 +33,18 @@ import type { ETFPlan, ETFComponent } from "@/lib/types.etf";
 import { useEffect, useMemo } from "react";
 import { defaultTickerForISIN } from "@/lib/providers/yahoo";
 
+// Percent input helpers
+const twoDec = (v: string) => (Number.isFinite(Number(v)) ? Number(v).toFixed(2) : v);
+const clampPct = (n: number) => Math.max(0, Math.min(100, n));
+const pctStringToUnit = (s: string) => {
+  const n = Number(s.replace(',', '.'));
+  if (!Number.isFinite(n)) return null;
+  return clampPct(n) / 100; // 0..1
+};
+const unitToPctString = (u?: number | null) =>
+  u === null || u === undefined ? '' : (u * 100).toFixed(2);
+
+
 const planSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters."),
   startDate: z.date(),
@@ -45,7 +57,7 @@ const planSchema = z.object({
     isin: z.string().regex(/^[A-Z]{2}[A-Z0-9]{9}\d$/, "Invalid ISIN format."),
     preferredExchange: z.enum(['XETRA', 'LSE', 'MIL', 'AMS']).optional(),
     ticker: z.string().optional(),
-    targetWeight: z.coerce.number().min(0).max(1, "Weight must be between 0 and 1."),
+    targetWeight: z.coerce.number().min(0).max(1, "Weight must be between 0 and 1.").nullable(),
   })).min(1, "At least one component is required.")
     .refine(components => {
         const totalWeight = components.reduce((sum, c) => sum + (c.targetWeight || 0), 0);
@@ -80,7 +92,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
       feePct: 0,
       rebalanceOnContribution: false,
       components: [
-        { name: "", isin: "", preferredExchange: "XETRA", targetWeight: undefined as any },
+        { name: "", isin: "", preferredExchange: "XETRA", targetWeight: null },
       ],
     }
   });
@@ -94,7 +106,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
   
   const { totalWeight, hasUnresolvedTickers } = useMemo(() => {
     const weight = componentValues.reduce((sum, c) => sum + (Number(c.targetWeight) || 0), 0);
-    const unresolved = componentValues.some(c => !(c.ticker || defaultTickerForISIN(c.isin, c.preferredExchange)));
+    const unresolved = componentValues.some(c => !(c.ticker?.trim() || defaultTickerForISIN(c.isin, c.preferredExchange)));
     return { totalWeight: weight, hasUnresolvedTickers: unresolved };
   }, [componentValues]);
 
@@ -106,7 +118,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
       form.reset({
         ...plan,
         startDate: parseISO(plan.startDate),
-        components: plan.components.map(c => ({...c}))
+        components: plan.components.map(c => ({...c, targetWeight: c.targetWeight ?? null}))
       });
     }
   }, [plan, form]);
@@ -207,9 +219,6 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
               </TableHeader>
               <TableBody>
                 {fields.map((field, index) => {
-                  const resolvedTicker = form.watch(`components.${index}.ticker`) || defaultTickerForISIN(form.watch(`components.${index}.isin`), form.watch(`components.${index}.preferredExchange`));
-                  const cannotResolve = !resolvedTicker;
-
                   return (
                   <TableRow key={field.id} className="align-top">
                     <TableCell>
@@ -244,45 +253,81 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                         />
                     </TableCell>
                     <TableCell className="align-top">
-                       <div className="flex flex-col">
-                           <Controller
-                            control={form.control}
-                            name={`components.${index}.ticker`}
-                            render={({ field }) => (
-                                <Input {...field} placeholder="Optional override" />
-                            )}
-                          />
-                           <FormDescription className={cn("text-xs mt-1", cannotResolve && "text-destructive")}>
-                              {cannotResolve ? "No known ticker for this ISIN+exchange. Enter a ticker override."
-                                          : `Using: ${resolvedTicker}`}
-                           </FormDescription>
-                        </div>
-                    </TableCell>
-                    <TableCell>
+                      <div className="flex flex-col gap-1">
                         <Controller
-                            control={form.control}
-                            name={`components.${index}.targetWeight`}
-                            render={({ field }) => (
-                                <Input 
-                                    type="number" 
-                                    className="text-right" 
-                                    onChange={e => {
-                                        const value = e.target.value;
-                                        const regex = /^\d*(\.\d{0,2})?$/;
-                                        if (value === "" || value === null) {
-                                            field.onChange(null);
-                                        } else if (regex.test(value)) {
-                                            const parsedValue = parseFloat(value);
-                                            if (!isNaN(parsedValue)) {
-                                                field.onChange(parsedValue / 100);
-                                            }
-                                        }
-                                    }} 
-                                    value={field.value === null || field.value === undefined ? '' : field.value * 100} 
-                                    placeholder="Weight"
-                                />
-                            )}
+                          control={form.control}
+                          name={`components.${index}.ticker`}
+                          render={({ field }) => (
+                            <Input {...field} placeholder="Optional override (e.g. EUNL.DE or SWDA.L)" />
+                          )}
                         />
+                        {(() => {
+                          const exch = form.watch(`components.${index}.preferredExchange`);
+                          const isin = form.watch(`components.${index}.isin`);
+                          const override = form.watch(`components.${index}.ticker`)?.trim();
+                          const resolved = override || defaultTickerForISIN(isin, exch);
+                          const unresolved = !resolved;
+
+                          return unresolved ? (
+                            <span className="text-xs text-destructive">
+                              No known ticker for this ISIN + exchange. Enter an override.
+                            </span>
+                          ) : (
+                            <div className="text-xs text-muted-foreground">
+                              Using:&nbsp;
+                              <span className="inline-flex items-center rounded-md border px-2 py-0.5 text-xs">
+                                {override ? 'Override: ' : ''}{resolved}
+                              </span>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </TableCell>
+                    <TableCell className="align-top">
+                       <Controller
+                        control={form.control}
+                        name={`components.${index}.targetWeight`}
+                        render={({ field }) => {
+                          const pctStr = unitToPctString(field.value);
+
+                          return (
+                            <Input
+                              inputMode="decimal"
+                              pattern="^\\d{1,3}([.,]\\d{0,2})?$"
+                              className="text-right"
+                              placeholder="Weight"
+                              value={pctStr}
+                              onChange={(e) => {
+                                const raw = e.target.value.replace(',', '.');
+                                // Allow empty input to let user clear
+                                if (raw === '') {
+                                  field.onChange(null);
+                                  return;
+                                }
+                                // Only allow up to 2 decimals and max 3 digits before decimal
+                                const ok = /^\\d{1,3}(\\.\\d{0,2})?$/.test(raw);
+                                if (!ok) return;
+
+                                // Clamp 0..100 immediately, but keep typed decimals
+                                const clamped = clampPct(Number(raw));
+                                field.onChange(clamped / 100);
+                              }}
+                              onBlur={(e) => {
+                                const raw = e.target.value.replace(',', '.');
+                                const n = Number(raw);
+                                if (!Number.isFinite(n)) {
+                                  field.onChange(null);
+                                  return;
+                                }
+                                const clamped = clampPct(n);
+                                // normalize to 2 decimals on blur
+                                field.onChange(clamped / 100);
+                                e.target.value = twoDec(String(clamped));
+                              }}
+                            />
+                          );
+                        }}
+                      />
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon" onClick={() => remove(index)} disabled={fields.length <= 1}>
@@ -299,12 +344,12 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => append({ name: "", isin: "", targetWeight: undefined as any, preferredExchange: "XETRA" })}
+                    onClick={() => append({ name: "", isin: "", targetWeight: null, preferredExchange: "XETRA" })}
                 >
                     <PlusCircle className="mr-2 h-4 w-4" /> Add Component
                 </Button>
                 <div className={cn("text-sm font-medium", Math.abs(totalWeight - 1) > 0.001 ? "text-destructive" : "text-green-600")}>
-                    Total Weight: {(totalWeight * 100).toFixed(2)}%
+                    Total Weight: {(Number((totalWeight * 100).toFixed(2))).toFixed(2)}%
                 </div>
             </div>
              {form.formState.errors.components?.message && (
@@ -324,4 +369,5 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
   );
 }
 
+    
     
