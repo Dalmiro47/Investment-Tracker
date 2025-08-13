@@ -1,6 +1,6 @@
 
-import type { TaxSettings } from '@/lib/types';
-import { addYears, differenceInCalendarDays, isAfter, isSameDay, parseISO } from 'date-fns';
+import type { TaxSettings, Investment } from '@/lib/types';
+import { addYears, differenceInCalendarDays, isAfter, isSameDay, parseISO, startOfDay } from 'date-fns';
 
 export const TAX = {
   cryptoFreigrenze: (year: number) => (year >= 2024 ? 1000 : 600),
@@ -144,4 +144,43 @@ export function estimateCardTax(
   return { taxBase: base, taxRate: base > 0 ? total / base : 0, tax: capTax, soli, church: churchTax, total, isTaxFree: false };
 }
 
+export interface CryptoTaxInfo {
+  taxFreeDate: Date | null;      // purchaseDate + (1 or 10) years
+  isEligibleNow: boolean;        // today >= taxFreeDate
+  daysUntilEligible: number | null; // remaining days (0 if eligible)
+}
+
+/**
+ * Germany: private crypto sales become tax‑free after 1 year
+ * (or 10 years if staking/lending). Always returns the date + status.
+ */
+export function getCryptoTaxInfo(
+  inv: Investment,
+  opts?: { stakingOrLending?: boolean }
+): CryptoTaxInfo {
+  if (inv.type !== 'Crypto' || !inv.purchaseDate) {
+    return { taxFreeDate: null, isEligibleNow: false, daysUntilEligible: null };
+  }
+
+  const p =
+    typeof inv.purchaseDate === 'string'
+      ? parseISO(inv.purchaseDate)
+      : new Date(inv.purchaseDate);
+
+  // 1 year normally; 10 years if staking/lending
+  const years = (opts?.stakingOrLending ?? inv.stakingOrLending) ? 10 : 1;
+
+  // Use midnight-safe dates to avoid off-by-one issues on DST boundaries
+  const taxFreeDate = startOfDay(addYears(p, years));
+  const today = startOfDay(new Date());
+
+  const eligible = isAfter(today, taxFreeDate) || isSameDay(today, taxFreeDate);
+  const daysUntil = eligible ? 0 : Math.max(0, differenceInCalendarDays(taxFreeDate, today));
+
+  return {
+    taxFreeDate,
+    isEligibleNow: eligible,
+    daysUntilEligible: eligible ? 0 : daysUntil,
+  };
+}
     

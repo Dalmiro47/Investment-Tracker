@@ -8,9 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History, PlusCircle, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format, parseISO, differenceInDays } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { dec, toNum, formatCurrency, formatQty, formatPercent, div, mul, sub, add } from '@/lib/money';
-import { isCryptoSellTaxFree, estimateCardTax } from '@/lib/tax';
+import { getCryptoTaxInfo, estimateCardTax } from '@/lib/tax';
 
 import {
   DropdownMenu,
@@ -88,10 +88,7 @@ export default function InvestmentCard({
   const displayAvgSellPrice = toNum(avgSellPrice);
 
   const isCrypto = investment.type === 'Crypto';
-  let holdingPeriodDays: number | null = null;
-  if(purchaseDate) {
-      holdingPeriodDays = differenceInDays(new Date(), parseISO(purchaseDate));
-  }
+  const cryptoTax = isCrypto ? getCryptoTaxInfo(investment) : null;
   
   const estimatedTax = taxSettings ? estimateCardTax(
     {
@@ -314,17 +311,25 @@ export default function InvestmentCard({
           {purchaseDate && (
             <div>
                 Purchased on {format(parseISO(purchaseDate), 'dd MMM yyyy')}
-                {isCrypto && holdingPeriodDays !== null && ` (${holdingPeriodDays} days ago)`}
             </div>
           )}
-          {isCrypto && isCryptoSellTaxFree(purchaseDate, new Date().toISOString(), investment.stakingOrLending ?? false) && (
-            <div className="flex items-center gap-1.5 mt-2 font-medium text-green-500">
-                Gains on sale are now tax-free (held {'>'}1 year).
+          {isCrypto && cryptoTax?.taxFreeDate && (
+            <div className="mt-1 flex items-center gap-2">
+              {cryptoTax.isEligibleNow ? (
+                <span className="text-green-600 font-medium">
+                  ✓ Tax-free eligible now (since {format(cryptoTax.taxFreeDate, 'dd MMM yyyy')})
+                </span>
+              ) : (
+                <span className="text-muted-foreground">
+                  Can be sold without taxes from {format(cryptoTax.taxFreeDate, 'dd MMM yyyy')}
+                  {typeof cryptoTax.daysUntilEligible === 'number' &&
+                    cryptoTax.daysUntilEligible > 0 &&
+                    ` (in ${cryptoTax.daysUntilEligible} days)`}
+                </span>
+              )}
             </div>
           )}
         </CardFooter>
     </Card>
   );
 }
-
-    
