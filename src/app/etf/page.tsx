@@ -5,7 +5,7 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
-import { getEtfPlans, createEtfPlan, deleteEtfPlan } from '@/lib/firestore.etfPlan';
+import { getEtfPlans, createEtfPlan, deleteEtfPlan, getEtfPlan, updateEtfPlan } from '@/lib/firestore.etfPlan';
 import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import DashboardHeader from '@/components/dashboard-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,6 +25,7 @@ export default function EtfPlansPage() {
     const [loading, setLoading] = useState(true);
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [editingPlan, setEditingPlan] = useState<(ETFPlan & { components: ETFComponent[] }) | null>(null);
 
     const fetchPlans = async (uid: string) => {
         setLoading(true);
@@ -43,27 +44,52 @@ export default function EtfPlansPage() {
             fetchPlans(user.uid);
         }
     }, [user]);
+    
+    const handleAddNew = () => {
+        setEditingPlan(null);
+        setIsFormOpen(true);
+    };
+
+    const handleEdit = async (planId: string) => {
+        if (!user) return;
+        try {
+            const planWithComps = await getEtfPlan(user.uid, planId);
+            if (planWithComps) {
+                setEditingPlan(planWithComps);
+                setIsFormOpen(true);
+            }
+        } catch (error) {
+            toast({ variant: 'destructive', title: 'Error', description: 'Could not load plan for editing.' });
+        }
+    };
 
     const handleFormSubmit = async (values: PlanFormValues) => {
         if (!user) return;
         setIsSubmitting(true);
         try {
-            const planData: Omit<ETFPlan, 'id' | 'createdAt' | 'updatedAt'> = {
+            const planData = {
                 title: values.title,
                 startDate: values.startDate.toISOString(),
                 monthContribution: values.monthContribution,
                 feePct: values.feePct,
                 rebalanceOnContribution: values.rebalanceOnContribution,
-                baseCurrency: 'EUR'
+                baseCurrency: 'EUR' as const
             };
-            const componentsData: Omit<ETFComponent, 'id'>[] = values.components;
+            const componentsData: Omit<ETFComponent, 'id'>[] = values.components.map(({ id, ...comp }) => comp);
+
+            if (editingPlan) {
+                await updateEtfPlan(user.uid, editingPlan.id, planData, componentsData);
+                toast({ title: 'Success', description: 'ETF Plan updated successfully.' });
+            } else {
+                await createEtfPlan(user.uid, planData, componentsData);
+                toast({ title: 'Success', description: 'ETF Plan created successfully.' });
+            }
             
-            await createEtfPlan(user.uid, planData, componentsData);
-            toast({ title: 'Success', description: 'ETF Plan created successfully.' });
             await fetchPlans(user.uid);
             setIsFormOpen(false);
+            setEditingPlan(null);
         } catch (error) {
-            toast({ variant: 'destructive', title: 'Error', description: `Failed to create plan: ${(error as Error).message}` });
+            toast({ variant: 'destructive', title: 'Error', description: `Failed to save plan: ${(error as Error).message}` });
         } finally {
             setIsSubmitting(false);
         }
@@ -79,6 +105,11 @@ export default function EtfPlansPage() {
             toast({ variant: 'destructive', title: 'Error', description: 'Could not delete plan.' });
         }
     }
+    
+    const closeDialog = () => {
+        setIsFormOpen(false);
+        setEditingPlan(null);
+    }
 
     return (
         <div className="min-h-screen w-full bg-background">
@@ -87,7 +118,7 @@ export default function EtfPlansPage() {
             <main className="p-4 sm:p-6 lg:p-8">
                 <div className="flex justify-between items-center mb-6">
                     <h1 className="text-3xl font-bold font-headline">ETF Savings Plans</h1>
-                    <Button onClick={() => setIsFormOpen(true)}>
+                    <Button onClick={handleAddNew}>
                         <PlusCircle className="mr-2 h-4 w-4" />
                         Add New Plan
                     </Button>
@@ -112,7 +143,7 @@ export default function EtfPlansPage() {
                                                 </Button>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
-                                                <DropdownMenuItem disabled>
+                                                <DropdownMenuItem onClick={() => handleEdit(plan.id)}>
                                                     <Edit className="mr-2 h-4 w-4" /> Edit
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => handleDeletePlan(plan.id)} className="text-destructive focus:text-destructive">
@@ -144,7 +175,7 @@ export default function EtfPlansPage() {
                     <div className="text-center py-16 rounded-lg border-2 border-dashed">
                         <h3 className="text-xl font-semibold text-foreground">No ETF Plans Found</h3>
                         <p className="text-muted-foreground mt-2">Create your first savings plan to get started.</p>
-                        <Button onClick={() => setIsFormOpen(true)} className="mt-4">
+                        <Button onClick={handleAddNew} className="mt-4">
                             <PlusCircle className="mr-2 h-4 w-4" />
                             Create First Plan
                         </Button>
@@ -152,17 +183,18 @@ export default function EtfPlansPage() {
                 )}
             </main>
 
-            <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}>
+            <Dialog open={isFormOpen} onOpenChange={closeDialog}>
                  <DialogContent className="max-w-4xl">
                     <DialogHeader>
-                        <DialogTitle>Create New ETF Plan</DialogTitle>
+                        <DialogTitle>{editingPlan ? 'Edit' : 'Create New'} ETF Plan</DialogTitle>
                         <DialogDescription>
-                            Define your automated savings plan details and components.
+                            {editingPlan ? 'Update your automated savings plan.' : 'Define your automated savings plan details and components.'}
                         </DialogDescription>
                     </DialogHeader>
                     <PlanForm 
+                        plan={editingPlan ?? undefined}
                         onSubmit={handleFormSubmit}
-                        onCancel={() => setIsFormOpen(false)} 
+                        onCancel={closeDialog} 
                         isSubmitting={isSubmitting}
                     />
                 </DialogContent>

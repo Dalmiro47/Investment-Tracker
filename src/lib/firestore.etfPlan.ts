@@ -63,7 +63,7 @@ export async function createEtfPlan(uid: string, planData: Omit<ETFPlan, 'id'|'c
 }
 
 
-export async function updateEtfPlan(uid: string, planId: string, planData: Partial<ETFPlan>, components: ETFComponent[]) {
+export async function updateEtfPlan(uid: string, planId: string, planData: Partial<Omit<ETFPlan, 'id'>>, components: Omit<ETFComponent, 'id'>[]) {
     const batch = writeBatch(db);
 
     const planRef = planDoc(uid, planId);
@@ -78,12 +78,14 @@ export async function updateEtfPlan(uid: string, planId: string, planData: Parti
     existingComps.forEach(doc => batch.delete(doc.ref));
 
     components.forEach(comp => {
-        const compRef = doc(componentsCol(uid, planId), comp.id || undefined);
-        batch.set(compRef, { ...comp, id: compRef.id });
+        // When updating, we create new component docs. Their IDs will be auto-generated.
+        const compRef = doc(componentsCol(uid, planId));
+        batch.set(compRef, comp);
     });
 
     await batch.commit();
 }
+
 
 export async function deleteEtfPlan(uid: string, planId: string) {
     const batch = writeBatch(db);
