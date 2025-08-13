@@ -258,13 +258,17 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                                     type="number" 
                                     step="0.01"
                                     className="text-right" 
-                                    {...field} 
                                     onChange={e => {
                                         const value = e.target.value;
+                                        // Regex to allow numbers with up to 2 decimal places
+                                        const regex = /^\d*(\.\d{0,2})?$/;
                                         if (value === "" || value === null) {
                                             field.onChange(null);
-                                        } else {
-                                            field.onChange(parseFloat(value) / 100);
+                                        } else if (regex.test(value)) {
+                                            const parsedValue = parseFloat(value);
+                                            if (!isNaN(parsedValue)) {
+                                                field.onChange(parsedValue / 100);
+                                            }
                                         }
                                     }} 
                                     value={field.value === null || field.value === undefined ? '' : field.value * 100} 
