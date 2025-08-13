@@ -1,6 +1,8 @@
 
 import { endOfMonth, eachMonthOfInterval, parseISO, format } from 'date-fns';
 import type { ETFPlan, ETFComponent, ETFPricePoint, FXRatePoint } from '@/lib/types.etf';
+import { dec, add, sub, mul, div, toNum } from '@/lib/money';
+import Big from 'big.js';
 
 export interface PlanRow {
   date: string;                 // yyyy-MM-dd (month end)
@@ -51,15 +53,18 @@ export function simulatePlan(
   const months = eachMonthOfInterval({ start, end });
 
   // running state: units per symbol
-  const units: Record<string, number> = {};
-  components.forEach(c => (units[c.ticker ?? c.isin] = 0));
+  const units: Record<string, Big> = {};
+  components.forEach(c => {
+    const symbol = c.ticker ?? c.isin;
+    units[symbol] = dec(0)
+  });
 
   const rows: PlanRow[] = [];
 
   for (const monthDate of months) {
     const monthKey = toMonthKey(monthDate);
     const fxPoint = fxByMonth[monthKey];
-    let preValue = 0;
+    let preValue = dec(0);
 
     // --- Calculate value with previous month's units and this month's prices ---
     const initialPositions = components.map(c => {
@@ -67,81 +72,78 @@ export function simulatePlan(
       const p = monthlyByMonth[symbol]?.[monthKey];
       if (!p) return null;
 
-      // Convert CCY->EUR: price_EUR = price_CCY / (EUR→CCY rate)
       const fxRate = p.currency === 'EUR' ? 1 : (fxPoint?.rates?.[p.currency] ?? null);
       if (p.currency !== 'EUR' && !fxRate) return null; // Skip if FX rate is missing
       
-      const priceEUR = fxRate ? p.close / fxRate : p.close;
-      const valueEUR = (units[symbol] ?? 0) * priceEUR;
-      preValue += valueEUR;
+      const priceEUR = fxRate ? div(dec(p.close), dec(fxRate)) : dec(p.close);
+      const valueEUR = mul(units[symbol] ?? dec(0), priceEUR);
+      preValue = add(preValue, valueEUR);
 
       return {
         symbol,
-        units: units[symbol] ?? 0,
-        priceCCY: p.close,
+        units: units[symbol] ?? dec(0),
+        priceCCY: dec(p.close),
         ccy: p.currency,
-        fxEURtoCCY: p.currency === 'EUR' ? 1 : fxRate ?? undefined,
+        fxEURtoCCY: fxRate ?? undefined,
         priceEUR,
         valueEUR,
         targetWeight: c.targetWeight,
-        driftPct: 0,
       };
-    }).filter(Boolean) as PlanRow['positions'];
+    }).filter(Boolean) as ({ symbol: string; units: Big; priceCCY: Big; ccy: string; fxEURtoCCY: number | undefined; priceEUR: Big; valueEUR: Big; targetWeight: number; })[];
 
     // --- Contribution & Fee ---
-    const fee = plan.feePct ? plan.monthContribution * plan.feePct : 0;
-    const cashToInvest = plan.monthContribution - fee;
+    const fee = plan.feePct ? mul(dec(plan.monthContribution), dec(plan.feePct)) : dec(0);
+    const cashToInvest = sub(dec(plan.monthContribution), fee);
 
     // --- Allocate contribution ---
-    if (plan.rebalanceOnContribution && preValue > 0) {
-      // Steer cash by drift to bring portfolio closer to targets
-      const currentWeights = initialPositions.map(p => ({ symbol: p.symbol, weight: p.valueEUR / preValue }));
+    if (plan.rebalanceOnContribution && preValue.gt(0)) {
+      const currentWeights = initialPositions.map(p => ({ symbol: p.symbol, weight: div(p.valueEUR, preValue) }));
       const needs = currentWeights.map(cw => {
-        const target = components.find(c => (c.ticker ?? c.isin) === cw.symbol)?.targetWeight ?? 0;
-        return { symbol: cw.symbol, need: target - cw.weight };
+        const target = dec(components.find(c => (c.ticker ?? c.isin) === cw.symbol)?.targetWeight ?? 0);
+        return { symbol: cw.symbol, need: sub(target, cw.weight) };
       });
 
-      const positiveNeeds = needs.filter(n => n.need > 0);
-      const totalPositiveNeed = positiveNeeds.reduce((sum, n) => sum + n.need, 0);
+      const positiveNeeds = needs.filter(n => n.need.gt(0));
+      const totalPositiveNeed = positiveNeeds.reduce((sum, n) => add(sum, n.need), dec(0));
 
-      if (totalPositiveNeed > 0) {
+      if (totalPositiveNeed.gt(0)) {
         positiveNeeds.forEach(n => {
-            const allocShare = n.need / totalPositiveNeed;
-            const cashForSymbol = cashToInvest * allocShare;
+            const allocShare = div(n.need, totalPositiveNeed);
+            const cashForSymbol = mul(cashToInvest, allocShare);
             const priceInfo = initialPositions.find(p => p.symbol === n.symbol);
-            if (priceInfo && priceInfo.priceEUR > 0) {
-                const buyUnits = cashForSymbol / priceInfo.priceEUR;
-                units[n.symbol] = (units[n.symbol] ?? 0) + buyUnits;
+            if (priceInfo && priceInfo.priceEUR.gt(0)) {
+                const buyUnits = div(cashForSymbol, priceInfo.priceEUR);
+                units[n.symbol] = add(units[n.symbol] ?? dec(0), buyUnits);
             }
         });
-      } else { // if no drift, or all negative drift, allocate by target
+      } else { 
         components.forEach(c => {
           const symbol = c.ticker ?? c.isin;
-          const allocShare = c.targetWeight;
-          const cashForSymbol = cashToInvest * allocShare;
+          const allocShare = dec(c.targetWeight);
+          const cashForSymbol = mul(cashToInvest, allocShare);
           const priceInfo = initialPositions.find(p => p.symbol === symbol);
-          if (priceInfo && priceInfo.priceEUR > 0) {
-              const buyUnits = cashForSymbol / priceInfo.priceEUR;
-              units[symbol] = (units[symbol] ?? 0) + buyUnits;
+          if (priceInfo && priceInfo.priceEUR.gt(0)) {
+              const buyUnits = div(cashForSymbol, priceInfo.priceEUR);
+              units[symbol] = add(units[symbol] ?? dec(0), buyUnits);
           }
         });
       }
 
     } else {
-      // Proportional to targets if not rebalancing or if it's the first month
       components.forEach(c => {
         const symbol = c.ticker ?? c.isin;
-        const cashForSymbol = cashToInvest * c.targetWeight;
+        const cashForSymbol = mul(cashToInvest, dec(c.targetWeight));
         const priceInfo = initialPositions.find(p => p.symbol === symbol);
-        if (priceInfo && priceInfo.priceEUR > 0) {
-            const buyUnits = cashForSymbol / priceInfo.priceEUR;
-            units[symbol] = (units[symbol] ?? 0) + buyUnits;
+        if (priceInfo && priceInfo.priceEUR.gt(0)) {
+            const buyUnits = div(cashForSymbol, priceInfo.priceEUR);
+            units[symbol] = add(units[symbol] ?? dec(0), buyUnits);
         }
       });
     }
 
     // --- Recompute final position values after buying ---
-    const finalPositions = components.map(c => {
+    let portfolioValue = dec(0);
+    const finalPositionsData = components.map(c => {
       const symbol = c.ticker ?? c.isin;
       const p = monthlyByMonth[symbol]?.[monthKey];
       if (!p) return null;
@@ -149,35 +151,36 @@ export function simulatePlan(
       const fxRate = p.currency === 'EUR' ? 1 : (fxByMonth[monthKey]?.rates?.[p.currency] ?? null);
       if (p.currency !== 'EUR' && !fxRate) return null;
       
-      const priceEUR = fxRate ? p.close / fxRate : p.close;
-      const valueEUR = (units[symbol] ?? 0) * priceEUR;
+      const priceEUR = fxRate ? div(dec(p.close), dec(fxRate)) : dec(p.close);
+      const valueEUR = mul(units[symbol] ?? dec(0), priceEUR);
+      portfolioValue = add(portfolioValue, valueEUR);
+      
       return {
         symbol,
-        units: units[symbol] ?? 0,
+        units: units[symbol] ?? dec(0),
         priceCCY: p.close,
         ccy: p.currency,
         fxEURtoCCY: p.currency === 'EUR' ? 1 : fxRate ?? undefined,
-        priceEUR,
-        valueEUR,
+        priceEUR: toNum(priceEUR),
+        valueEUR: toNum(valueEUR),
         targetWeight: c.targetWeight,
-        driftPct: 0, // will be filled below
+        driftPct: 0,
       };
     }).filter(Boolean) as PlanRow['positions'];
 
-    const portfolioValue = finalPositions.reduce((s, x) => s + x.valueEUR, 0);
-
     // --- Calculate final drift ---
-    finalPositions.forEach(pos => {
-      const actualWeight = portfolioValue > 0 ? pos.valueEUR / portfolioValue : 0;
-      pos.driftPct = actualWeight - pos.targetWeight;
+    finalPositionsData.forEach(pos => {
+      const actualWeight = portfolioValue.gt(0) ? div(dec(pos.valueEUR), portfolioValue) : dec(0);
+      pos.driftPct = toNum(sub(actualWeight, dec(pos.targetWeight)), 4);
+      pos.units = toNum(units[pos.symbol] ?? dec(0), 8);
     });
 
     rows.push({
       date: format(monthDate, 'yyyy-MM-dd'),
       contribution: plan.monthContribution,
-      fees: fee,
-      portfolioValue,
-      positions: finalPositions,
+      fees: toNum(fee),
+      portfolioValue: toNum(portfolioValue),
+      positions: finalPositionsData,
     });
   }
 

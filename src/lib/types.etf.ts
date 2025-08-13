@@ -26,12 +26,14 @@ export interface ETFPlan {
 export interface ETFPricePoint {
   symbol: string;        // resolved trading symbol (e.g. SWDA.L)
   date: string;          // ISO (month end or trading day)
+  month?: string;         // 'YYYY-MM' key for alignment
   close: number;         // in instrument currency
   currency: string;      // 'GBP', 'EUR', ...
 }
 
 export interface FXRatePoint {
   date: string;          // ISO day
+  month?: string;         // 'YYYY-MM' key for alignment
   base: 'EUR';
   rates: Record<string, number>; // e.g. { USD: 1.073, GBP: 0.855, ... } → EUR→CCY
 }

@@ -2,6 +2,7 @@
 import { db } from './firebase';
 import { collection, doc, writeBatch, getDocs, query, where, Timestamp, WriteBatch } from 'firebase/firestore';
 import type { ETFPricePoint, FXRatePoint } from './types.etf';
+import { format } from 'date-fns';
 
 // Helper to commit writes in chunks to avoid 500-document limit
 async function commitInChunks<T>(
@@ -64,8 +65,10 @@ export async function getFXRates(uid: string, startDate: string, endDate: string
     const rates: Record<string, FXRatePoint> = {};
     snapshot.forEach(docSnap => {
         const data = docSnap.data();
+        const date = (data.date as Timestamp).toDate();
         rates[docSnap.id] = {
-            date: (data.date as Timestamp).toDate().toISOString().split('T')[0],
+            date: format(date, 'yyyy-MM-dd'),
+            month: format(date, 'yyyy-MM'),
             base: 'EUR',
             rates: data.rates,
         };
@@ -84,9 +87,11 @@ export async function getPricePoints(uid: string, planId: string, symbol: string
     const prices: Record<string, ETFPricePoint> = {};
     snapshot.forEach(docSnap => {
         const data = docSnap.data();
+        const date = (data.date as Timestamp).toDate();
         prices[docSnap.id] = {
             symbol: data.symbol,
-            date: (data.date as Timestamp).toDate().toISOString().split('T')[0],
+            date: format(date, 'yyyy-MM-dd'),
+            month: format(date, 'yyyy-MM'),
             close: data.close,
             currency: data.currency,
         };
