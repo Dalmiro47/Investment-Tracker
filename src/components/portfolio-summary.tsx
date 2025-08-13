@@ -39,7 +39,9 @@ interface TaxEstimateDialogProps {
 }
 
 function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings }: TaxEstimateDialogProps) {
-    if (!taxSummary || !taxSettings) return null;
+    if (!taxSummary || !taxSettings || !taxSummary.capitalTaxResult || !taxSummary.cryptoTaxResult) {
+      return null;
+    }
 
     const { capitalTaxResult: capital, cryptoTaxResult: crypto } = taxSummary;
     const shortTermGainsTotal = taxSummary.totalShortTermGains;
@@ -469,5 +471,3 @@ export default function PortfolioSummary({
         </TooltipProvider>
     );
 }
-
-    
