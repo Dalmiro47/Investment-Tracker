@@ -6,7 +6,7 @@ import type { Investment, Transaction, YearFilter, TaxSettings } from '@/lib/typ
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { PieChart, Pie, Cell, Tooltip } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
 import { TrendingUp, TrendingDown, Info, Scale } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatPercent, toNum } from '@/lib/money';
@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TAX } from '@/lib/tax';
 import { Separator } from './ui/separator';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 const CHART_COLORS = [
@@ -41,7 +42,8 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
     if (!taxSummary || !taxSettings) return null;
 
     const { capitalTaxResult: capital, cryptoTaxResult: crypto } = taxSummary;
-    const shortTermGainsTotal = crypto.taxableBase > 0 ? taxSummary.totalShortTermGains : crypto.thresholdUsed;
+    const shortTermGainsTotal = taxSummary.totalShortTermGains;
+
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -72,7 +74,7 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                     {/* Crypto */}
                      <div className="p-3 rounded-md bg-muted/50 border">
                         <h4 className="font-semibold mb-2">Crypto Private Sales (§23 EStG)</h4>
-                         <div className="flex justify-between"><span className="text-muted-foreground">Short-term Gains</span> <span className="font-mono">{formatCurrency(taxSummary.totalShortTermGains)}</span></div>
+                         <div className="flex justify-between"><span className="text-muted-foreground">Short-term Gains</span> <span className="font-mono">{formatCurrency(shortTermGainsTotal)}</span></div>
                         <div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Threshold Checked ({formatCurrency(crypto.threshold)})</span> <span className="font-mono">{crypto.taxableBase > 0 ? 'Exceeded' : `Used: ${formatCurrency(crypto.thresholdUsed)}`}</span></div>
                          <Separator className="my-1" />
                         <div className="flex justify-between font-medium"><span className="">Taxable Base</span> <span className="font-mono">{formatCurrency(crypto.taxableBase)}</span></div>
@@ -91,6 +93,33 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
             </DialogContent>
         </Dialog>
     );
+}
+
+const getSummaryContext = (filter: YearFilter): { title: string, description: string } => {
+    if (filter.kind === 'all') {
+        return {
+            title: 'Portfolio Summary – Lifetime Performance',
+            description: 'Includes all realized gains since inception + current unrealized gains on holdings.'
+        };
+    }
+    const year = filter.year;
+    switch (filter.mode) {
+        case 'combined':
+            return {
+                title: `Portfolio Summary – Year ${year} (Combined)`,
+                description: 'Shows this year’s realized gains + current unrealized gains on holdings. Not a pure tax view.'
+            };
+        case 'realized':
+            return {
+                title: `Portfolio Summary – Year ${year} (Tax-Only)`,
+                description: 'Shows only assets sold in this year. Unrealized gains excluded. Used for tax estimates.'
+            };
+        case 'holdings':
+            return {
+                title: `Portfolio Summary – Year ${year} (Holdings Snapshot)`,
+                description: 'Shows only open positions and their current unrealized gains.'
+            };
+    }
 }
 
 interface PortfolioSummaryProps {
@@ -179,14 +208,88 @@ export default function PortfolioSummary({
     const totalPortfolioValue = donutMode === 'market' ? totals.marketValue : totals.economicValue;
     const showTaxEstimatorButton = isTaxView && taxSummary && yearFilter.kind === 'year';
 
+    const { title, description } = getSummaryContext(yearFilter);
+    const isYearView = yearFilter.kind === 'year';
+
     return (
-        <>
+        <TooltipProvider>
         <Card>
             <CardHeader>
                <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
                     <div>
-                        <CardTitle className="font-headline text-2xl">Portfolio Summary</CardTitle>
-                        <CardDescription>An overview of your current portfolio performance.</CardDescription>
+                        <div className="flex items-center gap-2">
+                           <CardTitle className="font-headline text-2xl">{title}</CardTitle>
+                             <Dialog>
+                                <DialogTrigger asChild>
+                                    <Button variant="ghost" size="icon">
+                                        <Info className="h-5 w-5" />
+                                        <span className="sr-only">Show Explanations</span>
+                                    </Button>
+                                </DialogTrigger>
+                                 <DialogContent className="max-w-2xl">
+                                    <DialogHeader>
+                                        <DialogTitle>Summary Column Explanations</DialogTitle>
+                                        <DialogDescription>How each value in the summary table is calculated.</DialogDescription>
+                                    </DialogHeader>
+                                    <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4">
+                                        <div>
+                                            <h4 className="font-semibold">Filter Explanation</h4>
+                                             <ul className="list-disc pl-5 mt-2 space-y-2 text-muted-foreground">
+                                                <li><span className="font-semibold text-foreground">All Years View:</span> Shows a lifetime summary of all investments (active and sold). The 'Realized P/L' column displays total realized gains/losses across all time.</li>
+                                                <li><span className="font-semibold text-foreground">Specific Year View:</span> Restricts calculations to a single year and enables different view modes.</li>
+                                            </ul>
+                                        </div>
+                                         <div>
+                                            <h4 className="font-semibold">Yearly View Modes</h4>
+                                            <p className="text-muted-foreground">When a specific year is selected, these modes change which investments are included in the summary.</p>
+                                            <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
+                                                <li><span className="font-semibold text-foreground">Combined:</span> (Default) Shows all currently open positions PLUS any positions that had a sale in the selected year. Realized P/L is year-specific.</li>
+                                                <li><span className="font-semibold text-foreground">Realized (Tax):</span> Shows ONLY positions that had a sale in the selected year. This is a pure tax-reporting view.</li>
+                                                <li><span className="font-semibold text-foreground">Holdings:</span> Shows ONLY currently open positions. Realized P/L is shown as zero.</li>
+                                            </ul>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-semibold">Cost Basis</h4>
+                                            <p className="text-muted-foreground">The original purchase price of the assets included in the current view. <br/><code className="text-xs">Formula: For each included investment, sum of (Original Purchase Price per Unit x Quantity)</code></p>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-semibold">Market Value</h4>
+                                            <p className="text-muted-foreground">The current value of the assets you still own. <br/><code className="text-xs">Formula: Available Quantity × Current Price per Unit</code></p>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-semibold">Realized P/L (Profit/Loss)</h4>
+                                            <p className="text-muted-foreground">Your "locked-in" profit or loss from sales. This value is filtered by the selected "Tax Year" and "View Mode". <br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-semibold">Unrealized P/L (Profit/Loss)</h4>
+                                            <p className="text-muted-foreground">Your "paper" profit or loss on the assets you still hold. It's the difference between what they are worth now and what you paid for them.<br/><code className="text-xs">Formula: Market Value - Cost Basis of remaining shares</code></p>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-semibold">Total P/L (Profit/Loss)</h4>
+                                            <p className="text-muted-foreground">The complete picture of your profit or loss, combining the (filtered) realized gains/losses with the current unrealized gains/losses.<br/><code className="text-xs">Formula: Realized P/L + Unrealized P/L</code></p>
+                                        </div>
+                                        <div>
+                                           <h4 className="font-semibold">Performance</h4>
+                                           <p className="text-muted-foreground">The total percentage return. This is calculated against the total original purchase value of the assets included in the current view to give a true measure of performance for that selection.</p>
+                                           <p className="text-muted-foreground mt-1"><code className="text-xs">Formula: (Total P/L / Total Original Purchase Value) × 100</code></p>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-semibold">% of Portfolio (Donut Chart)</h4>
+                                            <p className="text-muted-foreground">This shows the allocation of your portfolio's value. It has two modes:</p>
+                                            <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
+                                                <li><span className="font-semibold text-foreground">Market Value Mode:</span> Shows the percentage based on the current market value of what you own.</li>
+                                                <li><span className="font-semibold text-foreground">Economic Value Mode:</span> Shows a broader view, including your realized gains (note: this uses all-time realized gains, not the filtered year). The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>
+                                            </ul>
+                                        </div>
+                                        <div className="pt-2">
+                                            <h4 className="font-semibold">Total Row</h4>
+                                            <p className="text-muted-foreground">The "Total" row sums the numeric columns from the rows above it. The "Performance" percentage is then re-calculated based on the grand totals to provide a true weighted-average performance for your entire portfolio.</p>
+                                        </div>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        </div>
+                        <CardDescription>{description}</CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
                          <Select onValueChange={handleYearChange} value={yearFilter.kind === 'year' ? String(yearFilter.year) : 'all'}>
@@ -200,75 +303,6 @@ export default function PortfolioSummary({
                                 ))}
                             </SelectContent>
                         </Select>
-                        <Dialog>
-                            <DialogTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                    <Info className="h-5 w-5" />
-                                    <span className="sr-only">Show Explanations</span>
-                                </Button>
-                            </DialogTrigger>
-                             <DialogContent className="max-w-2xl">
-                                <DialogHeader>
-                                    <DialogTitle>Summary Column Explanations</DialogTitle>
-                                    <DialogDescription>How each value in the summary table is calculated.</DialogDescription>
-                                </DialogHeader>
-                                <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4">
-                                    <div>
-                                        <h4 className="font-semibold">Filter Explanation</h4>
-                                         <ul className="list-disc pl-5 mt-2 space-y-2 text-muted-foreground">
-                                            <li><span className="font-semibold text-foreground">All Years View:</span> Shows a lifetime summary of all investments (active and sold). The 'Realized P/L' column displays total realized gains/losses across all time.</li>
-                                            <li><span className="font-semibold text-foreground">Specific Year View:</span> Restricts calculations to a single year and enables different view modes.</li>
-                                        </ul>
-                                    </div>
-                                     <div>
-                                        <h4 className="font-semibold">Yearly View Modes</h4>
-                                        <p className="text-muted-foreground">When a specific year is selected, these modes change which investments are included in the summary.</p>
-                                        <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
-                                            <li><span className="font-semibold text-foreground">Combined:</span> (Default) Shows all currently open positions PLUS any positions that had a sale in the selected year. Realized P/L is year-specific.</li>
-                                            <li><span className="font-semibold text-foreground">Realized (Tax):</span> Shows ONLY positions that had a sale in the selected year. This is a pure tax-reporting view.</li>
-                                            <li><span className="font-semibold text-foreground">Holdings:</span> Shows ONLY currently open positions. Realized P/L is shown as zero.</li>
-                                        </ul>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold">Cost Basis</h4>
-                                        <p className="text-muted-foreground">The original purchase price of the assets you currently still own. It ignores the cost of shares you've already sold. <br/><code className="text-xs">Formula: Available Quantity × Original Purchase Price per Unit</code></p>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold">Market Value</h4>
-                                        <p className="text-muted-foreground">The current value of the assets you currently still own. <br/><code className="text-xs">Formula: Available Quantity × Current Price per Unit</code></p>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold">Realized P/L (Profit/Loss)</h4>
-                                        <p className="text-muted-foreground">Your "locked-in" profit or loss from sales. This value is filtered by the selected "Tax Year" and "View Mode". <br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold">Unrealized P/L (Profit/Loss)</h4>
-                                        <p className="text-muted-foreground">Your "paper" profit or loss on the assets you still hold. It's the difference between what they are worth now and what you paid for them.<br/><code className="text-xs">Formula: Market Value - Cost Basis</code></p>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold">Total P/L (Profit/Loss)</h4>
-                                        <p className="text-muted-foreground">The complete picture of your profit or loss, combining the (filtered) realized gains/losses with the current unrealized gains/losses.<br/><code className="text-xs">Formula: Realized P/L + Unrealized P/L</code></p>
-                                    </div>
-                                    <div>
-                                       <h4 className="font-semibold">Performance</h4>
-                                       <p className="text-muted-foreground">The total percentage return. This is calculated against the total original purchase value of the assets included in the current view to give a true measure of performance for that selection.</p>
-                                       <p className="text-muted-foreground mt-1"><code className="text-xs">Formula: (Total P/L / Total Original Purchase Value) × 100</code></p>
-                                    </div>
-                                    <div>
-                                        <h4 className="font-semibold">% of Portfolio (Donut Chart)</h4>
-                                        <p className="text-muted-foreground">This shows the allocation of your portfolio's value. It has two modes:</p>
-                                        <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
-                                            <li><span className="font-semibold text-foreground">Market Value Mode:</span> Shows the percentage based on the current market value of what you own.</li>
-                                            <li><span className="font-semibold text-foreground">Economic Value Mode:</span> Shows a broader view, including your realized gains (note: this uses all-time realized gains, not the filtered year). The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>
-                                        </ul>
-                                    </div>
-                                    <div className="pt-2">
-                                        <h4 className="font-semibold">Total Row</h4>
-                                        <p className="text-muted-foreground">The "Total" row sums the numeric columns from the rows above it. The "Performance" percentage is then re-calculated based on the grand totals to provide a true weighted-average performance for your entire portfolio.</p>
-                                    </div>
-                                </div>
-                            </DialogContent>
-                        </Dialog>
                     </div>
                 </div>
                 <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-2 mb-4">
@@ -289,9 +323,6 @@ export default function PortfolioSummary({
                         </Button>
                     )}
                 </div>
-                 <p className="text-xs text-muted-foreground mt-1">
-                    Realized P/L reflects the selected year and view mode. Market & unrealized values are based on current prices.
-                </p>
             </CardHeader>
             <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -302,8 +333,22 @@ export default function PortfolioSummary({
                                     <TableHead>Asset Type</TableHead>
                                     <TableHead className="text-right">Cost Basis</TableHead>
                                     <TableHead className="text-right">Market Value</TableHead>
-                                    <TableHead className="text-right">Realized P/L</TableHead>
-                                    <TableHead className="text-right">Unrealized P/L</TableHead>
+                                    <TableHead className="text-right">
+                                        {isYearView ? (
+                                             <Tooltip>
+                                                <TooltipTrigger className="cursor-help underline decoration-dashed">Realized P/L</TooltipTrigger>
+                                                <TooltipContent>Only includes sales completed in {yearFilter.year}.</TooltipContent>
+                                            </Tooltip>
+                                        ) : 'Realized P/L'}
+                                    </TableHead>
+                                    <TableHead className="text-right">
+                                         {isYearView ? (
+                                             <Tooltip>
+                                                <TooltipTrigger className="cursor-help underline decoration-dashed">Unrealized P/L</TooltipTrigger>
+                                                <TooltipContent>Based on current prices, not prices from {yearFilter.year}.</TooltipContent>
+                                            </Tooltip>
+                                        ) : 'Unrealized P/L'}
+                                    </TableHead>
                                     <TableHead className="text-right">Total P/L</TableHead>
                                     <TableHead className="text-right">Performance</TableHead>
                                     <TableHead className="text-right">% of Portfolio</TableHead>
@@ -358,7 +403,7 @@ export default function PortfolioSummary({
                         <ChartContainer config={{}} className="aspect-square h-[250px] w-full">
                             {chartData.length > 0 ? (
                             <PieChart>
-                                <Tooltip
+                                <RechartsTooltip
                                     cursor={false}
                                     content={<ChartTooltipContent 
                                         hideLabel
@@ -421,6 +466,8 @@ export default function PortfolioSummary({
                 taxSettings={taxSettings}
             />
         )}
-        </>
+        </TooltipProvider>
     );
 }
+
+    
