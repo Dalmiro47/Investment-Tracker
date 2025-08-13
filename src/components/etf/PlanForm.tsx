@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import { CalendarIcon, PlusCircle, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { ETFPlan, ETFComponent } from "@/lib/types.etf";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { defaultTickerForISIN } from "@/lib/providers/yahoo";
 
 const planSchema = z.object({
@@ -90,7 +90,6 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
     name: "components",
   });
   
-  const components = form.watch('components');
   const totalWeight = useMemo(() => {
     return (fields as PlanFormValues['components']).reduce((sum, c) => sum + (c.targetWeight || 0), 0);
   }, [fields]);
@@ -193,9 +192,9 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                 <TableRow>
                   <TableHead className="w-[25%]">Name</TableHead>
                   <TableHead className="w-[20%]">ISIN</TableHead>
-                  <TableHead className="w-[20%]">Exchange</TableHead>
+                  <TableHead className="w-[15%]">Exchange</TableHead>
                   <TableHead className="w-[20%]">Ticker (Override)</TableHead>
-                  <TableHead className="text-right">Weight (%)</TableHead>
+                  <TableHead className="text-right w-[15%]">Weight (%)</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
