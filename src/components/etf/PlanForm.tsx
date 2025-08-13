@@ -75,8 +75,8 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
       feePct: 0,
       rebalanceOnContribution: false,
       components: [
-        { name: "iShares Core MSCI World", isin: "IE00B4K48X80", preferredExchange: "LSE", targetWeight: 0.7 },
-        { name: "iShares Core MSCI EM IMI", isin: "IE00B1FZS574", preferredExchange: "LSE", targetWeight: 0.3 },
+        { name: "iShares Core MSCI World", isin: "IE00B4K48X80", preferredExchange: "XETRA", targetWeight: 0.7 },
+        { name: "iShares Core MSCI EM IMI", isin: "IE00B1FZS574", preferredExchange: "XETRA", targetWeight: 0.3 },
       ],
     }
   });
@@ -258,7 +258,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => append({ name: "", isin: "", targetWeight: 0 })}
+                    onClick={() => append({ name: "", isin: "", targetWeight: 0, preferredExchange: "XETRA" })}
                 >
                     <PlusCircle className="mr-2 h-4 w-4" /> Add Component
                 </Button>

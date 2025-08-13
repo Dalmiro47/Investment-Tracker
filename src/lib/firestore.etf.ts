@@ -3,7 +3,7 @@
 import { db } from './firebase';
 import { collection, doc, writeBatch, getDocs, query, where, Timestamp, WriteBatch } from 'firebase/firestore';
 import type { ETFPricePoint, FXRatePoint } from './types.etf';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, endOfMonth } from 'date-fns';
 
 // Helper to commit writes in chunks to avoid 500-document limit
 async function commitInChunks<T>(
@@ -34,11 +34,12 @@ export async function cachePrices(uid: string, planId: string, monthlyBySymbol: 
     );
 
     await commitInChunks(allPoints, (batch, { symbol, point }) => {
-        const dateId = format(parseISO(point.date), 'yyyy-MM');
-        const pointRef = doc(db, 'users', uid, 'etfPlans', planId, 'prices', symbol, 'points', dateId);
+        const monthEnd = endOfMonth(parseISO(point.date));
+        const monthId = format(monthEnd, 'yyyy-MM');
+        const pointRef = doc(db, 'users', uid, 'etfPlans', planId, 'prices', symbol, 'points', monthId);
         batch.set(pointRef, {
             ...point,
-            date: Timestamp.fromDate(new Date(point.date))
+            date: Timestamp.fromDate(monthEnd)
         });
     });
 }
@@ -46,11 +47,12 @@ export async function cachePrices(uid: string, planId: string, monthlyBySymbol: 
 
 export async function cacheFX(uid: string, points: FXRatePoint[]) {
     await commitInChunks(points, (batch, point) => {
-        const dateId = format(parseISO(point.date), 'yyyy-MM');
-        const pointRef = doc(db, 'users', uid, 'fx', 'monthly', dateId);
+        const monthEnd = endOfMonth(parseISO(point.date));
+        const monthId = format(monthEnd, 'yyyy-MM');
+        const pointRef = doc(db, 'users', uid, 'fx', 'monthly', monthId);
         batch.set(pointRef, {
             ...point,
-            date: Timestamp.fromDate(new Date(point.date))
+            date: Timestamp.fromDate(monthEnd)
         });
     });
 }

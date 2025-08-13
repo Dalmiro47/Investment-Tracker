@@ -10,7 +10,7 @@ import { refreshEtfData, runPlan } from '@/app/actions/etf';
 import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import type { PlanRow } from '@/lib/etf/engine';
 import { format, parseISO } from 'date-fns';
-import { formatCurrency, formatPercent, toNum, dec, mul, sub, div } from '@/lib/money';
+import { formatCurrency, formatPercent, toNum } from '@/lib/money';
 
 import DashboardHeader from '@/components/dashboard-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Legend } from 'recharts';
-import { ArrowLeft, RefreshCw, Play, Loader2, BarChart, ArrowDownToLine } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Play, Loader2, ArrowDownToLine } from 'lucide-react';
 
 const CHART_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
@@ -81,11 +81,11 @@ export default function PlanDetailPage({ params }: { params: { planId: string } 
         return simData.map(row => {
             const chartRow: any = {
                 date: format(parseISO(row.date), 'MMM yy'),
-                'Portfolio Value': toNum(dec(row.portfolioValue)),
+                'Portfolio Value': toNum(row.portfolioValue),
             };
             plan?.components.forEach(comp => {
                 const pos = row.positions.find(p => p.symbol === (comp.ticker || comp.isin));
-                chartRow[comp.name] = toNum(dec(pos?.valueEUR ?? 0));
+                chartRow[comp.name] = toNum(pos?.valueEUR ?? 0);
             });
             return chartRow;
         });
@@ -118,11 +118,11 @@ export default function PlanDetailPage({ params }: { params: { planId: string } 
                         <CardTitle>Controls</CardTitle>
                     </CardHeader>
                     <CardContent className="flex gap-4">
-                        <Button onClick={handleRefresh} disabled={isRefreshing}>
+                        <Button onClick={handleRefresh} disabled={isRefreshing || isRunning}>
                             {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <RefreshCw className="mr-2 h-4 w-4" />}
                             Refresh Price Data
                         </Button>
-                        <Button onClick={handleRun} disabled={isRunning}>
+                        <Button onClick={handleRun} disabled={isRunning || isRefreshing}>
                             {isRunning ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Play className="mr-2 h-4 w-4" />}
                             Run Simulation
                         </Button>
