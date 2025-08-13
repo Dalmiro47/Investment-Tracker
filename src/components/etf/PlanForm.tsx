@@ -85,10 +85,11 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
     control: form.control,
     name: "components",
   });
-
+  
+  const components = form.watch('components');
   const totalWeight = useMemo(() => {
-    return form.watch('components').reduce((sum, c) => sum + (c.targetWeight || 0), 0);
-  }, [form.watch('components')]);
+    return components.reduce((sum, c) => sum + (c.targetWeight || 0), 0);
+  }, [components]);
 
   useEffect(() => {
     if (plan) {
