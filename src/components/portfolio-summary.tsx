@@ -41,7 +41,7 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
     if (!taxSummary || !taxSettings) return null;
 
     const { capitalTaxResult: capital, cryptoTaxResult: crypto } = taxSummary;
-    const shortTermGainsTotal = crypto.taxableBase > 0 ? crypto.taxableBase : crypto.thresholdUsed;
+    const shortTermGainsTotal = crypto.taxableBase > 0 ? taxSummary.totalShortTermGains : crypto.thresholdUsed;
 
     return (
         <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -72,8 +72,8 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                     {/* Crypto */}
                      <div className="p-3 rounded-md bg-muted/50 border">
                         <h4 className="font-semibold mb-2">Crypto Private Sales (§23 EStG)</h4>
-                         <div className="flex justify-between"><span className="text-muted-foreground">Short-term Gains</span> <span className="font-mono">{formatCurrency(shortTermGainsTotal)}</span></div>
-                        <div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Threshold Used ({formatCurrency(crypto.threshold)})</span> <span className="font-mono">- {formatCurrency(crypto.taxableBase > 0 ? 0 : crypto.thresholdUsed)}</span></div>
+                         <div className="flex justify-between"><span className="text-muted-foreground">Short-term Gains</span> <span className="font-mono">{formatCurrency(taxSummary.totalShortTermGains)}</span></div>
+                        <div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Threshold Checked ({formatCurrency(crypto.threshold)})</span> <span className="font-mono">{crypto.taxableBase > 0 ? 'Exceeded' : `Used: ${formatCurrency(crypto.thresholdUsed)}`}</span></div>
                          <Separator className="my-1" />
                         <div className="flex justify-between font-medium"><span className="">Taxable Base</span> <span className="font-mono">{formatCurrency(crypto.taxableBase)}</span></div>
                         <Separator className="my-2" />
@@ -214,8 +214,15 @@ export default function PortfolioSummary({
                                 </DialogHeader>
                                 <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4">
                                     <div>
-                                        <h4 className="font-semibold">Tax Year Filter &amp; View Mode</h4>
-                                        <p className="text-muted-foreground">The filter restricts calculations to a specific year. The view mode changes which investments are included.</p>
+                                        <h4 className="font-semibold">Filter Explanation</h4>
+                                         <ul className="list-disc pl-5 mt-2 space-y-2 text-muted-foreground">
+                                            <li><span className="font-semibold text-foreground">All Years View:</span> Shows a lifetime summary of all investments (active and sold). The 'Realized P/L' column displays total realized gains/losses across all time.</li>
+                                            <li><span className="font-semibold text-foreground">Specific Year View:</span> Restricts calculations to a single year and enables different view modes.</li>
+                                        </ul>
+                                    </div>
+                                     <div>
+                                        <h4 className="font-semibold">Yearly View Modes</h4>
+                                        <p className="text-muted-foreground">When a specific year is selected, these modes change which investments are included in the summary.</p>
                                         <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
                                             <li><span className="font-semibold text-foreground">Combined:</span> (Default) Shows all currently open positions PLUS any positions that had a sale in the selected year. Realized P/L is year-specific.</li>
                                             <li><span className="font-semibold text-foreground">Realized (Tax):</span> Shows ONLY positions that had a sale in the selected year. This is a pure tax-reporting view.</li>
