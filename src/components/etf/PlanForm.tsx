@@ -203,7 +203,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
               </TableHeader>
               <TableBody>
                 {fields.map((field, index) => (
-                  <TableRow key={field.id}>
+                  <TableRow key={field.id} className="align-top">
                     <TableCell>
                       <Controller
                         control={form.control}
@@ -235,19 +235,19 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                           )}
                         />
                     </TableCell>
-                    <TableCell className="align-top">
-                       <Controller
-                        control={form.control}
-                        name={`components.${index}.ticker`}
-                        render={({ field }) => (
-                            <div>
+                    <TableCell>
+                       <div className="flex flex-col">
+                           <Controller
+                            control={form.control}
+                            name={`components.${index}.ticker`}
+                            render={({ field }) => (
                                 <Input {...field} placeholder="Optional override" />
-                                <FormDescription className="text-xs mt-1">
-                                    Using: {field.value || defaultTickerForISIN(form.watch(`components.${index}.isin`), form.watch(`components.${index}.preferredExchange`)) || 'N/A'}
-                                </FormDescription>
-                            </div>
-                        )}
-                      />
+                            )}
+                          />
+                            <FormDescription className="text-xs mt-1">
+                                Using: {form.watch(`components.${index}.ticker`) || defaultTickerForISIN(form.watch(`components.${index}.isin`), form.watch(`components.${index}.preferredExchange`)) || 'N/A'}
+                            </FormDescription>
+                        </div>
                     </TableCell>
                     <TableCell>
                         <Controller
@@ -256,11 +256,12 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                             render={({ field }) => (
                                 <Input 
                                     type="number" 
+                                    step="0.01"
                                     className="text-right" 
                                     {...field} 
                                     onChange={e => {
                                         const value = e.target.value;
-                                        if (value === "") {
+                                        if (value === "" || value === null) {
                                             field.onChange(null);
                                         } else {
                                             field.onChange(parseFloat(value) / 100);
