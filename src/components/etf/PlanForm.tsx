@@ -48,7 +48,7 @@ const planSchema = z.object({
     targetWeight: z.coerce.number().min(0).max(1, "Weight must be between 0 and 1."),
   })).min(1, "At least one component is required.")
     .refine(components => {
-        const totalWeight = components.reduce((sum, c) => sum + c.targetWeight, 0);
+        const totalWeight = components.reduce((sum, c) => sum + (c.targetWeight || 0), 0);
         // Use a small tolerance for floating point comparisons
         return Math.abs(totalWeight - 1) < 1e-9;
     }, {
@@ -80,7 +80,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
       feePct: 0,
       rebalanceOnContribution: false,
       components: [
-        { name: "", isin: "", preferredExchange: "XETRA", targetWeight: 0 },
+        { name: "", isin: "", preferredExchange: "XETRA", targetWeight: undefined as any },
       ],
     }
   });
@@ -246,7 +246,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                         <Controller
                             control={form.control}
                             name={`components.${index}.targetWeight`}
-                            render={({ field }) => <Input type="number" className="text-right" {...field} onChange={e => field.onChange(parseFloat(e.target.value) / 100)} value={(field.value || 0) * 100} placeholder="0"/>}
+                            render={({ field }) => <Input type="number" className="text-right" {...field} onChange={e => field.onChange(parseFloat(e.target.value) / 100)} value={field.value === null || field.value === undefined ? '' : field.value * 100} placeholder="Weight"/>}
                         />
                     </TableCell>
                     <TableCell>
@@ -264,7 +264,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => append({ name: "", isin: "", targetWeight: 0, preferredExchange: "XETRA" })}
+                    onClick={() => append({ name: "", isin: "", targetWeight: undefined as any, preferredExchange: "XETRA" })}
                 >
                     <PlusCircle className="mr-2 h-4 w-4" /> Add Component
                 </Button>
@@ -288,3 +288,5 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
     </Form>
   );
 }
+
+    
