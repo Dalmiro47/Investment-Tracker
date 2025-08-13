@@ -12,6 +12,7 @@ const defaultTickerMap: Record<string, Record<string, string>> = {
 
 
 export function defaultTickerForISIN(isin: string, exch: 'XETRA' | 'LSE' | 'MIL' | 'AMS' = 'LSE'): string {
+    if (!isin) return '';
     return defaultTickerMap[isin]?.[exch] ?? '';
 }
 

@@ -8,7 +8,8 @@ import { refreshEtfPlanPrices } from './prices';
 
 
 export async function refreshEtfData(uid: string, planId: string, components: ETFComponent[], sinceISO: string) {
-  return refreshEtfPlanPrices(uid, planId, components, sinceISO);
+  const since = format(startOfMonth(parseISO(sinceISO)), 'yyyy-MM-dd');
+  return refreshEtfPlanPrices(uid, planId, components, since);
 }
 
 

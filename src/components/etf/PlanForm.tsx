@@ -239,7 +239,14 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                        <Controller
                         control={form.control}
                         name={`components.${index}.ticker`}
-                        render={({ field }) => <Input {...field} placeholder={defaultTickerForISIN(form.watch(`components.${index}.isin`), form.watch(`components.${index}.preferredExchange`))} />}
+                        render={({ field }) => (
+                            <div>
+                                <Input {...field} placeholder="Optional override" />
+                                <FormDescription className="text-xs mt-1">
+                                    Using: {field.value || defaultTickerForISIN(form.watch(`components.${index}.isin`), form.watch(`components.${index}.preferredExchange`)) || 'N/A'}
+                                </FormDescription>
+                            </div>
+                        )}
                       />
                     </TableCell>
                     <TableCell>
