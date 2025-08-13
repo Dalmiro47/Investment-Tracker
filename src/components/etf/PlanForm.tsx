@@ -49,13 +49,14 @@ const planSchema = z.object({
   })).min(1, "At least one component is required.")
     .refine(components => {
         const totalWeight = components.reduce((sum, c) => sum + c.targetWeight, 0);
-        return Math.abs(totalWeight - 1) < 0.001;
+        // Use a small tolerance for floating point comparisons
+        return Math.abs(totalWeight - 1) < 1e-9;
     }, {
-        message: "Total target weight must be exactly 1 (or 100%).",
+        message: "Total target weight must be exactly 100%.",
         path: ["components"],
     })
     .refine(cs => {
-      const keys = cs.map(c => (c.ticker || c.isin).trim().toUpperCase());
+      const keys = cs.map(c => (c.ticker || c.isin).trim().toUpperCase()).filter(k => k);
       return new Set(keys).size === keys.length;
     }, { path: ['components'], message: 'Duplicate tickers/ISINs are not allowed.' })
 });
@@ -79,8 +80,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
       feePct: 0,
       rebalanceOnContribution: false,
       components: [
-        { name: "iShares Core MSCI World", isin: "IE00B4K48X80", preferredExchange: "XETRA", targetWeight: 0.7 },
-        { name: "iShares Core MSCI EM IMI", isin: "IE00B1FZS574", preferredExchange: "XETRA", targetWeight: 0.3 },
+        { name: "", isin: "", preferredExchange: "XETRA", targetWeight: 0 },
       ],
     }
   });
@@ -90,9 +90,12 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
     name: "components",
   });
   
+  const componentValues = form.watch('components');
   const totalWeight = useMemo(() => {
-    return (fields as PlanFormValues['components']).reduce((sum, c) => sum + (c.targetWeight || 0), 0);
-  }, [fields]);
+    return componentValues.reduce((sum, c) => sum + (Number(c.targetWeight) || 0), 0);
+  }, [componentValues]);
+
+  const isSaveDisabled = isSubmitting || Math.abs(totalWeight - 1) > 1e-9;
 
   useEffect(() => {
     if (plan) {
@@ -194,7 +197,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                   <TableHead className="w-[20%]">ISIN</TableHead>
                   <TableHead className="w-[15%]">Exchange</TableHead>
                   <TableHead className="w-[20%]">Ticker (Override)</TableHead>
-                  <TableHead className="text-right w-[15%]">Weight (%)</TableHead>
+                  <TableHead className="text-right w-[120px]">Weight (%)</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
@@ -243,7 +246,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                         <Controller
                             control={form.control}
                             name={`components.${index}.targetWeight`}
-                            render={({ field }) => <Input type="number" className="text-right" {...field} onChange={e => field.onChange(parseFloat(e.target.value) / 100)} value={(field.value || 0) * 100} />}
+                            render={({ field }) => <Input type="number" className="text-right" {...field} onChange={e => field.onChange(parseFloat(e.target.value) / 100)} value={(field.value || 0) * 100} placeholder="0"/>}
                         />
                     </TableCell>
                     <TableCell>
@@ -265,18 +268,21 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                 >
                     <PlusCircle className="mr-2 h-4 w-4" /> Add Component
                 </Button>
-                <div className={cn("text-sm font-medium", Math.abs(totalWeight - 1) > 0.001 ? "text-destructive" : "text-green-600")}>
+                <div className={cn("text-sm font-medium", Math.abs(totalWeight - 1) > 1e-9 ? "text-destructive" : "text-green-600")}>
                     Total Weight: {(totalWeight * 100).toFixed(2)}%
                 </div>
             </div>
              {form.formState.errors.components?.message && (
                 <p className="text-sm font-medium text-destructive mt-2">{form.formState.errors.components.message}</p>
             )}
+             {form.formState.errors.components?.root?.message && (
+                <p className="text-sm font-medium text-destructive mt-2">{form.formState.errors.components?.root?.message}</p>
+            )}
         </div>
 
         <div className="flex justify-end gap-2">
           <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-          <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Saving..." : "Save Plan"}</Button>
+          <Button type="submit" disabled={isSaveDisabled}>{isSubmitting ? "Saving..." : "Save Plan"}</Button>
         </div>
       </form>
     </Form>
