@@ -283,19 +283,18 @@ export default function InvestmentCard({
             
             <Separator />
 
-            <div className="grid grid-cols-3 gap-4 text-center">
-               <div>
+            <div className="grid grid-cols-2 gap-4">
+               <div className="text-center">
                   <div className="text-sm text-muted-foreground">Unrealized P/L</div>
                   <div className={cn("flex items-center justify-center font-bold text-lg", displayUnrealizedPL >= 0 ? "text-green-600" : "text-destructive")}>
                     {displayUnrealizedPL >= 0 ? <TrendingUp className="h-5 w-5 mr-1" /> : <TrendingDown className="h-5 w-5 mr-1" />}
                     {formatCurrency(displayUnrealizedPL)}
                   </div>
               </div>
-               <div>
+               <div className="text-center">
                   <div className="text-sm text-muted-foreground">Realized P/L</div>
-                  <div className={cn("font-bold text-lg text-right w-full pr-4", displayRealizedPL >= 0 ? "text-green-600" : "text-destructive")}>{formatCurrency(displayRealizedPL)}</div>
+                  <div className={cn("font-bold text-lg", displayRealizedPL >= 0 ? "text-green-600" : "text-destructive")}>{formatCurrency(displayRealizedPL)}</div>
               </div>
-              <div></div>
             </div>
 
              <div className="text-center pt-2">
