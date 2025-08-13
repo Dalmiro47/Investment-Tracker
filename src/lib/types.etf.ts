@@ -1,4 +1,6 @@
 // src/lib/types.etf.ts
+import type { Timestamp } from 'firebase/firestore';
+
 export type ETFPlanId = string;
 
 export interface ETFComponent {
@@ -19,8 +21,8 @@ export interface ETFPlan {
   feePct?: number;            // 0.001 = 0.1% fee per contribution (optional)
   startDate: string;          // ISO date; first month to simulate
   rebalanceOnContribution?: boolean; // if true, use contrib to steer back to targets
-  createdAt: string;
-  updatedAt: string;
+  createdAt?: Timestamp;
+  updatedAt?: Timestamp;
 }
 
 export interface ETFPricePoint {

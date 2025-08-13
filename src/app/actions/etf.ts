@@ -4,8 +4,15 @@ import { getPricePoints, getFXRates } from '@/lib/firestore.etf';
 import { simulatePlan } from '@/lib/etf/engine';
 import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import { endOfMonth, format } from 'date-fns';
+import { refreshEtfPlanPrices } from './prices';
 
-export async function runEtfSimulation(uid: string, plan: ETFPlan, components: ETFComponent[]) {
+
+export async function refreshEtfData(uid: string, planId: string, components: ETFComponent[], sinceISO: string) {
+  return refreshEtfPlanPrices(uid, planId, components, sinceISO);
+}
+
+
+export async function runPlan(uid: string, plan: ETFPlan, components: ETFComponent[]) {
   const start = plan.startDate;
   const end = format(endOfMonth(new Date()), 'yyyy-MM-dd');
 

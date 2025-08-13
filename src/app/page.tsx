@@ -1,7 +1,9 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
@@ -13,7 +15,7 @@ import { TaxSettingsDialog } from '@/components/tax-settings-dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, SlidersHorizontal, Loader2, RefreshCw } from 'lucide-react';
+import { PlusCircle, SlidersHorizontal, Loader2, RefreshCw, Briefcase } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -37,6 +39,7 @@ import { calculatePositionMetrics } from '@/lib/portfolio';
 export default function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [transactionsMap, setTransactionsMap] = useState<Record<string, Transaction[]>>({});
   const [sellYears, setSellYears] = useState<number[]>([]);
@@ -292,6 +295,10 @@ export default function DashboardPage() {
                  <Button onClick={handleRefreshPrices} disabled={isRefreshing}>
                   {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                   Refresh Prices
+                </Button>
+                <Button onClick={() => router.push('/etf')}>
+                  <Briefcase className="mr-2 h-4 w-4" />
+                  ETF Plans
                 </Button>
                  <Button onClick={handleAddClick}>
                   <PlusCircle className="mr-2 h-4 w-4" />

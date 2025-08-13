@@ -1,8 +1,9 @@
 
+
 import { db } from './firebase';
 import { collection, doc, writeBatch, getDocs, query, where, Timestamp, WriteBatch } from 'firebase/firestore';
 import type { ETFPricePoint, FXRatePoint } from './types.etf';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 // Helper to commit writes in chunks to avoid 500-document limit
 async function commitInChunks<T>(
@@ -33,7 +34,7 @@ export async function cachePrices(uid: string, planId: string, monthlyBySymbol: 
     );
 
     await commitInChunks(allPoints, (batch, { symbol, point }) => {
-        const dateId = point.date; // YYYY-MM-DD
+        const dateId = format(parseISO(point.date), 'yyyy-MM');
         const pointRef = doc(db, 'users', uid, 'etfPlans', planId, 'prices', symbol, 'points', dateId);
         batch.set(pointRef, {
             ...point,
@@ -45,7 +46,7 @@ export async function cachePrices(uid: string, planId: string, monthlyBySymbol: 
 
 export async function cacheFX(uid: string, points: FXRatePoint[]) {
     await commitInChunks(points, (batch, point) => {
-        const dateId = point.date; // YYYY-MM-DD
+        const dateId = format(parseISO(point.date), 'yyyy-MM');
         const pointRef = doc(db, 'users', uid, 'fx', 'monthly', dateId);
         batch.set(pointRef, {
             ...point,
