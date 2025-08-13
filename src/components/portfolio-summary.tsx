@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
@@ -68,8 +69,8 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                         <div className="flex justify-between font-medium"><span className="">Taxable Base</span> <span className="font-mono">{formatCurrency(capital.taxableBase)}</span></div>
                         <Separator className="my-2" />
                         <div className="flex justify-between"><span className="text-muted-foreground">Base Tax ({formatPercent(TAX.abgeltungsteuer)})</span> <span className="font-mono">{formatCurrency(capital.baseTax)}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge</span> <span className="font-mono">{formatCurrency(capital.soli)}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax</span> <span className="font-mono">{formatCurrency(capital.church)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge ({formatPercent(TAX.soliRate)})</span> <span className="font-mono">{formatCurrency(capital.soli)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax ({formatPercent(taxSettings.churchTaxRate)})</span> <span className="font-mono">{formatCurrency(capital.church)}</span></div>
                         <div className="flex justify-between font-bold mt-1"><span className="">Total Capital Tax</span> <span className="font-mono">{formatCurrency(capital.total)}</span></div>
                     </div>
 
@@ -77,13 +78,13 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                      <div className="p-3 rounded-md bg-muted/50 border">
                         <h4 className="font-semibold mb-2">Crypto Private Sales (§23 EStG)</h4>
                          <div className="flex justify-between"><span className="text-muted-foreground">Short-term Gains</span> <span className="font-mono">{formatCurrency(shortTermGainsTotal)}</span></div>
-                        <div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Threshold Checked ({formatCurrency(crypto.threshold)})</span> <span className="font-mono">{crypto.taxableBase > 0 ? 'Exceeded' : `Used: ${formatCurrency(crypto.thresholdUsed)}`}</span></div>
+                        <div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Threshold Checked ({formatCurrency(crypto.threshold)})</span> <span className="font-mono">{crypto.taxableBase > 0 ? 'Exceeded' : `${formatCurrency(crypto.thresholdUsed)}`}</span></div>
                          <Separator className="my-1" />
                         <div className="flex justify-between font-medium"><span className="">Taxable Base</span> <span className="font-mono">{formatCurrency(crypto.taxableBase)}</span></div>
                         <Separator className="my-2" />
                         <div className="flex justify-between"><span className="text-muted-foreground">Income Tax ({formatPercent(taxSettings.cryptoMarginalRate)})</span> <span className="font-mono">{formatCurrency(crypto.incomeTax)}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge</span> <span className="font-mono">{formatCurrency(crypto.soli)}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax</span> <span className="font-mono">{formatCurrency(crypto.church)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge ({formatPercent(TAX.soliRate)})</span> <span className="font-mono">{formatCurrency(crypto.soli)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax ({formatPercent(taxSettings.churchTaxRate)})</span> <span className="font-mono">{formatCurrency(crypto.church)}</span></div>
                         <div className="flex justify-between font-bold mt-1"><span className="">Total Crypto Tax</span> <span className="font-mono">{formatCurrency(crypto.total)}</span></div>
                     </div>
                     
