@@ -22,7 +22,7 @@ import { ArrowLeft, RefreshCw, Play, Loader2, ArrowDownToLine } from 'lucide-rea
 
 const CHART_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
-export default function PlanDetailPage({ params }: { params: { planId: string } }) {
+export default function PlanDetailPage({ params: { planId } }: { params: { planId: string } }) {
     const { user } = useAuth();
     const { toast } = useToast();
     const [plan, setPlan] = useState<(ETFPlan & { components: ETFComponent[] }) | null>(null);
@@ -32,28 +32,33 @@ export default function PlanDetailPage({ params }: { params: { planId: string } 
     const [isRunning, setIsRunning] = useState(false);
 
     useEffect(() => {
-        if (user && params.planId) {
+        if (user && planId) {
             const fetchPlan = async () => {
                 setLoading(true);
-                const fetchedPlan = await getEtfPlan(user.uid, params.planId);
+                const fetchedPlan = await getEtfPlan(user.uid, planId);
                 setPlan(fetchedPlan);
                 setLoading(false);
             };
             fetchPlan();
         }
-    }, [user, params.planId]);
+    }, [user, planId]);
 
     const handleRefresh = async () => {
         if (!user || !plan) return;
         setIsRefreshing(true);
         toast({ title: 'Refreshing price data...', description: 'This may take a moment.' });
-        const result = await refreshEtfData(user.uid, plan.id, plan.components, plan.startDate);
-        if (result.ok) {
-            toast({ title: 'Success', description: 'Price data has been updated.' });
-        } else {
-            toast({ variant: 'destructive', title: 'Error', description: result.error });
+        try {
+            const result = await refreshEtfData(user.uid, plan.id, plan.components, plan.startDate);
+            if (result.ok) {
+                toast({ title: 'Success', description: 'Price data has been updated.' });
+            } else {
+                toast({ variant: 'destructive', title: 'Error', description: result.error });
+            }
+        } catch (e: any) {
+            toast({ variant: 'destructive', title: 'Refresh failed', description: e.message ?? 'Unknown error' });
+        } finally {
+            setIsRefreshing(false);
         }
-        setIsRefreshing(false);
     };
 
     const handleRun = async () => {
