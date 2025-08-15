@@ -55,7 +55,7 @@ export function simulatePlan(
   // running state: units per symbol
   const units: Record<string, Big> = {};
   components.forEach(c => {
-    const symbol = c.ticker ?? c.isin;
+    const symbol = c.ticker;
     units[symbol] = dec(0)
   });
 
@@ -68,7 +68,7 @@ export function simulatePlan(
 
     // --- Calculate value with previous month's units and this month's prices ---
     const initialPositions = components.map(c => {
-      const symbol = c.ticker ?? c.isin;
+      const symbol = c.ticker;
       const p = monthlyByMonth[symbol]?.[monthKey];
       if (!p) return null;
 
@@ -99,7 +99,7 @@ export function simulatePlan(
     if (plan.rebalanceOnContribution && preValue.gt(0)) {
       const currentWeights = initialPositions.map(p => ({ symbol: p.symbol, weight: div(p.valueEUR, preValue) }));
       const needs = currentWeights.map(cw => {
-        const target = dec(components.find(c => (c.ticker ?? c.isin) === cw.symbol)?.targetWeight ?? 0);
+        const target = dec(components.find(c => c.ticker === cw.symbol)?.targetWeight ?? 0);
         return { symbol: cw.symbol, need: sub(target, cw.weight) };
       });
 
@@ -118,7 +118,7 @@ export function simulatePlan(
         });
       } else { 
         components.forEach(c => {
-          const symbol = c.ticker ?? c.isin;
+          const symbol = c.ticker;
           const allocShare = dec(c.targetWeight);
           const cashForSymbol = mul(cashToInvest, allocShare);
           const priceInfo = initialPositions.find(p => p.symbol === symbol);
@@ -131,7 +131,7 @@ export function simulatePlan(
 
     } else {
       components.forEach(c => {
-        const symbol = c.ticker ?? c.isin;
+        const symbol = c.ticker;
         const cashForSymbol = mul(cashToInvest, dec(c.targetWeight));
         const priceInfo = initialPositions.find(p => p.symbol === symbol);
         if (priceInfo && priceInfo.priceEUR.gt(0)) {
@@ -144,7 +144,7 @@ export function simulatePlan(
     // --- Recompute final position values after buying ---
     let portfolioValue = dec(0);
     const finalPositionsData = components.map(c => {
-      const symbol = c.ticker ?? c.isin;
+      const symbol = c.ticker;
       const p = monthlyByMonth[symbol]?.[monthKey];
       if (!p) return null;
       

@@ -3,22 +3,6 @@ import type { ETFPricePoint } from '@/lib/types.etf';
 import { http } from '@/lib/http';
 import { format, parseISO, startOfMonth } from 'date-fns';
 
-const defaultTickerMap: Record<string, Record<string, string>> = {
-    // Mappings based on user's configuration
-    'IE00B4L5Y983': { 'XETRA': 'EUNL.DE' }, // MSCI World
-    'IE00BKM4GZ66': { 'XETRA': 'IS3N.DE' }, // Emerging Markets
-    'IE00B52MJY50': { 'XETRA': 'SXR1.DE' }, // Pacific ex-Japan
-    'IE00B4K48X80': { 'XETRA': 'EUNK.DE' }, // MSCI Europe
-};
-
-
-export function defaultTickerForISIN(isin: string, exch: 'XETRA' | 'LSE' | 'MIL' | 'AMS' = 'XETRA'): string {
-    if (!isin) return '';
-    const m = defaultTickerMap[isin]; 
-    if (!m) return '';
-    return m[exch] ?? Object.values(m)[0] ?? '';
-}
-
 export async function fetchYahooMonthly(symbol: string, sinceISO: string): Promise<ETFPricePoint[]> {
     if (!symbol) return [];
     
@@ -89,3 +73,4 @@ export async function fetchYahooLast(symbol: string): Promise<ETFPricePoint | nu
         return null;
     }
 }
+

@@ -1,3 +1,4 @@
+
 // src/lib/types.etf.ts
 import type { Timestamp } from 'firebase/firestore';
 
@@ -6,9 +7,9 @@ export type ETFPlanId = string;
 export interface ETFComponent {
   id: string;                 // auto
   name: string;               // e.g. iShares Core MSCI World
-  isin: string;               // IE00B4K48X80
-  preferredExchange?: 'XETRA'|'LSE'|'MIL'|'AMS';
-  ticker?: string;            // e.g. SWDA.L or EUNL.DE (preferred)
+  ticker: string;             // e.g. SWDA.L or EUNL.DE (user-provided from Yahoo Finance)
+  isin?: string;              // Optional, for user reference
+  preferredExchange?: 'XETRA'|'LSE'|'MIL'|'AMS'; // Optional
   currency?: 'EUR'|'USD'|'GBP'|'CHF'|string;
   targetWeight: number;       // 0..1
 }

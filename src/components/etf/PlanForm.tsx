@@ -31,7 +31,6 @@ import { CalendarIcon, PlusCircle, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import type { ETFPlan, ETFComponent } from "@/lib/types.etf";
 import React, { useEffect, useMemo } from "react";
-import { defaultTickerForISIN } from "@/lib/providers/yahoo";
 
 function PercentInput({
   value,            // 0..1 | null
@@ -103,9 +102,9 @@ const planSchema = z.object({
   components: z.array(z.object({
     id: z.string().optional(),
     name: z.string().min(2, "Name is required."),
-    isin: z.string().regex(/^[A-Z]{2}[A-Z0-9]{9}\d$/, "Invalid ISIN format."),
+    isin: z.string().optional(),
     preferredExchange: z.enum(['XETRA', 'LSE', 'MIL', 'AMS']).optional(),
-    ticker: z.string().optional(),
+    ticker: z.string().min(1, 'A Yahoo Finance ticker is required.'),
     targetWeight: z.coerce.number().min(0).max(1, "Weight must be between 0 and 1.").nullable(),
   })).min(1, "At least one component is required.")
     .refine(components => {
@@ -117,9 +116,9 @@ const planSchema = z.object({
         path: ["components"],
     })
     .refine(cs => {
-      const keys = cs.map(c => (c.ticker || c.isin).trim().toUpperCase()).filter(k => k);
+      const keys = cs.map(c => c.ticker?.trim().toUpperCase()).filter(k => k);
       return new Set(keys).size === keys.length;
-    }, { path: ['components'], message: 'Duplicate tickers/ISINs are not allowed.' })
+    }, { path: ['components'], message: 'Duplicate tickers are not allowed.' })
 });
 
 export type PlanFormValues = z.infer<typeof planSchema>;
@@ -141,7 +140,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
       feePct: 0,
       rebalanceOnContribution: false,
       components: [
-        { name: "", isin: "", preferredExchange: "XETRA", targetWeight: null },
+        { name: "", isin: "", ticker: "", preferredExchange: "XETRA", targetWeight: null },
       ],
     }
   });
@@ -153,14 +152,12 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
   
   const componentValues = form.watch('components');
   
-  const { totalWeight, hasUnresolvedTickers } = useMemo(() => {
-    const weight = componentValues.reduce((sum, c) => sum + (Number(c.targetWeight) || 0), 0);
-    const unresolved = componentValues.some(c => !(c.ticker?.trim() || defaultTickerForISIN(c.isin, c.preferredExchange)));
-    return { totalWeight: weight, hasUnresolvedTickers: unresolved };
+  const totalWeight = useMemo(() => {
+    return componentValues.reduce((sum, c) => sum + (Number(c.targetWeight) || 0), 0);
   }, [componentValues]);
 
 
-  const isSaveDisabled = isSubmitting || Math.abs(totalWeight - 1) > 0.001 || hasUnresolvedTickers;
+  const isSaveDisabled = isSubmitting || Math.abs(totalWeight - 1) > 0.001;
 
   useEffect(() => {
     if (plan) {
@@ -177,7 +174,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
             feePct: 0,
             rebalanceOnContribution: false,
             components: [
-                { name: "", isin: "", preferredExchange: "XETRA", targetWeight: null },
+                { name: "", isin: "", ticker: "", preferredExchange: "XETRA", targetWeight: null },
             ],
         });
     }
@@ -270,9 +267,9 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[25%]">Name</TableHead>
-                  <TableHead className="w-[20%]">ISIN</TableHead>
-                  <TableHead className="w-[15%]">Exchange</TableHead>
-                  <TableHead className="w-[20%]">Ticker (Override)</TableHead>
+                  <TableHead className="w-[20%]">Ticker (from Yahoo Finance)</TableHead>
+                  <TableHead className="w-[20%]">ISIN (Optional)</TableHead>
+                  <TableHead className="w-[15%]">Exchange (Optional)</TableHead>
                   <TableHead className="text-right w-[120px]">Weight (%)</TableHead>
                   <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
@@ -282,21 +279,30 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                   return (
                   <TableRow key={field.id} className="align-top">
                     <TableCell>
-                      <Controller
+                      <FormField
                         control={form.control}
                         name={`components.${index}.name`}
                         render={({ field }) => <Input {...field} placeholder="MSCI World" />}
                       />
+                       <FormMessage className="text-xs mt-1">{form.formState.errors.components?.[index]?.name?.message}</FormMessage>
+                    </TableCell>
+                     <TableCell>
+                      <FormField
+                        control={form.control}
+                        name={`components.${index}.ticker`}
+                        render={({ field }) => <Input {...field} placeholder="IWDA.AS" />}
+                      />
+                       <FormMessage className="text-xs mt-1">{form.formState.errors.components?.[index]?.ticker?.message}</FormMessage>
                     </TableCell>
                     <TableCell>
-                       <Controller
+                       <FormField
                         control={form.control}
                         name={`components.${index}.isin`}
                         render={({ field }) => <Input {...field} placeholder="IE00B4L5Y983"/>}
                       />
                     </TableCell>
                      <TableCell>
-                      <Controller
+                      <FormField
                           control={form.control}
                           name={`components.${index}.preferredExchange`}
                           render={({ field }) => (
@@ -313,43 +319,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                         />
                     </TableCell>
                     <TableCell className="align-top">
-                      <div className="flex flex-col gap-1">
-                        <Controller
-                          control={form.control}
-                          name={`components.${index}.ticker`}
-                          render={({ field }) => (
-                            <Input {...field} placeholder="Optional override (e.g. EUNL.DE or SWDA.L)" />
-                          )}
-                        />
-                        {(() => {
-                          const exch = form.watch(`components.${index}.preferredExchange`);
-                          const isin = form.watch(`components.${index}.isin`);
-                          const override = form.watch(`components.${index}.ticker`)?.trim();
-                          const resolved = override || defaultTickerForISIN(isin, exch);
-                          const unresolved = !resolved;
-
-                          return (
-                            <div className="min-h-[20px] text-xs">
-                              {unresolved ? (
-                                <span className="text-destructive">
-                                  No known ticker for this ISIN + exchange. Enter an override.
-                                </span>
-                              ) : (
-                                <span className="text-muted-foreground">
-                                  Using:&nbsp;
-                                  <span className="inline-flex items-center rounded border px-2 py-0.5">
-                                    {override ? "Override: " : ""}
-                                    {resolved}
-                                  </span>
-                                </span>
-                              )}
-                            </div>
-                          );
-                        })()}
-                      </div>
-                    </TableCell>
-                    <TableCell className="align-top">
-                      <Controller
+                      <FormField
                         control={form.control}
                         name={`components.${index}.targetWeight`}
                         render={({ field }) => (
@@ -361,6 +331,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                           />
                         )}
                       />
+                       <FormMessage className="text-xs mt-1">{form.formState.errors.components?.[index]?.targetWeight?.message}</FormMessage>
                     </TableCell>
                     <TableCell>
                       <Button variant="ghost" size="icon" onClick={() => remove(index)} disabled={fields.length <= 1}>
@@ -377,7 +348,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => append({ name: "", isin: "", targetWeight: null, preferredExchange: "XETRA" })}
+                    onClick={() => append({ name: "", isin: "", ticker: "", targetWeight: null, preferredExchange: "XETRA" })}
                 >
                     <PlusCircle className="mr-2 h-4 w-4" /> Add Component
                 </Button>

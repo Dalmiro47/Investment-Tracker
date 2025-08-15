@@ -89,7 +89,7 @@ export default function PlanDetailPage({ params }: { params: { planId: string } 
                 'Portfolio Value': toNum(row.portfolioValue),
             };
             plan?.components.forEach(comp => {
-                const pos = row.positions.find(p => p.symbol === (comp.ticker || comp.isin));
+                const pos = row.positions.find(p => p.symbol === comp.ticker);
                 chartRow[comp.name] = toNum(pos?.valueEUR ?? 0);
             });
             return chartRow;
@@ -193,11 +193,11 @@ export default function PlanDetailPage({ params }: { params: { planId: string } 
                                         <TableCell className="text-right font-mono">{formatCurrency(row.contribution)}</TableCell>
                                         <TableCell className="text-right font-mono font-bold">{formatCurrency(row.portfolioValue)}</TableCell>
                                         {plan.components.map(comp => {
-                                            const pos = row.positions.find(p => p.symbol === (comp.ticker || comp.isin));
+                                            const pos = row.positions.find(p => p.symbol === comp.ticker);
                                             return <TableCell key={comp.id} className="text-right font-mono">{formatCurrency(pos?.valueEUR ?? 0)}</TableCell>
                                         })}
                                          {plan.components.map(comp => {
-                                            const pos = row.positions.find(p => p.symbol === (comp.ticker || comp.isin));
+                                            const pos = row.positions.find(p => p.symbol === comp.ticker);
                                             const drift = pos?.driftPct ?? 0;
                                             return <TableCell key={comp.id} className={`text-right font-mono ${drift > 0.01 ? 'text-green-500' : drift < -0.01 ? 'text-destructive' : ''}`}>{formatPercent(drift)}</TableCell>
                                         })}
