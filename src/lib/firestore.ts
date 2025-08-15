@@ -95,11 +95,9 @@ export async function getAllTransactionsForInvestments(
 }
 
 export async function getSellYears(userId: string): Promise<number[]> {
-  const q = query(collectionGroup(db, 'transactions'), where('type', '==', 'Sell'));
-  // Note: This queries across all investments for the user if rules allow.
-  // Assuming a structure where transactions are under a user's collection, this needs security rules.
-  // For now, we'll implement it by fetching all transactions and filtering client-side as it's simpler
-  // without modifying security rules.
+  // NOTE: A collectionGroup query requires a specific rule and index.
+  // To avoid this complexity, we fetch all investments for the user
+  // and then derive the sell years from their transactions.
   const allInvestments = await getInvestments(userId);
   const txMap = await getAllTransactionsForInvestments(userId, allInvestments);
 
