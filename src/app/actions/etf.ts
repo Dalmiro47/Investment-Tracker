@@ -1,30 +1,31 @@
-
 'use server'
-import { getPricePoints, getFXRates } from '@/lib/firestore.etf';
+import { getPricePointsServer, getFXRatesServer } from '@/lib/firestore.etf.server';
 import { simulatePlan } from '@/lib/etf/engine';
-import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
-import { endOfMonth, format, startOfMonth, parseISO } from 'date-fns';
+import { endOfMonth, startOfMonth, format, parseISO } from 'date-fns';
 import { refreshEtfPlanPrices } from './prices';
-
+import type { ETFComponent, ETFPlan } from '@/lib/types.etf';
 
 export async function refreshEtfData(uid: string, planId: string, components: ETFComponent[], sinceISO: string) {
   const since = format(startOfMonth(parseISO(sinceISO)), 'yyyy-MM-dd');
   return refreshEtfPlanPrices(uid, planId, components, since);
 }
 
-
 export async function runPlan(uid: string, plan: ETFPlan, components: ETFComponent[]) {
-  const start = format(startOfMonth(parseISO(plan.startDate)), 'yyyy-MM-dd');
-  const end = format(endOfMonth(new Date()), 'yyyy-MM-dd');
+  try {
+    const start = format(startOfMonth(parseISO(plan.startDate)), 'yyyy-MM-dd');
+    const end   = format(endOfMonth(new Date()), 'yyyy-MM-dd');
 
-  // fetch all time-series for each component
-  const perSymbol: Record<string, any> = {};
-  await Promise.all(components.map(async c => {
-    const symbol = c.ticker ?? c.isin;
-    perSymbol[symbol] = await getPricePoints(uid, plan.id, symbol, start, end);
-  }));
-
-  const fx = await getFXRates(uid, start, end);
-
-  return simulatePlan(plan, components, perSymbol, fx);
+    const perSymbol: Record<string, any> = {};
+    await Promise.all(components.map(async c => {
+      const symbol = c.ticker ?? c.isin;
+      if (symbol) {
+        perSymbol[symbol] = await getPricePointsServer(uid, plan.id, symbol, start, end);
+      }
+    }));
+    const fx = await getFXRatesServer(uid, start, end);
+    return simulatePlan(plan, components, perSymbol, fx);
+  } catch (e:any) {
+    // surface errors to the UI
+    throw new Error(`runPlan failed: ${e.message ?? e}`);
+  }
 }

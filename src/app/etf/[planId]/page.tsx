@@ -60,10 +60,15 @@ export default function PlanDetailPage({ params }: { params: { planId: string } 
         if (!user || !plan) return;
         setIsRunning(true);
         toast({ title: 'Running simulation...' });
-        const result = await runPlan(user.uid, plan, plan.components);
-        setSimData(result);
-        setIsRunning(false);
-        toast({ title: 'Simulation complete.' });
+        try {
+            const result = await runPlan(user.uid, plan, plan.components);
+            setSimData(result);
+            toast({ title: 'Simulation complete.' });
+        } catch (e: any) {
+            toast({ variant: 'destructive', title: 'Simulation failed', description: e.message ?? 'Unknown error' });
+        } finally {
+            setIsRunning(false);
+        }
     };
     
     const kpis = useMemo(() => {
