@@ -66,7 +66,17 @@ export default function PlanDetailPage({ params: { planId } }: { params: { planI
         setIsRunning(true);
         toast({ title: 'Running simulation...' });
         try {
-            const result = await runPlan(user.uid, plan, plan.components);
+             // Create a plain object for the server action, excluding complex types like Timestamps
+            const plainPlan: ETFPlan = {
+                id: plan.id,
+                title: plan.title,
+                baseCurrency: plan.baseCurrency,
+                monthContribution: plan.monthContribution,
+                startDate: plan.startDate,
+                feePct: plan.feePct,
+                rebalanceOnContribution: plan.rebalanceOnContribution,
+            };
+            const result = await runPlan(user.uid, plainPlan, plan.components);
             setSimData(result);
             toast({ title: 'Simulation complete.' });
         } catch (e: any) {
