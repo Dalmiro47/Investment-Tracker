@@ -8,7 +8,7 @@ const defaultTickerMap: Record<string, Record<string, string>> = {
     'IE00B4L5Y983': { 'LSE': 'SWDA.L', 'XETRA': 'EUNL.DE' }, // iShares Core MSCI World UCITS ETF USD (Acc)
     'IE00BKM4GZ66': { 'LSE': 'EIMI.L', 'XETRA': 'IS3N.DE' }, // iShares Core MSCI Emerging Markets IMI UCITS ETF (Acc)
     'IE00B52MJY50': { 'LSE': 'CPXJ.L', 'XETRA': 'SXR1.DE' }, // iShares Core MSCI Pacific ex Japan UCITS ETF (Acc)
-    'IE00B4K48X80': { 'LSE': 'IMEU.L', 'XETRA': 'SXR1.DE' }, // iShares Core MSCI Europe UCITS ETF EUR (Acc) -> Using SXR1.DE as a more reliable ticker than EUNK.DE
+    'IE00B4K48X80': { 'LSE': 'IMEU.L', 'XETRA': 'IUSE.DE' }, // iShares Core MSCI Europe UCITS ETF EUR (Acc) -> Using IUSE.DE as more reliable than EUNK.DE
 };
 
 
