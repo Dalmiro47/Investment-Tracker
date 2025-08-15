@@ -169,6 +169,17 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
         startDate: parseISO(plan.startDate),
         components: plan.components.map(c => ({...c, targetWeight: c.targetWeight ?? null}))
       });
+    } else {
+        form.reset({
+            title: "",
+            startDate: new Date(),
+            monthContribution: 100,
+            feePct: 0,
+            rebalanceOnContribution: false,
+            components: [
+                { name: "", isin: "", preferredExchange: "XETRA", targetWeight: null },
+            ],
+        });
     }
   }, [plan, form]);
 
