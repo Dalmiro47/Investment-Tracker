@@ -1,10 +1,53 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow users to read and write only their own investments.
-    // The `userId` in the path must match the UID of the authenticated user.
-    match /users/{userId}/investments/{investmentId} {
-      allow read, write: if request.auth != null && request.auth.uid == userId;
+
+    // Helper function to check if the user is the owner of the document
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // Match any document in the 'users' collection
+    match /users/{uid} {
+      // A user can only read and write their own document
+      allow read, write: if isOwner(uid);
+
+      // Match the 'investments' subcollection
+      match /investments/{invId} {
+        allow read, write: if isOwner(uid);
+
+        // Match the 'transactions' sub-subcollection
+        match /transactions/{txId} {
+          allow read, write: if isOwner(uid);
+        }
+      }
+
+      // Match the 'etfPlans' subcollection
+      match /etfPlans/{planId} {
+        allow read, write: if isOwner(uid);
+
+        // Match the 'components' sub-subcollection
+        match /components/{compId} {
+           allow read, write: if isOwner(uid);
+        }
+
+        // Match the 'prices' sub-subcollection and its nested structure
+        // This uses a recursive wildcard to match any documents within the 'prices' subcollection
+        match /prices/{symbol=**} {
+            allow read, write: if isOwner(uid);
+        }
+      }
+
+      // Match the 'fx' subcollection and its nested structure
+      match /fx/{fxCollection}/{docId=**} {
+          allow read, write: if isOwner(uid);
+      }
+      
+      // Match the 'settings' subcollection
+      match /settings/{settingId} {
+        allow read, write: if isOwner(uid);
+      }
     }
   }
 }
