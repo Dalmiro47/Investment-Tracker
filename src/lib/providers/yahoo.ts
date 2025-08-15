@@ -21,8 +21,13 @@ export function defaultTickerForISIN(isin: string, exch: 'XETRA' | 'LSE' | 'MIL'
 
 export async function fetchYahooMonthly(symbol: string, sinceISO: string): Promise<ETFPricePoint[]> {
     if (!symbol) return [];
+    
+    // Convert ISO start date to a UNIX timestamp for the API
+    const period1 = Math.floor(startOfMonth(parseISO(sinceISO)).getTime() / 1000);
+    // Use current date as the end timestamp
+    const period2 = Math.floor(new Date().getTime() / 1000);
 
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?interval=1mo&range=10y`;
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${symbol}?period1=${period1}&period2=${period2}&interval=1mo`;
 
     try {
         const response = await http.get(url);
