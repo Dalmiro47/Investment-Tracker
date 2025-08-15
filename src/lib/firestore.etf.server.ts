@@ -30,14 +30,14 @@ export async function cacheFXServer(uid: string, points: FXRatePoint[]) {
   await commitInChunks(points, (batch, p) => {
     const monthEnd = endOfMonth(parseISO(p.date));
     const monthId = monthEnd.toISOString().slice(0, 7);
-    const ref = adminDb.doc(`users/${uid}/fx/monthly/${monthId}`);
+    const ref = adminDb.doc(`users/${uid}/fxRates/${monthId}`);
     batch.set(ref, { ...p, date: Timestamp.fromDate(monthEnd) });
   });
 }
 
 export async function getFXRatesServer(uid: string, startISO: string, endISO: string) {
   const snap = await adminDb
-    .collection(`users/${uid}/fx/monthly`)
+    .collection(`users/${uid}/fxRates`)
     .where('date', '>=', Timestamp.fromDate(new Date(startISO)))
     .where('date', '<=', Timestamp.fromDate(new Date(endISO)))
     .get();
