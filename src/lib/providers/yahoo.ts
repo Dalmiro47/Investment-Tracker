@@ -4,19 +4,19 @@ import { http } from '@/lib/http';
 import { format, parseISO, startOfMonth } from 'date-fns';
 
 const defaultTickerMap: Record<string, Record<string, string>> = {
-    // User-corrected mappings
-    'IE00B4L5Y983': { 'LSE': 'SWDA.L', 'XETRA': 'EUNL.DE' }, // iShares Core MSCI World UCITS ETF USD (Acc)
-    'IE00BKM4GZ66': { 'LSE': 'EIMI.L', 'XETRA': 'IS3N.DE' }, // iShares Core MSCI Emerging Markets IMI UCITS ETF (Acc)
-    'IE00B52MJY50': { 'LSE': 'CPXJ.L', 'XETRA': 'SXR1.DE' }, // iShares Core MSCI Pacific ex Japan UCITS ETF (Acc)
-    'IE00B4K48X80': { 'LSE': 'IMEU.L', 'XETRA': 'IUSE.DE' }, // iShares Core MSCI Europe UCITS ETF EUR (Acc) -> Using IUSE.DE as more reliable than EUNK.DE
+    // Mappings based on user's configuration
+    'IE00B4L5Y983': { 'XETRA': 'EUNL.DE' }, // MSCI World
+    'IE00BKM4GZ66': { 'XETRA': 'IS3N.DE' }, // Emerging Markets
+    'IE00B52MJY50': { 'XETRA': 'SXR1.DE' }, // Pacific ex-Japan
+    'IE00B4K48X80': { 'XETRA': 'EUNK.DE' }, // MSCI Europe
 };
 
 
-export function defaultTickerForISIN(isin: string, exch: 'XETRA' | 'LSE' | 'MIL' | 'AMS' = 'LSE'): string {
+export function defaultTickerForISIN(isin: string, exch: 'XETRA' | 'LSE' | 'MIL' | 'AMS' = 'XETRA'): string {
     if (!isin) return '';
     const m = defaultTickerMap[isin]; 
     if (!m) return '';
-    return m[exch] ?? m.XETRA ?? m.LSE ?? '';
+    return m[exch] ?? Object.values(m)[0] ?? '';
 }
 
 export async function fetchYahooMonthly(symbol: string, sinceISO: string): Promise<ETFPricePoint[]> {
@@ -89,5 +89,3 @@ export async function fetchYahooLast(symbol: string): Promise<ETFPricePoint | nu
         return null;
     }
 }
-
-    
