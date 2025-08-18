@@ -83,7 +83,7 @@ export default function PlanDetailPage() {
         setIsRunning(true);
         toast({ title: 'Running simulation...' });
         try {
-            const plainPlan: Omit<ETFPlan, 'createdAt' | 'updatedAt'> = {
+            const plainPlan = {
                 id: plan.id,
                 title: plan.title,
                 baseCurrency: plan.baseCurrency,
@@ -91,6 +91,7 @@ export default function PlanDetailPage() {
                 startDate: plan.startDate,
                 feePct: plan.feePct,
                 rebalanceOnContribution: plan.rebalanceOnContribution,
+                contributionSteps: plan.contributionSteps ?? [],
             };
             const res = await fetch('/api/simulate', {
                 method: 'POST',
@@ -109,9 +110,11 @@ export default function PlanDetailPage() {
     };
 
     const effectiveRows = useMemo(() => {
+        if (!simData || simData.length === 0) return [];
         let end = simData.length - 1;
         while (end >= 0 && (simData[end]?.portfolioValue ?? 0) === 0) end--;
         const baseRows = simData.slice(0, end + 1);
+
         if (yearFilter === 'all') {
             return baseRows;
         }
@@ -121,8 +124,9 @@ export default function PlanDetailPage() {
     const kpis = useMemo(() => {
         if (effectiveRows.length === 0) return null;
         
-        const firstRowIndex = simData.findIndex(row => row.date === effectiveRows[0].date);
-        const valueBeforePeriod = simData[firstRowIndex - 1]?.portfolioValue ?? 0;
+        const firstRowInPeriod = effectiveRows[0];
+        const allSimDataBeforePeriod = simData.filter(row => row.date < firstRowInPeriod.date);
+        const valueBeforePeriod = allSimDataBeforePeriod[allSimDataBeforePeriod.length - 1]?.portfolioValue ?? 0;
         
         const lastRow = effectiveRows[effectiveRows.length - 1];
         const totalContributions = effectiveRows.reduce((sum, row) => sum + row.contribution, 0);
