@@ -6,7 +6,6 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { getEtfPlan } from '@/lib/firestore.etfPlan';
-import { refreshEtfData } from '@/app/actions/etf';
 import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import type { PlanRow } from '@/lib/etf/engine';
 import { format, parseISO } from 'date-fns';
@@ -50,7 +49,17 @@ export default function PlanDetailPage({ params: { planId } }: { params: { planI
         setIsRefreshing(true);
         toast({ title: 'Refreshing price data...', description: 'This may take a moment.' });
         try {
-            const result = await refreshEtfData(user.uid, plan.id, plan.components, plan.startDate);
+            const res = await fetch('/api/refresh-prices', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    uid: user.uid, 
+                    planId: plan.id, 
+                    components: plan.components,
+                    startDate: plan.startDate 
+                }),
+            });
+            const result = await res.json();
             if (result.ok) {
                 toast({ title: 'Success', description: 'Price data has been updated.' });
             } else {
@@ -68,7 +77,6 @@ export default function PlanDetailPage({ params: { planId } }: { params: { planI
         setIsRunning(true);
         toast({ title: 'Running simulation...' });
         try {
-             // Create a plain object for the server action, excluding complex types like Timestamps
             const plainPlan: ETFPlan = {
                 id: plan.id,
                 title: plan.title,
@@ -237,5 +245,3 @@ export default function PlanDetailPage({ params: { planId } }: { params: { planI
     )
 
 }
-
-    

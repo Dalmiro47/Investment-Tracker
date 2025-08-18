@@ -11,5 +11,3 @@ export async function refreshEtfData(uid: string, planId: string, components: ET
   const since = format(startOfMonth(parseISO(sinceISO)), 'yyyy-MM-dd');
   return refreshEtfPlanPrices(uid, planId, components, since);
 }
-
-    
