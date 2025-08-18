@@ -9,7 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { getEtfPlan } from '@/lib/firestore.etfPlan';
 import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import type { PlanRow } from '@/lib/etf/engine';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, getYear } from 'date-fns';
 import { formatCurrency, formatPercent } from '@/lib/money';
 
 import DashboardHeader from '@/components/dashboard-header';
@@ -18,7 +18,9 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Legend } from 'recharts';
-import { ArrowLeft, RefreshCw, Play, Loader2, ArrowDownToLine } from 'lucide-react';
+import { ArrowLeft, RefreshCw, Play, Loader2, ArrowDownToLine, Info } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export const runtime = 'nodejs';
 
@@ -34,6 +36,7 @@ export default function PlanDetailPage() {
     const [loading, setLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
+    const [yearFilter, setYearFilter] = useState<string>('all');
 
     useEffect(() => {
         if (user && planId) {
@@ -108,19 +111,30 @@ export default function PlanDetailPage() {
     const effectiveRows = useMemo(() => {
         let end = simData.length - 1;
         while (end >= 0 && (simData[end]?.portfolioValue ?? 0) === 0) end--;
-        return simData.slice(0, end + 1);
-    }, [simData]);
+        const baseRows = simData.slice(0, end + 1);
+        if (yearFilter === 'all') {
+            return baseRows;
+        }
+        return baseRows.filter(row => getYear(parseISO(row.date)) === parseInt(yearFilter));
+    }, [simData, yearFilter]);
     
     const kpis = useMemo(() => {
         if (effectiveRows.length === 0) return null;
+        
+        const firstRowIndex = simData.findIndex(row => row.date === effectiveRows[0].date);
+        const valueBeforePeriod = simData[firstRowIndex - 1]?.portfolioValue ?? 0;
+        
         const lastRow = effectiveRows[effectiveRows.length - 1];
         const totalContributions = effectiveRows.reduce((sum, row) => sum + row.contribution, 0);
         const totalFees = effectiveRows.reduce((sum, row) => sum + row.fees, 0);
         const currentValue = lastRow.portfolioValue;
-        const gainLoss = currentValue - totalContributions;
-        const performance = totalContributions > 0 ? gainLoss / totalContributions : 0;
+
+        const gainLoss = currentValue - valueBeforePeriod - totalContributions;
+        const basis = valueBeforePeriod + totalContributions;
+        const performance = basis > 0 ? gainLoss / basis : 0;
+        
         return { totalContributions, totalFees, currentValue, gainLoss, performance };
-    }, [effectiveRows]);
+    }, [effectiveRows, simData]);
 
     const chartData = useMemo(() => {
         return effectiveRows.map(row => {
@@ -135,6 +149,13 @@ export default function PlanDetailPage() {
             return chartRow;
         });
     }, [effectiveRows, plan]);
+
+     const availableYears = useMemo(() => {
+        if (simData.length === 0) return [];
+        const years = new Set<number>();
+        simData.forEach(row => years.add(getYear(parseISO(row.date))));
+        return Array.from(years).sort((a, b) => b - a);
+    }, [simData]);
     
     if (loading) {
         return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div>
@@ -176,15 +197,15 @@ export default function PlanDetailPage() {
 
                 {kpis && (
                     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-6">
-                        <Card><CardHeader><CardTitle>{formatCurrency(kpis.totalContributions)}</CardTitle><CardDescription>Total Contributions</CardDescription></CardHeader></Card>
-                        <Card><CardHeader><CardTitle>{formatCurrency(kpis.totalFees)}</CardTitle><CardDescription>Total Fees Paid</CardDescription></CardHeader></Card>
-                        <Card><CardHeader><CardTitle>{formatCurrency(kpis.currentValue)}</CardTitle><CardDescription>Current Portfolio Value</CardDescription></CardHeader></Card>
-                        <Card><CardHeader><CardTitle className={kpis.gainLoss >= 0 ? "text-green-500" : "text-destructive"}>{formatCurrency(kpis.gainLoss)}</CardTitle><CardDescription>Total Gain / Loss</CardDescription></CardHeader></Card>
-                        <Card><CardHeader><CardTitle className={kpis.performance >= 0 ? "text-green-500" : "text-destructive"}>{formatPercent(kpis.performance)}</CardTitle><CardDescription>Overall Performance</CardDescription></CardHeader></Card>
+                        <Card><CardHeader><CardTitle>{formatCurrency(kpis.totalContributions)}</CardTitle><CardDescription>Total Contributions ({yearFilter === 'all' ? 'All Time' : yearFilter})</CardDescription></CardHeader></Card>
+                        <Card><CardHeader><CardTitle>{formatCurrency(kpis.totalFees)}</CardTitle><CardDescription>Total Fees Paid ({yearFilter === 'all' ? 'All Time' : yearFilter})</CardDescription></CardHeader></Card>
+                        <Card><CardHeader><CardTitle>{formatCurrency(kpis.currentValue)}</CardTitle><CardDescription>End of Period Value</CardDescription></CardHeader></Card>
+                        <Card><CardHeader><CardTitle className={kpis.gainLoss >= 0 ? "text-green-500" : "text-destructive"}>{formatCurrency(kpis.gainLoss)}</CardTitle><CardDescription>Gain / Loss ({yearFilter === 'all' ? 'All Time' : yearFilter})</CardDescription></CardHeader></Card>
+                        <Card><CardHeader><CardTitle className={kpis.performance >= 0 ? "text-green-500" : "text-destructive"}>{formatPercent(kpis.performance)}</CardTitle><CardDescription>Performance ({yearFilter === 'all' ? 'All Time' : yearFilter})</CardDescription></CardHeader></Card>
                     </div>
                 )}
                 
-                {simData.length > 0 && (
+                {effectiveRows.length > 0 && (
                 <Card className="mb-6">
                     <CardHeader>
                         <CardTitle>Portfolio Value Over Time</CardTitle>
@@ -206,14 +227,46 @@ export default function PlanDetailPage() {
                 </Card>
                 )}
 
-                {simData.length > 0 && (
+                {effectiveRows.length > 0 && (
                 <Card>
                     <CardHeader className="flex flex-row justify-between items-center">
-                        <div>
-                            <CardTitle>Monthly Simulation Details</CardTitle>
-                            <CardDescription>Breakdown of portfolio evolution month by month.</CardDescription>
+                        <div className="flex items-center gap-2">
+                            <div>
+                                <CardTitle>Monthly Simulation Details</CardTitle>
+                                <CardDescription>Breakdown of portfolio evolution month by month.</CardDescription>
+                            </div>
+                             <Dialog>
+                                <DialogTrigger asChild>
+                                    <Button variant="ghost" size="icon"><Info className="h-4 w-4"/></Button>
+                                </DialogTrigger>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Simulation Column Explanations</DialogTitle>
+                                    </DialogHeader>
+                                    <div className="text-sm space-y-3 py-4">
+                                        <div><h4 className="font-semibold">Date</h4><p className="text-muted-foreground">The end of each month in the simulation period.</p></div>
+                                        <div><h4 className="font-semibold">Contribution</h4><p className="text-muted-foreground">The fixed amount invested that month before any fees.</p></div>
+                                        <div><h4 className="font-semibold">Value</h4><p className="text-muted-foreground">The total market value of your entire portfolio at the end of the month.</p></div>
+                                        <div><h4 className="font-semibold">[ETF] Value</h4><p className="text-muted-foreground">The portion of your total portfolio value held in that specific ETF.</p></div>
+                                        <div><h4 className="font-semibold">[ETF] Drift</h4><p className="text-muted-foreground">How far the ETF's actual weight is from its target weight. A positive (green) drift means it's overweight; a negative (red) drift means it's underweight.</p></div>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
                         </div>
-                        <Button variant="outline" size="sm" disabled><ArrowDownToLine className="mr-2 h-4 w-4"/>Export CSV</Button>
+                        <div className="flex items-center gap-4">
+                            <Select value={yearFilter} onValueChange={setYearFilter}>
+                                <SelectTrigger className="w-[180px]">
+                                    <SelectValue placeholder="Filter by year" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">All Years</SelectItem>
+                                    {availableYears.map(year => (
+                                        <SelectItem key={year} value={String(year)}>{year}</SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                            <Button variant="outline" size="sm" disabled><ArrowDownToLine className="mr-2 h-4 w-4"/>Export CSV</Button>
+                        </div>
                     </CardHeader>
                     <CardContent>
                         <Table>
@@ -227,7 +280,7 @@ export default function PlanDetailPage() {
                                 </TableRow>
                             </TableHeader>
                              <TableBody>
-                                {simData.map(row => (
+                                {effectiveRows.map(row => (
                                     <TableRow key={row.date}>
                                         <TableCell>{format(parseISO(row.date), 'MMM yyyy')}</TableCell>
                                         <TableCell className="text-right font-mono">{formatCurrency(row.contribution)}</TableCell>
