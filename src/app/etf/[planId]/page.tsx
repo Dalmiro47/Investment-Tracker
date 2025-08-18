@@ -10,7 +10,7 @@ import { getEtfPlan } from '@/lib/firestore.etfPlan';
 import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import type { PlanRow } from '@/lib/etf/engine';
 import { format, parseISO } from 'date-fns';
-import { formatCurrency, formatPercent, toNum } from '@/lib/money';
+import { formatCurrency, formatPercent } from '@/lib/money';
 
 import DashboardHeader from '@/components/dashboard-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -80,7 +80,7 @@ export default function PlanDetailPage() {
         setIsRunning(true);
         toast({ title: 'Running simulation...' });
         try {
-            const plainPlan: ETFPlan = {
+            const plainPlan: Omit<ETFPlan, 'createdAt' | 'updatedAt'> = {
                 id: plan.id,
                 title: plan.title,
                 baseCurrency: plan.baseCurrency,
@@ -104,31 +104,37 @@ export default function PlanDetailPage() {
             setIsRunning(false);
         }
     };
+
+    const effectiveRows = useMemo(() => {
+        let end = simData.length - 1;
+        while (end >= 0 && (simData[end]?.portfolioValue ?? 0) === 0) end--;
+        return simData.slice(0, end + 1);
+    }, [simData]);
     
     const kpis = useMemo(() => {
-        if (simData.length === 0) return null;
-        const lastRow = simData[simData.length - 1];
-        const totalContributions = simData.reduce((sum, row) => sum + row.contribution, 0);
-        const totalFees = simData.reduce((sum, row) => sum + row.fees, 0);
+        if (effectiveRows.length === 0) return null;
+        const lastRow = effectiveRows[effectiveRows.length - 1];
+        const totalContributions = effectiveRows.reduce((sum, row) => sum + row.contribution, 0);
+        const totalFees = effectiveRows.reduce((sum, row) => sum + row.fees, 0);
         const currentValue = lastRow.portfolioValue;
         const gainLoss = currentValue - totalContributions;
         const performance = totalContributions > 0 ? gainLoss / totalContributions : 0;
         return { totalContributions, totalFees, currentValue, gainLoss, performance };
-    }, [simData]);
+    }, [effectiveRows]);
 
     const chartData = useMemo(() => {
-        return simData.map(row => {
+        return effectiveRows.map(row => {
             const chartRow: any = {
                 date: format(parseISO(row.date), 'MMM yy'),
-                'Portfolio Value': toNum(row.portfolioValue),
+                'Portfolio Value': row.portfolioValue,
             };
             plan?.components.forEach(comp => {
                 const pos = row.positions.find(p => p.symbol === comp.ticker);
-                chartRow[comp.name] = toNum(pos?.valueEUR ?? 0);
+                chartRow[comp.name] = pos?.valueEUR ?? 0;
             });
             return chartRow;
         });
-    }, [simData, plan]);
+    }, [effectiveRows, plan]);
     
     if (loading) {
         return <div className="flex h-screen w-full items-center justify-center"><Loader2 className="h-8 w-8 animate-spin"/></div>
