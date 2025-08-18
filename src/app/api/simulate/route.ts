@@ -10,6 +10,31 @@ export const runtime = 'nodejs'; // ensure Admin SDK works
 const monthKeys = (pts: Record<string, any>) =>
   Object.keys(pts).filter(k => /^\d{4}-\d{2}$/.test(k)).sort();
 
+const monthsBetween = (start: string, end: string) => {
+  const out: string[] = [];
+  const [sy, sm] = start.split('-').map(Number);
+  const [ey, em] = end.split('-').map(Number);
+  let y = sy, m = sm;
+  while (y < ey || (y === ey && m <= em)) {
+    out.push(`${y}-${String(m).padStart(2,'0')}`);
+    m++; if (m === 13) { m = 1; y++; }
+  }
+  return out;
+};
+
+const backfillLeft = (pts: Record<string, any>, months: string[]) => {
+  const available = Object.keys(pts).sort();
+  if (available.length === 0) return pts;
+  const first = available[0];
+  for (const m of months) {
+    if (m < first && !pts[m]) {
+      // clone first available price as constant
+      const p = pts[first];
+      pts[m] = { ...p, month: m, date: `${m}-01` };
+    }
+  }
+  return pts;
+};
 
 export async function POST(req: Request) {
   try {
@@ -20,7 +45,8 @@ export async function POST(req: Request) {
     }
 
     const startISO = format(startOfMonth(parseISO(plan.startDate)), 'yyyy-MM-dd');
-    let endISO   = format(endOfMonth(new Date()), 'yyyy-MM-dd');
+    let endISO = format(endOfMonth(new Date()), 'yyyy-MM-dd');
+    const startMonth = startISO.slice(0, 7);
 
     const perSymbol: Record<string, Record<string, any>> = {};
     const currencies = new Set<string>();
@@ -41,16 +67,25 @@ export async function POST(req: Request) {
     const lastMonths = monthsPerSymbol.map(ms => ms[ms.length - 1]); // each symbol’s last available month
     const lastCommonMonth = lastMonths.sort()[0]; // earliest among those (intersection cap)
 
-    // Trim any months beyond lastCommonMonth to avoid a trailing zero row
-    for (const sym in perSymbol) {
+    endISO = format(endOfMonth(parseISO(`${lastCommonMonth}-01`)), 'yyyy-MM-dd');
+
+    // backfill left
+    const allMonthsInRange = monthsBetween(startMonth, lastCommonMonth);
+    for (const sym of Object.keys(perSymbol)) {
+      perSymbol[sym] = backfillLeft(perSymbol[sym], allMonthsInRange);
+      // Also ensure we have entries for *all* months in range (carry forward)
+      for (const m of allMonthsInRange) {
+        if (!perSymbol[sym][m]) {
+          // find the latest month < m
+          const prev = [...Object.keys(perSymbol[sym])].filter(x => x <= m).sort().pop();
+          if (prev) perSymbol[sym][m] = { ...perSymbol[sym][prev], month: m, date: `${m}-01` };
+        }
+      }
+      // Trim any months beyond lastCommonMonth to avoid a trailing zero row
       for (const m of Object.keys(perSymbol[sym])) {
         if (m > lastCommonMonth) delete perSymbol[sym][m];
       }
     }
-    
-    // Cap end of sim to lastCommonMonth’s end
-    endISO = format(endOfMonth(parseISO(`${lastCommonMonth}-01`)), 'yyyy-MM-dd');
-
 
     const needsFx = currencies.size > 1 || (currencies.size === 1 && !currencies.has('EUR'));
     const fx = needsFx ? await getFXRatesServer(uid, startISO, endISO) : {};
@@ -66,5 +101,3 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: false, error: String(e?.message ?? 'An unknown error occurred during simulation.') }, { status: 500 });
   }
 }
-
-    

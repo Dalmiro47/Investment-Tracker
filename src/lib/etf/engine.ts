@@ -24,13 +24,18 @@ export interface PlanRow {
 
 type PriceMap = Record<string, Record<string, ETFPricePoint>>; // symbol -> date -> point
 type FXMap = Record<string, FXRatePoint>;                       // date -> point (EUR base)
+type EngineOptions = { allocationMode?: 'fixed' | 'rebalance' };
+
 
 export function simulatePlan(
   plan: ETFPlan,
   components: ETFComponent[],
   monthly: PriceMap,
-  fx: FXMap
+  fx: FXMap,
+  options: EngineOptions = {}
 ): PlanRow[] {
+  const allocationMode = options.allocationMode ?? (plan.rebalanceOnContribution ? 'rebalance' : 'fixed');
+  
   const toMonthKey = (isoOrDate: string | Date) => format(endOfMonth(typeof isoOrDate === 'string' ? parseISO(isoOrDate) : isoOrDate), 'yyyy-MM');
 
   // Remap prices to symbol -> 'YYYY-MM' -> point for alignment
@@ -66,6 +71,11 @@ export function simulatePlan(
     const fxPoint = fxByMonth[monthKey];
     let preValue = dec(0);
 
+    const hasAllPrices = components.every(c => monthlyByMonth[c.ticker]?.[monthKey]);
+    if (!hasAllPrices) {
+        continue;
+    }
+
     // --- Calculate value with previous month's units and this month's prices ---
     const initialPositions = components.map(c => {
       const symbol = c.ticker;
@@ -96,7 +106,7 @@ export function simulatePlan(
     const cashToInvest = sub(dec(plan.monthContribution), fee);
 
     // --- Allocate contribution ---
-    if (plan.rebalanceOnContribution && preValue.gt(0)) {
+    if (allocationMode === 'rebalance' && preValue.gt(0)) {
       const currentWeights = initialPositions.map(p => ({ symbol: p.symbol, weight: div(p.valueEUR, preValue) }));
       const needs = currentWeights.map(cw => {
         const target = dec(components.find(c => c.ticker === cw.symbol)?.targetWeight ?? 0);
@@ -129,7 +139,7 @@ export function simulatePlan(
         });
       }
 
-    } else {
+    } else { // Fixed allocation
       components.forEach(c => {
         const symbol = c.ticker;
         const cashForSymbol = mul(cashToInvest, dec(c.targetWeight));
