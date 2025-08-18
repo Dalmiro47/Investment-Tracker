@@ -73,7 +73,8 @@ export default function EtfPlansPage() {
                 monthContribution: values.monthContribution,
                 feePct: values.feePct,
                 rebalanceOnContribution: values.rebalanceOnContribution,
-                baseCurrency: 'EUR' as const
+                baseCurrency: 'EUR' as const,
+                contributionSteps: values.contributionSteps ?? [], // Ensure steps are included
             };
             const componentsData: Omit<ETFComponent, 'id'>[] = values.components.map(({ id, ...comp }) => comp);
 
