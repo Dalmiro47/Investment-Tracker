@@ -162,7 +162,7 @@ export default function EtfPlansPage() {
                                 <CardContent className="flex-grow">
                                    <div className="text-sm text-muted-foreground space-y-2">
                                         <div className="flex justify-between">
-                                            <span>{hasStepUps ? 'Monthly Contribution (Starting amount):' : 'Monthly Contribution:'}</span> 
+                                            <span>{hasStepUps ? 'Monthly Contribution (Starting Amount):' : 'Monthly Contribution:'}</span> 
                                             <span className="font-medium text-foreground">{formatCurrency(plan.monthContribution)}</span>
                                         </div>
                                         {hasStepUps && (
@@ -251,3 +251,5 @@ export default function EtfPlansPage() {
         </div>
     );
 }
+
+    
