@@ -160,7 +160,7 @@ export default function EtfPlansPage() {
                                     </div>
                                 </CardHeader>
                                 <CardContent className="flex-grow">
-                                   <div className="text-sm text-muted-foreground">
+                                   <div className="text-sm text-muted-foreground space-y-2">
                                         <div className="flex justify-between">
                                             <span>Monthly Contribution:</span> 
                                             <span className="font-medium text-foreground">{formatCurrency(plan.monthContribution)}</span>
@@ -168,35 +168,37 @@ export default function EtfPlansPage() {
                                         {hasStepUps && (
                                              <div className="flex justify-between items-center">
                                                 <span>Contribution Step-ups:</span>
-                                                <Dialog>
-                                                    <DialogTrigger asChild>
-                                                        <Button variant="outline" size="sm" className="h-7">
-                                                            Yes
-                                                            <Info className="ml-2 h-3 w-3"/>
-                                                        </Button>
-                                                    </DialogTrigger>
-                                                    <DialogContent>
-                                                        <DialogHeader>
-                                                            <DialogTitle>Contribution Schedule for {plan.title}</DialogTitle>
-                                                        </DialogHeader>
-                                                        <Table>
-                                                            <TableHeader>
-                                                                <TableRow>
-                                                                    <TableHead>Effective Month</TableHead>
-                                                                    <TableHead className="text-right">New Monthly Amount</TableHead>
-                                                                </TableRow>
-                                                            </TableHeader>
-                                                            <TableBody>
-                                                                {sortedSteps.map(step => (
-                                                                    <TableRow key={step.month}>
-                                                                        <TableCell>{format(parseISO(`${step.month}-01`), 'MMM yyyy')}</TableCell>
-                                                                        <TableCell className="text-right font-mono">{formatCurrency(step.amount)}</TableCell>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="font-medium text-foreground">Yes</span>
+                                                    <Dialog>
+                                                        <DialogTrigger asChild>
+                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
+                                                                <Info className="h-4 w-4"/>
+                                                            </Button>
+                                                        </DialogTrigger>
+                                                        <DialogContent>
+                                                            <DialogHeader>
+                                                                <DialogTitle>Contribution Schedule for {plan.title}</DialogTitle>
+                                                            </DialogHeader>
+                                                            <Table>
+                                                                <TableHeader>
+                                                                    <TableRow>
+                                                                        <TableHead>Effective Month</TableHead>
+                                                                        <TableHead className="text-right">New Monthly Amount</TableHead>
                                                                     </TableRow>
-                                                                ))}
-                                                            </TableBody>
-                                                        </Table>
-                                                    </DialogContent>
-                                                </Dialog>
+                                                                </TableHeader>
+                                                                <TableBody>
+                                                                    {sortedSteps.map(step => (
+                                                                        <TableRow key={step.month}>
+                                                                            <TableCell>{format(parseISO(`${step.month}-01`), 'MMM yyyy')}</TableCell>
+                                                                            <TableCell className="text-right font-mono">{formatCurrency(step.amount)}</TableCell>
+                                                                        </TableRow>
+                                                                    ))}
+                                                                </TableBody>
+                                                            </Table>
+                                                        </DialogContent>
+                                                    </Dialog>
+                                                </div>
                                             </div>
                                         )}
                                         <div className="flex justify-between">
