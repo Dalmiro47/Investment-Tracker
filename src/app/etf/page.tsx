@@ -10,12 +10,13 @@ import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import DashboardHeader from '@/components/dashboard-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { MoreVertical, PlusCircle, Trash2, Edit, Loader2, BarChart2 } from 'lucide-react';
+import { MoreVertical, PlusCircle, Trash2, Edit, Loader2, BarChart2, Info } from 'lucide-react';
 import { PlanForm, type PlanFormValues } from '@/components/etf/PlanForm';
 import { format, parseISO } from 'date-fns';
 import { formatCurrency } from '@/lib/money';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
 
 export default function EtfPlansPage() {
@@ -74,7 +75,7 @@ export default function EtfPlansPage() {
                 feePct: values.feePct,
                 rebalanceOnContribution: values.rebalanceOnContribution,
                 baseCurrency: 'EUR' as const,
-                contributionSteps: values.contributionSteps ?? [], // Ensure steps are included
+                contributionSteps: values.contributionSteps ?? [],
             };
             const componentsData: Omit<ETFComponent, 'id'>[] = values.components.map(({ id, ...comp }) => comp);
 
@@ -131,11 +132,8 @@ export default function EtfPlansPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                         {plans.map(plan => {
                             const hasStepUps = plan.contributionSteps && plan.contributionSteps.length > 0;
-                            const latestStep = hasStepUps 
-                                ? [...plan.contributionSteps!].sort((a,b) => b.month.localeCompare(a.month))[0]
-                                : null;
-                            const effectiveContribution = latestStep ? `Up to ${formatCurrency(latestStep.amount)}` : formatCurrency(plan.monthContribution);
-
+                            const sortedSteps = hasStepUps ? [...plan.contributionSteps!].sort((a,b) => a.month.localeCompare(b.month)) : [];
+                            
                             return (
                              <Card key={plan.id} className="flex flex-col">
                                 <CardHeader>
@@ -168,9 +166,37 @@ export default function EtfPlansPage() {
                                             <span className="font-medium text-foreground">{formatCurrency(plan.monthContribution)}</span>
                                         </div>
                                         {hasStepUps && (
-                                             <div className="flex justify-between">
-                                                <span>Contribution Step-ups:</span> 
-                                                <span className="font-medium text-foreground">Yes</span>
+                                             <div className="flex justify-between items-center">
+                                                <span>Contribution Step-ups:</span>
+                                                <Dialog>
+                                                    <DialogTrigger asChild>
+                                                        <Button variant="outline" size="sm" className="h-7">
+                                                            Yes
+                                                            <Info className="ml-2 h-3 w-3"/>
+                                                        </Button>
+                                                    </DialogTrigger>
+                                                    <DialogContent>
+                                                        <DialogHeader>
+                                                            <DialogTitle>Contribution Schedule for {plan.title}</DialogTitle>
+                                                        </DialogHeader>
+                                                        <Table>
+                                                            <TableHeader>
+                                                                <TableRow>
+                                                                    <TableHead>Effective Month</TableHead>
+                                                                    <TableHead className="text-right">New Monthly Amount</TableHead>
+                                                                </TableRow>
+                                                            </TableHeader>
+                                                            <TableBody>
+                                                                {sortedSteps.map(step => (
+                                                                    <TableRow key={step.month}>
+                                                                        <TableCell>{format(parseISO(`${step.month}-01`), 'MMM yyyy')}</TableCell>
+                                                                        <TableCell className="text-right font-mono">{formatCurrency(step.amount)}</TableCell>
+                                                                    </TableRow>
+                                                                ))}
+                                                            </TableBody>
+                                                        </Table>
+                                                    </DialogContent>
+                                                </Dialog>
                                             </div>
                                         )}
                                         <div className="flex justify-between">
