@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { getEtfPlan } from '@/lib/firestore.etfPlan';
-import { refreshEtfData, runPlan } from '@/app/actions/etf';
+import { refreshEtfData } from '@/app/actions/etf';
 import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import type { PlanRow } from '@/lib/etf/engine';
 import { format, parseISO } from 'date-fns';
@@ -78,8 +78,14 @@ export default function PlanDetailPage({ params: { planId } }: { params: { planI
                 feePct: plan.feePct,
                 rebalanceOnContribution: plan.rebalanceOnContribution,
             };
-            const result = await runPlan(user.uid, plainPlan, plan.components);
-            setSimData(result);
+            const res = await fetch('/api/simulate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid: user.uid, plan: plainPlan, components: plan.components }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.ok) throw new Error(data.error || 'Simulation failed');
+            setSimData(data.rows);
             toast({ title: 'Simulation complete.' });
         } catch (e: any) {
             toast({ variant: 'destructive', title: 'Simulation failed', description: e.message ?? 'Unknown error' });
@@ -231,3 +237,5 @@ export default function PlanDetailPage({ params: { planId } }: { params: { planI
     )
 
 }
+
+    
