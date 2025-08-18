@@ -1,3 +1,4 @@
+
 // src/lib/firestore.etf.server.ts  (server-only)
 import { adminDb } from '@/lib/firebase-admin';
 import { Timestamp, WriteBatch } from 'firebase-admin/firestore';
@@ -30,14 +31,14 @@ export async function cacheFXServer(uid: string, points: FXRatePoint[]) {
   await commitInChunks(points, (batch, p) => {
     const monthEnd = endOfMonth(parseISO(p.date));
     const monthId = monthEnd.toISOString().slice(0, 7);
-    const ref = adminDb.doc(`users/${uid}/fxRates/${monthId}`);
+    const ref = adminDb.doc(`users/${uid}/fx_rates/${monthId}`);
     batch.set(ref, { ...p, date: Timestamp.fromDate(monthEnd) });
   });
 }
 
-export async function getFXRatesServer(uid: string, startISO: string, endISO: string) {
+export async function getFXRatesServer(uid: string, startISO: string, endISO: string): Promise<Record<string, FXRatePoint>> {
   const snap = await adminDb
-    .collection(`users/${uid}/fxRates`)
+    .collection(`users/${uid}/fx_rates`)
     .where('date', '>=', Timestamp.fromDate(new Date(startISO)))
     .where('date', '<=', Timestamp.fromDate(new Date(endISO)))
     .get();
