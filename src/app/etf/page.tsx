@@ -14,7 +14,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { MoreVertical, PlusCircle, Trash2, Edit, Loader2, BarChart2 } from 'lucide-react';
 import { PlanForm, type PlanFormValues } from '@/components/etf/PlanForm';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { formatCurrency } from '@/lib/money';
 
 
@@ -129,7 +129,14 @@ export default function EtfPlansPage() {
                     <div className="flex justify-center items-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                 ) : plans.length > 0 ? (
                     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                        {plans.map(plan => (
+                        {plans.map(plan => {
+                            const hasStepUps = plan.contributionSteps && plan.contributionSteps.length > 0;
+                            const latestStep = hasStepUps 
+                                ? [...plan.contributionSteps!].sort((a,b) => b.month.localeCompare(a.month))[0]
+                                : null;
+                            const effectiveContribution = latestStep ? `Up to ${formatCurrency(latestStep.amount)}` : formatCurrency(plan.monthContribution);
+
+                            return (
                              <Card key={plan.id} className="flex flex-col">
                                 <CardHeader>
                                     <div className="flex items-start justify-between">
@@ -156,9 +163,22 @@ export default function EtfPlansPage() {
                                 </CardHeader>
                                 <CardContent className="flex-grow">
                                    <div className="text-sm text-muted-foreground">
-                                        <div className="flex justify-between"><span>Monthly Contribution:</span> <span className="font-medium text-foreground">{formatCurrency(plan.monthContribution)}</span></div>
-                                        <div className="flex justify-between"><span>Broker Fee:</span> <span className="font-medium text-foreground">{((plan.feePct ?? 0) * 100).toFixed(2)}%</span></div>
-                                        <div className="flex justify-between"><span>Rebalancing Strategy:</span> <span className="font-medium text-foreground">{plan.rebalanceOnContribution ? 'On Contribution' : 'None'}</span></div>
+                                        <div className="flex justify-between">
+                                            <span>Monthly Contribution:</span> 
+                                            <span className="font-medium text-foreground">{formatCurrency(plan.monthContribution)}</span>
+                                        </div>
+                                        {hasStepUps && (
+                                             <div className="flex justify-between">
+                                                <span>Contribution Step-ups:</span> 
+                                                <span className="font-medium text-foreground">Yes</span>
+                                            </div>
+                                        )}
+                                        <div className="flex justify-between">
+                                            <span>Broker Fee:</span> <span className="font-medium text-foreground">{((plan.feePct ?? 0) * 100).toFixed(2)}%</span>
+                                        </div>
+                                        <div className="flex justify-between">
+                                            <span>Rebalancing Strategy:</span> <span className="font-medium text-foreground">{plan.rebalanceOnContribution ? 'On Contribution' : 'None'}</span>
+                                        </div>
                                    </div>
                                 </CardContent>
                                 <CardFooter>
@@ -170,7 +190,7 @@ export default function EtfPlansPage() {
                                     </Link>
                                 </CardFooter>
                             </Card>
-                        ))}
+                        )})}
                     </div>
                 ) : (
                     <div className="text-center py-16 rounded-lg border-2 border-dashed">
