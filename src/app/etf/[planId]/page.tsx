@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
+import { useParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { getEtfPlan } from '@/lib/firestore.etfPlan';
@@ -23,7 +24,9 @@ export const runtime = 'nodejs';
 
 const CHART_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
-export default function PlanDetailPage({ params: { planId } }: { params: { planId: string } }) {
+export default function PlanDetailPage() {
+    const params = useParams<{ planId: string }>();
+    const planId = params?.planId;
     const { user } = useAuth();
     const { toast } = useToast();
     const [plan, setPlan] = useState<(ETFPlan & { components: ETFComponent[] }) | null>(null);

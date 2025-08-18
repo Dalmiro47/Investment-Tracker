@@ -15,8 +15,30 @@ export const div = (a: Big, b: Big) => {
     return a.div(b);
 }
 
+export function toNum(v: any, dp = 2): number {
+  if (v == null) return 0;
+  if (typeof v === 'number') return v;
+  if (typeof v === 'bigint') return Number(v);
+  if (typeof v === 'string') {
+    const n = Number(v);
+    return Number.isNaN(n) ? 0 : n;
+  }
+  // Ethers BigNumber / Decimal.js / Big.js tolerant conversions:
+  if (typeof v.toNumber === 'function') return v.toNumber();
+  if (typeof v.toFixed === 'function') return Number(v.toFixed(dp));
+  if (typeof v.valueOf === 'function') {
+    const val = v.valueOf();
+    if (typeof val === 'number') return val;
+    if (typeof val === 'string') {
+      const n = Number(val);
+      if (!Number.isNaN(n)) return n;
+    }
+  }
+  // Last resort
+  const n = Number(v);
+  return Number.isNaN(n) ? 0 : n;
+}
 
-export const toNum = (b: Big, dp = 2) => Number(b.round(dp));
 export const toLocale = (n: number, options?: Intl.NumberFormatOptions) => n.toLocaleString('de-DE', options);
 
 export const formatCurrency = (n: number | Big) => {
