@@ -20,6 +20,8 @@ import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/
 import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Legend } from 'recharts';
 import { ArrowLeft, RefreshCw, Play, Loader2, ArrowDownToLine } from 'lucide-react';
 
+export const runtime = 'nodejs';
+
 const CHART_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
 export default function PlanDetailPage({ params: { planId } }: { params: { planId: string } }) {
