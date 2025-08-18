@@ -4,6 +4,11 @@ import type { Timestamp } from 'firebase/firestore';
 
 export type ETFPlanId = string;
 
+export interface ContributionStep {
+  month: string;    // 'YYYY-MM' effective from this month (inclusive)
+  amount: number;   // € per month
+};
+
 export interface ETFComponent {
   id: string;                 // auto
   name: string;               // e.g. iShares Core MSCI World
@@ -18,7 +23,8 @@ export interface ETFPlan {
   id: ETFPlanId;
   title: string;
   baseCurrency: 'EUR';
-  monthContribution: number;  // € per month
+  monthContribution: number;  // € per month (base amount)
+  contributionSteps?: ContributionStep[]; // optional overrides
   feePct?: number;            // 0.001 = 0.1% fee per contribution (optional)
   startDate: string;          // ISO date; first month to simulate
   rebalanceOnContribution?: boolean; // if true, use contrib to steer back to targets

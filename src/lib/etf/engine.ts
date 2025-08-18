@@ -1,12 +1,12 @@
 
 import { endOfMonth, eachMonthOfInterval, parseISO, format } from 'date-fns';
-import type { ETFPlan, ETFComponent, ETFPricePoint, FXRatePoint } from '@/lib/types.etf';
+import type { ETFPlan, ETFComponent, ETFPricePoint, FXRatePoint, ContributionStep } from '@/lib/types.etf';
 import { dec, add, sub, mul, div, toNum } from '@/lib/money';
 import Big from 'big.js';
 
 export interface PlanRow {
   date: string;                 // yyyy-MM-dd (month end)
-  contribution: number;         // € contribution for the month (after fees if you want)
+  contribution: number;         // € contribution for the month
   fees: number;                 // optional
   portfolioValue: number;       // end-of-month total in EUR
   positions: {
@@ -25,6 +25,21 @@ export interface PlanRow {
 type PriceMap = Record<string, Record<string, ETFPricePoint>>; // symbol -> date -> point
 type FXMap = Record<string, FXRatePoint>;                       // date -> point (EUR base)
 type EngineOptions = { allocationMode?: 'fixed' | 'rebalance' };
+
+
+export function getContributionForMonth(plan: ETFPlan, month: string): number {
+  let amt = plan.monthContribution ?? 0;
+  
+  // Manual steps override (last step <= month wins)
+  const steps = (plan.contributionSteps ?? []).slice().sort((a,b)=>a.month.localeCompare(b.month));
+  for (const s of steps) {
+    if (s.month <= month) {
+      amt = s.amount;
+    }
+  }
+
+  return amt;
+}
 
 
 export function simulatePlan(
@@ -75,6 +90,8 @@ export function simulatePlan(
     if (!hasAllPrices) {
         continue;
     }
+    
+    const monthlyContribution = getContributionForMonth(plan, monthKey);
 
     // --- Calculate value with previous month's units and this month's prices ---
     const initialPositions = components.map(c => {
@@ -102,8 +119,8 @@ export function simulatePlan(
     }).filter(Boolean) as ({ symbol: string; units: Big; priceCCY: Big; ccy: string; fxEURtoCCY: number | undefined; priceEUR: Big; valueEUR: Big; targetWeight: number; })[];
 
     // --- Contribution & Fee ---
-    const fee = plan.feePct ? mul(dec(plan.monthContribution), dec(plan.feePct)) : dec(0);
-    const cashToInvest = sub(dec(plan.monthContribution), fee);
+    const fee = plan.feePct ? mul(dec(monthlyContribution), dec(plan.feePct)) : dec(0);
+    const cashToInvest = sub(dec(monthlyContribution), fee);
 
     // --- Allocate contribution ---
     if (allocationMode === 'rebalance' && preValue.gt(0)) {
@@ -187,7 +204,7 @@ export function simulatePlan(
 
     rows.push({
       date: format(monthDate, 'yyyy-MM-dd'),
-      contribution: plan.monthContribution,
+      contribution: monthlyContribution,
       fees: toNum(fee),
       portfolioValue: toNum(portfolioValue),
       positions: finalPositionsData,

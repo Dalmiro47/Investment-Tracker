@@ -29,7 +29,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { cn } from "@/lib/utils";
 import { CalendarIcon, PlusCircle, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import type { ETFPlan, ETFComponent } from "@/lib/types.etf";
+import type { ETFPlan, ETFComponent, ContributionStep } from "@/lib/types.etf";
 import React, { useEffect, useMemo } from "react";
 
 function PercentInput({
@@ -99,6 +99,10 @@ const planSchema = z.object({
   monthContribution: z.coerce.number().positive("Contribution must be positive."),
   feePct: z.coerce.number().min(0).max(1).optional(),
   rebalanceOnContribution: z.boolean().default(false),
+  contributionSteps: z.array(z.object({
+      month: z.string().regex(/^\d{4}-\d{2}$/, "Format must be YYYY-MM"),
+      amount: z.coerce.number().positive("Amount must be positive.")
+  })).optional(),
   components: z.array(z.object({
     id: z.string().optional(),
     name: z.string().min(2, "Name is required."),
@@ -139,6 +143,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
       monthContribution: 100,
       feePct: 0,
       rebalanceOnContribution: false,
+      contributionSteps: [],
       components: [
         { name: "", isin: "", ticker: "", preferredExchange: "XETRA", targetWeight: null },
       ],
@@ -150,6 +155,11 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
     name: "components",
   });
   
+  const { fields: stepFields, append: appendStep, remove: removeStep } = useFieldArray({
+    control: form.control,
+    name: "contributionSteps",
+  });
+
   const componentValues = form.watch('components');
   
   const totalWeight = useMemo(() => {
@@ -173,6 +183,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
             monthContribution: 100,
             feePct: 0,
             rebalanceOnContribution: false,
+            contributionSteps: [],
             components: [
                 { name: "", isin: "", ticker: "", preferredExchange: "XETRA", targetWeight: null },
             ],
@@ -227,8 +238,9 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
             name="monthContribution"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Monthly Contribution (€)</FormLabel>
+                <FormLabel>Base Monthly Contribution (€)</FormLabel>
                 <FormControl><Input type="number" {...field} /></FormControl>
+                 <FormDescription>The starting amount. You can add step-ups below.</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -259,6 +271,51 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
             )}
           />
         </div>
+        
+        <div className="space-y-2">
+            <h3 className="text-lg font-medium">Contribution Step-ups (Optional)</h3>
+            <div className="rounded-md border">
+                 <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-[40%]">Effective Month (YYYY-MM)</TableHead>
+                            <TableHead className="w-[40%]">New Monthly Amount (€)</TableHead>
+                            <TableHead className="w-[50px]"></TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {stepFields.map((field, index) => (
+                            <TableRow key={field.id} className="align-top">
+                                <TableCell>
+                                    <FormField control={form.control} name={`contributionSteps.${index}.month`}
+                                        render={({ field }) => <Input {...field} placeholder="e.g. 2024-01" />}
+                                    />
+                                    <FormMessage className="text-xs mt-1">{form.formState.errors.contributionSteps?.[index]?.month?.message}</FormMessage>
+                                </TableCell>
+                                <TableCell>
+                                    <FormField control={form.control} name={`contributionSteps.${index}.amount`}
+                                        render={({ field }) => <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} placeholder="e.g. 200" />}
+                                    />
+                                     <FormMessage className="text-xs mt-1">{form.formState.errors.contributionSteps?.[index]?.amount?.message}</FormMessage>
+                                </TableCell>
+                                <TableCell>
+                                    <Button variant="ghost" size="icon" onClick={() => removeStep(index)}>
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                 </Table>
+            </div>
+             <Button
+                type="button" variant="outline" size="sm"
+                onClick={() => appendStep({ month: "", amount: 0 })}
+            >
+                <PlusCircle className="mr-2 h-4 w-4" /> Add Step-up
+            </Button>
+        </div>
+
 
         <div>
           <h3 className="text-lg font-medium">Components</h3>

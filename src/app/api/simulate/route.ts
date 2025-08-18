@@ -92,8 +92,11 @@ export async function POST(req: Request) {
 
     const simulationResult: PlanRow[] = simulatePlan(plan, components, perSymbol, fx);
 
-    // Sanitize the data to be plain objects before returning to the client.
-    const wire = simulationResult.map(row => JSON.parse(JSON.stringify(row)));
+    // Sanitize the data to be plain objects and filter out pre-start rows
+    const simStartMonth = plan.startDate.slice(0, 7);
+    const wire = simulationResult
+      .filter(row => row.date.slice(0, 7) >= simStartMonth)
+      .map(row => JSON.parse(JSON.stringify(row)));
 
     return NextResponse.json({ ok: true, rows: wire });
   } catch (e: any) {

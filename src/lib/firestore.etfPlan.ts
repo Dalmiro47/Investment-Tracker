@@ -1,7 +1,7 @@
 
 import { db } from './firebase';
 import { collection, doc, writeBatch, getDocs, getDoc, addDoc, deleteDoc, serverTimestamp, query, Timestamp } from 'firebase/firestore';
-import type { ETFPlan, ETFComponent } from './types.etf';
+import type { ETFPlan, ETFComponent, ContributionStep } from './types.etf';
 
 const plansCol = (uid: string) => collection(db, 'users', uid, 'etfPlans');
 const planDoc = (uid: string, planId: string) => doc(db, 'users', uid, 'etfPlans', planId);
