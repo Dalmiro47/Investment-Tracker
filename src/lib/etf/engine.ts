@@ -69,6 +69,7 @@ export function simulatePlan(
   });
 
   const start = endOfMonth(parseISO(plan.startDate));
+  const planStartMonth = toMonthKey(start);
   const end = endOfMonth(new Date());
   const months = eachMonthOfInterval({ start, end });
 
@@ -83,6 +84,12 @@ export function simulatePlan(
 
   for (const monthDate of months) {
     const monthKey = toMonthKey(monthDate);
+    
+    // Engine Guard: Skip any month before the plan's start date.
+    if (monthKey < planStartMonth) {
+        continue;
+    }
+
     const fxPoint = fxByMonth[monthKey];
     let preValue = dec(0);
 

@@ -92,7 +92,7 @@ export async function POST(req: Request) {
 
     const simulationResult: PlanRow[] = simulatePlan(plan, components, perSymbol, fx);
 
-    // Sanitize the data to be plain objects and filter out pre-start rows
+    // API Guard: Sanitize the data to be plain objects and filter out pre-start rows
     const simStartMonth = plan.startDate.slice(0, 7);
     const wire = simulationResult
       .filter(row => row.date.slice(0, 7) >= simStartMonth)
