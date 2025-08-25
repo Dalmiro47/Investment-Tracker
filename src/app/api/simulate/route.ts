@@ -42,30 +42,66 @@ export async function POST(req: Request) {
       if (!symbol) return;
       const pts = await getPricePointsServer(uid, plan.id, symbol, startISO, endISO);
       perSymbol[symbol] = pts;
-      Object.values(pts).forEach((p: any) => currencies.add(p.currency));
+      Object.values(pts).forEach((p: any) => { 
+        if (p.currency) currencies.add(p.currency) 
+      });
     }));
 
-    // Find the latest month that exists for every symbol
     const monthsPerSymbol = Object.values(perSymbol).map(pts => monthKeys(pts));
     if (monthsPerSymbol.some(ms => ms.length === 0)) {
-      return NextResponse.json({ ok: false, error: 'No price data for one or more symbols. Refresh Price Data.' }, { status: 400 });
+        // This case might be hit if a symbol has ZERO data in the entire plan range
+        const symbolsWithNoData = components
+            .filter((c:any) => (perSymbol[c.ticker] && Object.keys(perSymbol[c.ticker]).length === 0))
+            .map((c:any) => c.ticker);
+        
+        if(symbolsWithNoData.length > 0) {
+            return NextResponse.json({ 
+                ok: false, 
+                code: 'MISSING_PRICES',
+                message: `No price data found for: ${symbolsWithNoData.join(', ')}. Refresh data or add manual prices.`,
+                missing: [{ month: 'all', missingFor: symbolsWithNoData }]
+            }, { status: 400 });
+        }
     }
-    const lastMonths = monthsPerSymbol.map(ms => ms[ms.length - 1]); // each symbol’s last available month
-    const lastCommonMonth = lastMonths.sort()[0]; // earliest among those (intersection cap)
-
+    
+    const lastMonths = monthsPerSymbol.filter(ms => ms.length > 0).map(ms => ms[ms.length - 1]);
+    const lastCommonMonth = lastMonths.length > 0 ? lastMonths.sort()[0] : startMonth;
+    
     endISO = format(endOfMonth(parseISO(`${lastCommonMonth}-01`)), 'yyyy-MM-dd');
     
     const allMonthsInRange = monthsBetween(startMonth, lastCommonMonth);
     
+    // --- START: Hardened price validation logic ---
+    const missingPrices: { month: string; missingFor: string[] }[] = [];
+    for (const month of allMonthsInRange) {
+        const lackingSymbols = components
+            .filter((c: any) => !perSymbol[c.ticker]?.[month])
+            .map((c: any) => c.ticker);
+        
+        if (lackingSymbols.length > 0) {
+            missingPrices.push({ month, missingFor: lackingSymbols });
+        }
+    }
+
+    if (missingPrices.length > 0) {
+        return NextResponse.json({
+            ok: false,
+            code: 'MISSING_PRICES',
+            message: 'Some months are missing prices. Please add manual prices to proceed.',
+            missing: missingPrices
+        }, { status: 400 });
+    }
+    // --- END: Hardened price validation logic ---
+
+
+    // Carry-forward prices only AFTER the first real data point for each symbol
     for (const sym of Object.keys(perSymbol)) {
         const pts = perSymbol[sym];
         const firstRealMonth = Object.keys(pts).sort()[0];
 
-        // Carry-forward prices only AFTER the first real data point
         for (const m of allMonthsInRange) {
             if (m < firstRealMonth) continue; // Do not backfill before first real price
             if (!pts[m]) {
-                // Find the latest month < m that exists
                 const prev = Object.keys(pts).filter(x => x < m).sort().pop();
                 if (prev) pts[m] = { ...pts[prev], month: m, date: `${m}-01` };
             }
@@ -76,7 +112,6 @@ export async function POST(req: Request) {
             if (m > lastCommonMonth) delete pts[m];
         }
     }
-
 
     const needsFx = currencies.size > 1 || (currencies.size === 1 && !currencies.has('EUR'));
     const fx = needsFx ? await getFXRatesServer(uid, startISO, endISO) : {};

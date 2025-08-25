@@ -38,6 +38,8 @@ export interface ETFPricePoint {
   month?: string;         // 'YYYY-MM' key for alignment
   close: number;         // in instrument currency
   currency: string;      // 'GBP', 'EUR', ...
+  source?: 'yahoo' | 'justetf' | 'manual';
+  note?: string;
 }
 
 export interface FXRatePoint {

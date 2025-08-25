@@ -56,6 +56,31 @@ export async function getFXRatesServer(uid: string, startISO: string, endISO: st
   return out;
 }
 
+async function readOverrides(uid: string, planId: string, symbol: string, startMonth: string, endMonth: string) {
+    const snap = await adminDb
+        .collection(`users/${uid}/etfPlans/${planId}/prices/${symbol}/overrides`)
+        .orderBy(FieldPath.documentId())
+        .startAt(startMonth)
+        .endAt(endMonth)
+        .get();
+
+    const out: Record<string, ETFPricePoint> = {};
+    snap.forEach(d => {
+        const data = d.data() as any;
+        const month = d.id;
+        out[month] = {
+            symbol: symbol,
+            date: `${month}-01`,
+            month,
+            close: data.close,
+            currency: data.currency,
+            source: 'manual',
+            note: data.note,
+        };
+    });
+    return out;
+}
+
 export async function getPricePointsServer(uid: string, planId: string, symbol: string, startISO: string, endISO: string) {
   const startMonth = startISO.slice(0, 7);
   const endMonth = endISO.slice(0, 7);
@@ -67,11 +92,11 @@ export async function getPricePointsServer(uid: string, planId: string, symbol: 
     .endAt(endMonth)
     .get();
 
-  const out: Record<string, ETFPricePoint> = {};
+  const base: Record<string, ETFPricePoint> = {};
   snap.forEach(d => {
     const data = d.data() as any;
     const month = d.id;
-    out[month] = {
+    base[month] = {
       symbol: data.symbol,
       date: `${month}-01`,
       month,
@@ -79,5 +104,13 @@ export async function getPricePointsServer(uid: string, planId: string, symbol: 
       currency: data.currency
     };
   });
-  return out;
+  
+  const overrides = await readOverrides(uid, planId, symbol, startMonth, endMonth);
+  
+  // Merge overrides, with overrides taking precedence
+  for (const [month, overridePoint] of Object.entries(overrides)) {
+    base[month] = { ...base[month], ...overridePoint };
+  }
+  
+  return base;
 }
