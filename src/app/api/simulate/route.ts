@@ -29,9 +29,10 @@ export async function POST(req: Request) {
     if (!uid || !plan || !components) {
         return NextResponse.json({ ok: false, error: 'Missing required parameters.' }, { status: 400 });
     }
-
-    const startMonth = plan.startDate.slice(0, 7);
+    
+    // Timezone-safe start month derivation
     const startISO = format(startOfMonth(parseISO(plan.startDate)), 'yyyy-MM-dd');
+    const startMonth = startISO.slice(0, 7);
     let endISO = format(endOfMonth(new Date()), 'yyyy-MM-dd');
 
     const perSymbol: Record<string, Record<string, any>> = {};
@@ -120,7 +121,7 @@ export async function POST(req: Request) {
     const simulationResult: PlanRow[] = simulatePlan(plan, components, perSymbol, fx, { endMonth: lastCommonMonth });
 
     // API Guard: Sanitize the data to be plain objects and filter out pre-start rows
-    const simStartMonth = plan.startDate.slice(0, 7);
+    const simStartMonth = startMonth;
     const wire = simulationResult
       .filter(row => row.date.slice(0, 7) >= simStartMonth)
       .map(row => JSON.parse(JSON.stringify(row)));

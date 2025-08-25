@@ -1,5 +1,5 @@
 
-import { endOfMonth, eachMonthOfInterval, parseISO, format } from 'date-fns';
+import { endOfMonth, eachMonthOfInterval, parseISO, format, startOfMonth } from 'date-fns';
 import type { ETFPlan, ETFComponent, ETFPricePoint, FXRatePoint, ContributionStep } from '@/lib/types.etf';
 import { dec, add, sub, mul, div, toNum } from '@/lib/money';
 import Big from 'big.js';
@@ -67,7 +67,8 @@ export function simulatePlan(
 ): PlanRow[] {
   const allocationMode = options.allocationMode ?? (plan.rebalanceOnContribution ? 'rebalance' : 'fixed');
   
-  const planStartMonth = plan.startDate.slice(0,7);
+  // Timezone-safe start month derivation
+  const planStartMonth = format(startOfMonth(parseISO(plan.startDate)), 'yyyy-MM');
   const endMonth = options.endMonth ?? new Date().toISOString().slice(0,7);
   
   const months = monthsBetween(planStartMonth, endMonth);
