@@ -22,8 +22,8 @@ export interface PlanRow {
   }[];
 }
 
-type PriceMap = Record<string, Record<string, ETFPricePoint>>; // symbol -> date -> point
-type FXMap = Record<string, FXRatePoint>;                       // date -> point (EUR base)
+type PriceMap = Record<string, Record<string, ETFPricePoint>>; // symbol -> month -> point
+type FXMap = Record<string, FXRatePoint>;                       // month -> point (EUR base)
 type EngineOptions = { allocationMode?: 'fixed' | 'rebalance' };
 
 
@@ -45,31 +45,14 @@ export function getContributionForMonth(plan: ETFPlan, month: string): number {
 export function simulatePlan(
   plan: ETFPlan,
   components: ETFComponent[],
-  monthly: PriceMap,
-  fx: FXMap,
+  monthlyByMonth: PriceMap, // Now expecting data pre-keyed by 'YYYY-MM'
+  fxByMonth: FXMap,         // Now expecting data pre-keyed by 'YYYY-MM'
   options: EngineOptions = {}
 ): PlanRow[] {
   const allocationMode = options.allocationMode ?? (plan.rebalanceOnContribution ? 'rebalance' : 'fixed');
   
-  const toMonthKey = (isoOrDate: string | Date) => format(endOfMonth(typeof isoOrDate === 'string' ? parseISO(isoOrDate) : isoOrDate), 'yyyy-MM');
-
-  // Remap prices to symbol -> 'YYYY-MM' -> point for alignment
-  const monthlyByMonth: Record<string, Record<string, ETFPricePoint>> = {};
-  for (const [symbol, byDate] of Object.entries(monthly)) {
-    monthlyByMonth[symbol] = {};
-    Object.values(byDate).forEach(p => {
-      monthlyByMonth[symbol][toMonthKey(p.date)] = p;
-    });
-  }
-
-  // Remap FX to 'YYYY-MM' -> point for alignment
-  const fxByMonth: Record<string, FXRatePoint> = {};
-  Object.values(fx).forEach(pt => {
-    fxByMonth[toMonthKey(pt.date)] = pt;
-  });
-
   const start = endOfMonth(parseISO(plan.startDate));
-  const planStartMonth = toMonthKey(start);
+  const planStartMonth = plan.startDate.slice(0,7);
   const end = endOfMonth(new Date());
   const months = eachMonthOfInterval({ start, end });
 
@@ -83,7 +66,7 @@ export function simulatePlan(
   const rows: PlanRow[] = [];
 
   for (const monthDate of months) {
-    const monthKey = toMonthKey(monthDate);
+    const monthKey = format(monthDate, 'yyyy-MM');
     
     // Engine Guard: Skip any month before the plan's start date.
     if (monthKey < planStartMonth) {
@@ -210,7 +193,7 @@ export function simulatePlan(
     });
 
     rows.push({
-      date: format(monthDate, 'yyyy-MM-dd'),
+      date: format(endOfMonth(monthDate), 'yyyy-MM-dd'),
       contribution: monthlyContribution,
       fees: toNum(fee),
       portfolioValue: toNum(portfolioValue),
