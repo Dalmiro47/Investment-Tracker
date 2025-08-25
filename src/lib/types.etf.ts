@@ -26,7 +26,8 @@ export interface ETFPlan {
   monthContribution: number;  // € per month (base amount)
   contributionSteps?: ContributionStep[]; // optional overrides
   feePct?: number;            // 0.001 = 0.1% fee per contribution (optional)
-  startDate: string;          // ISO date; first month to simulate
+  startDate: string;          // ISO date string for UI picker, e.g., '2023-06-01'
+  startMonth?: string;        // Canonical 'YYYY-MM', the true source for logic
   rebalanceOnContribution?: boolean; // if true, use contrib to steer back to targets
   createdAt?: Timestamp;
   updatedAt?: Timestamp;

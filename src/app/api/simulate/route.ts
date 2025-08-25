@@ -4,6 +4,7 @@ import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import { getPricePointsServer, getFXRatesServer } from '@/lib/firestore.etf.server';
 import { simulatePlan } from '@/lib/etf/engine';
 import type { PlanRow } from '@/lib/etf/engine';
+import { getStartMonth } from '@/lib/date-helpers';
 
 export const runtime = 'nodejs'; // ensure Admin SDK works
 
@@ -30,9 +31,8 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: 'Missing required parameters.' }, { status: 400 });
     }
     
-    // Timezone-safe start month derivation
-    const startISO = format(startOfMonth(parseISO(plan.startDate)), 'yyyy-MM-dd');
-    const startMonth = startISO.slice(0, 7);
+    const startMonth = getStartMonth(plan);
+    const startISO = `${startMonth}-01`;
     let endISO = format(endOfMonth(new Date()), 'yyyy-MM-dd');
 
     const perSymbol: Record<string, Record<string, any>> = {};
@@ -58,7 +58,6 @@ export async function POST(req: Request) {
 
     const monthsPerSymbol = Object.values(perSymbol).map(pts => monthKeys(pts));
     if (monthsPerSymbol.every(ms => ms.length === 0)) {
-        // This case can happen if no data source has any data for any symbol yet.
         const allSymbols = components.map((c:any) => c.ticker);
         return NextResponse.json({ 
             ok: false, 
@@ -73,7 +72,6 @@ export async function POST(req: Request) {
     
     const allMonthsInRange = monthsBetween(startMonth, lastCommonMonth);
     
-    // --- START: Hardened price validation logic ---
     const missingPrices: { month: string; missingFor: string[] }[] = [];
     for (const month of allMonthsInRange) {
         const lackingSymbols = components
@@ -93,23 +91,19 @@ export async function POST(req: Request) {
             missing: missingPrices
         }, { status: 400 });
     }
-    // --- END: Hardened price validation logic ---
-
-
-    // Carry-forward prices only AFTER the first real data point for each symbol
+    
     for (const sym of Object.keys(perSymbol)) {
         const pts = perSymbol[sym];
         const firstRealMonth = Object.keys(pts).sort()[0];
 
         for (const m of allMonthsInRange) {
-            if (m < firstRealMonth) continue; // Do not backfill before first real price
+            if (m < firstRealMonth) continue;
             if (!pts[m]) {
                 const prev = Object.keys(pts).filter(x => x < m).sort().pop();
                 if (prev) pts[m] = { ...pts[prev], month: m, date: `${m}-01`, source: 'forward-fill' };
             }
         }
         
-        // Extra safety: trim any months outside the simulation window
         for (const m of Object.keys(pts)) {
             if (m < startMonth || m > lastCommonMonth) delete pts[m];
         }
@@ -120,7 +114,6 @@ export async function POST(req: Request) {
 
     const simulationResult: PlanRow[] = simulatePlan(plan, components, perSymbol, fx, { endMonth: lastCommonMonth });
 
-    // API Guard: Sanitize the data to be plain objects and filter out pre-start rows
     const simStartMonth = startMonth;
     const wire = simulationResult
       .filter(row => row.date.slice(0, 7) >= simStartMonth)

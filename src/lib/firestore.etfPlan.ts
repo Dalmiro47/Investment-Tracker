@@ -2,6 +2,7 @@
 import { db } from './firebase';
 import { collection, doc, writeBatch, getDocs, getDoc, addDoc, deleteDoc, serverTimestamp, query, Timestamp } from 'firebase/firestore';
 import type { ETFPlan, ETFComponent, ContributionStep } from './types.etf';
+import { format, parseISO, startOfMonth } from 'date-fns';
 
 const plansCol = (uid: string) => collection(db, 'users', uid, 'etfPlans');
 const planDoc = (uid: string, planId: string) => doc(db, 'users', uid, 'etfPlans', planId);
@@ -46,9 +47,13 @@ export async function createEtfPlan(uid: string, planData: Omit<ETFPlan, 'id'|'c
     
     const batch = writeBatch(db);
 
+    const startDateObj = new Date(planData.startDate);
+    const startMonth = format(startOfMonth(startDateObj), 'yyyy-MM');
+
     batch.set(planRef, {
         ...planData,
-        startDate: Timestamp.fromDate(new Date(planData.startDate)),
+        startDate: format(startDateObj, 'yyyy-MM-dd'),
+        startMonth: startMonth,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
     });
@@ -69,7 +74,9 @@ export async function updateEtfPlan(uid: string, planId: string, planData: Parti
     const planRef = planDoc(uid, planId);
     const payload: Record<string, any> = { ...planData, updatedAt: serverTimestamp() };
     if (planData.startDate) {
-        payload.startDate = Timestamp.fromDate(new Date(planData.startDate));
+        const startDateObj = new Date(planData.startDate);
+        payload.startDate = format(startDateObj, 'yyyy-MM-dd');
+        payload.startMonth = format(startOfMonth(startDateObj), 'yyyy-MM');
     }
     batch.update(planRef, payload);
 

@@ -1,8 +1,9 @@
 
-import { endOfMonth, eachMonthOfInterval, parseISO, format, startOfMonth } from 'date-fns';
-import type { ETFPlan, ETFComponent, ETFPricePoint, FXRatePoint, ContributionStep } from '@/lib/types.etf';
+import { endOfMonth, parseISO, format } from 'date-fns';
+import type { ETFPlan, ETFComponent, ETFPricePoint, FXRatePoint } from '@/lib/types.etf';
 import { dec, add, sub, mul, div, toNum } from '@/lib/money';
 import Big from 'big.js';
+import { getStartMonth } from '@/lib/date-helpers';
 
 export interface PlanRow {
   date: string;                 // yyyy-MM-dd (month end)
@@ -29,7 +30,6 @@ type EngineOptions = {
   endMonth?: string;
 };
 
-
 const monthsBetween = (start: string, end: string) => {
   const out: string[] = [];
   const [sy, sm] = start.split('-').map(Number);
@@ -42,11 +42,9 @@ const monthsBetween = (start: string, end: string) => {
   return out;
 };
 
-
 export function getContributionForMonth(plan: ETFPlan, month: string): number {
   let amt = plan.monthContribution ?? 0;
   
-  // Manual steps override (last step <= month wins)
   const steps = (plan.contributionSteps ?? []).slice().sort((a,b)=>a.month.localeCompare(b.month));
   for (const s of steps) {
     if (s.month <= month) {
@@ -57,33 +55,28 @@ export function getContributionForMonth(plan: ETFPlan, month: string): number {
   return amt;
 }
 
-
 export function simulatePlan(
   plan: ETFPlan,
   components: ETFComponent[],
-  monthlyByMonth: PriceMap, // Now expecting data pre-keyed by 'YYYY-MM'
-  fxByMonth: FXMap,         // Now expecting data pre-keyed by 'YYYY-MM'
+  monthlyByMonth: PriceMap, 
+  fxByMonth: FXMap,         
   options: EngineOptions = {}
 ): PlanRow[] {
   const allocationMode = options.allocationMode ?? (plan.rebalanceOnContribution ? 'rebalance' : 'fixed');
   
-  // Timezone-safe start month derivation
-  const planStartMonth = format(startOfMonth(parseISO(plan.startDate)), 'yyyy-MM');
+  const planStartMonth = getStartMonth(plan);
   const endMonth = options.endMonth ?? new Date().toISOString().slice(0,7);
   
   const months = monthsBetween(planStartMonth, endMonth);
 
-  // running state: units per symbol
   const units: Record<string, Big> = {};
   components.forEach(c => {
-    const symbol = c.ticker;
-    units[symbol] = dec(0)
+    units[c.ticker] = dec(0)
   });
 
   const rows: PlanRow[] = [];
 
   for (const monthKey of months) {
-    // Engine Guard: Skip any month before the plan's start date.
     if (monthKey < planStartMonth) {
         continue;
     }
@@ -98,14 +91,13 @@ export function simulatePlan(
     
     const monthlyContribution = getContributionForMonth(plan, monthKey);
 
-    // --- Calculate value with previous month's units and this month's prices ---
     const initialPositions = components.map(c => {
       const symbol = c.ticker;
       const p = monthlyByMonth[symbol]?.[monthKey];
       if (!p) return null;
 
       const fxRate = p.currency === 'EUR' ? 1 : (fxPoint?.rates?.[p.currency] ?? null);
-      if (p.currency !== 'EUR' && !fxRate) return null; // Skip if FX rate is missing
+      if (p.currency !== 'EUR' && !fxRate) return null;
       
       const priceEUR = fxRate ? div(dec(p.close), dec(fxRate)) : dec(p.close);
       const valueEUR = mul(units[symbol] ?? dec(0), priceEUR);
@@ -123,11 +115,9 @@ export function simulatePlan(
       };
     }).filter(Boolean) as ({ symbol: string; units: Big; priceCCY: Big; ccy: string; fxEURtoCCY: number | undefined; priceEUR: Big; valueEUR: Big; targetWeight: number; })[];
 
-    // --- Contribution & Fee ---
     const fee = plan.feePct ? mul(dec(monthlyContribution), dec(plan.feePct)) : dec(0);
     const cashToInvest = sub(dec(monthlyContribution), fee);
 
-    // --- Allocate contribution ---
     if (allocationMode === 'rebalance' && preValue.gt(0)) {
       const currentWeights = initialPositions.map(p => ({ symbol: p.symbol, weight: div(p.valueEUR, preValue) }));
       const needs = currentWeights.map(cw => {
@@ -160,8 +150,7 @@ export function simulatePlan(
           }
         });
       }
-
-    } else { // Fixed allocation
+    } else { 
       components.forEach(c => {
         const symbol = c.ticker;
         const cashForSymbol = mul(cashToInvest, dec(c.targetWeight));
@@ -173,7 +162,6 @@ export function simulatePlan(
       });
     }
 
-    // --- Recompute final position values after buying ---
     let portfolioValue = dec(0);
     const finalPositionsData = components.map(c => {
       const symbol = c.ticker;
@@ -189,7 +177,7 @@ export function simulatePlan(
       
       return {
         symbol,
-        units: units[symbol] ?? dec(0),
+        units: toNum(units[symbol] ?? dec(0), 8),
         priceCCY: p.close,
         ccy: p.currency,
         fxEURtoCCY: p.currency === 'EUR' ? 1 : fxRate ?? undefined,
@@ -200,14 +188,11 @@ export function simulatePlan(
       };
     }).filter(Boolean) as PlanRow['positions'];
 
-    // --- Calculate final drift ---
     finalPositionsData.forEach(pos => {
       const actualWeight = portfolioValue.gt(0) ? div(dec(pos.valueEUR), portfolioValue) : dec(0);
       pos.driftPct = toNum(sub(actualWeight, dec(pos.targetWeight)), 4);
-      pos.units = toNum(units[pos.symbol] ?? dec(0), 8);
     });
 
-    // Use a mid-month day to safely get a date object, then format to EOM
     const eomDate = endOfMonth(parseISO(`${monthKey}-15`));
     rows.push({
       date: format(eomDate, 'yyyy-MM-dd'),
@@ -217,7 +202,6 @@ export function simulatePlan(
       positions: finalPositionsData,
     });
   }
-
-  // Final safety: drop any accidental pre-start rows
+  
   return rows.filter(r => r.date.slice(0,7) >= planStartMonth);
 }

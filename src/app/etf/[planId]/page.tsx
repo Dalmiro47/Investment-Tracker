@@ -9,8 +9,9 @@ import { useToast } from '@/hooks/use-toast';
 import { getEtfPlan } from '@/lib/firestore.etfPlan';
 import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import type { PlanRow } from '@/lib/etf/engine';
-import { format, parseISO, getYear } from 'date-fns';
+import { format, parseISO, getYear, startOfMonth } from 'date-fns';
 import { formatCurrency, formatPercent } from '@/lib/money';
+import { getStartMonth } from '@/lib/date-helpers';
 
 import DashboardHeader from '@/components/dashboard-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -164,6 +165,7 @@ export default function PlanDetailPage() {
                 baseCurrency: plan.baseCurrency,
                 monthContribution: plan.monthContribution,
                 startDate: plan.startDate,
+                startMonth: plan.startMonth,
                 feePct: plan.feePct,
                 rebalanceOnContribution: plan.rebalanceOnContribution,
                 contributionSteps: plan.contributionSteps ?? [],
@@ -277,6 +279,8 @@ export default function PlanDetailPage() {
         return <div>Plan not found.</div>
     }
 
+    const planStartMonth = getStartMonth(plan);
+
     return (
         <div className="min-h-screen w-full bg-background">
             <DashboardHeader isTaxView={false} onTaxViewChange={() => { }} onTaxSettingsClick={() => { }} />
@@ -287,7 +291,7 @@ export default function PlanDetailPage() {
                     </Link>
                     <div>
                         <h1 className="text-3xl font-bold font-headline">{plan.title}</h1>
-                        <p className="text-muted-foreground">Simulation from {format(parseISO(plan.startDate), 'dd MMM yyyy')} to present.</p>
+                        <p className="text-muted-foreground">Simulation from {format(parseISO(`${planStartMonth}-01`), 'dd MMM yyyy')} to present.</p>
                     </div>
                 </div>
 
