@@ -30,9 +30,9 @@ export async function POST(req: Request) {
         return NextResponse.json({ ok: false, error: 'Missing required parameters.' }, { status: 400 });
     }
 
+    const startMonth = plan.startDate.slice(0, 7);
     const startISO = format(startOfMonth(parseISO(plan.startDate)), 'yyyy-MM-dd');
     let endISO = format(endOfMonth(new Date()), 'yyyy-MM-dd');
-    const startMonth = plan.startDate.slice(0, 7);
 
     const perSymbol: Record<string, Record<string, any>> = {};
     const currencies = new Set<string>();
@@ -69,8 +69,6 @@ export async function POST(req: Request) {
     
     const lastMonths = monthsPerSymbol.filter(ms => ms.length > 0).map(ms => ms[ms.length - 1]);
     const lastCommonMonth = lastMonths.length > 0 ? lastMonths.sort()[0] : startMonth;
-    
-    endISO = format(endOfMonth(parseISO(`${lastCommonMonth}-01`)), 'yyyy-MM-dd');
     
     const allMonthsInRange = monthsBetween(startMonth, lastCommonMonth);
     
