@@ -119,6 +119,15 @@ export async function POST(req: Request) {
       .filter(row => row.date.slice(0, 7) >= simStartMonth)
       .map(row => JSON.parse(JSON.stringify(row)));
 
+    if (wire.length && wire[0].date.slice(0,7) !== startMonth) {
+      console.warn('Invariant violation: first simulation row month does not match plan start month.', { 
+          planStartDate: plan.startDate,
+          planStartMonth: getStartMonth(plan),
+          derivedStartMonth: startMonth, 
+          firstRowMonth: wire[0].date.slice(0,7) 
+      });
+    }
+
     return NextResponse.json({
         ok: true,
         meta: { startMonth, endMonth: lastCommonMonth },
