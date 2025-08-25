@@ -170,7 +170,8 @@ export default function PlanDetailPage() {
             };
             const res = await fetch('/api/simulate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+                cache: 'no-store',
                 body: JSON.stringify({ uid: user.uid, plan: plainPlan, components: plan.components }),
             });
             const data = await res.json();

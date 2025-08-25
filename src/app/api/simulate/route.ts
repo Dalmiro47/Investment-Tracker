@@ -47,6 +47,14 @@ export async function POST(req: Request) {
       });
     }));
 
+    // Hard-trim: never allow months < startMonth in the working data set
+    for (const sym of Object.keys(perSymbol)) {
+        const map = perSymbol[sym];
+        for (const m of Object.keys(map)) {
+            if (m < startMonth) delete map[m];
+        }
+    }
+
     const monthsPerSymbol = Object.values(perSymbol).map(pts => monthKeys(pts));
     if (monthsPerSymbol.every(ms => ms.length === 0)) {
         // This case can happen if no data source has any data for any symbol yet.
@@ -102,9 +110,9 @@ export async function POST(req: Request) {
             }
         }
         
-        // Trim any months beyond the common last month
+        // Extra safety: trim any months outside the simulation window
         for (const m of Object.keys(pts)) {
-            if (m > lastCommonMonth) delete pts[m];
+            if (m < startMonth || m > lastCommonMonth) delete pts[m];
         }
     }
 
@@ -119,7 +127,11 @@ export async function POST(req: Request) {
       .filter(row => row.date.slice(0, 7) >= simStartMonth)
       .map(row => JSON.parse(JSON.stringify(row)));
 
-    return NextResponse.json({ ok: true, rows: wire });
+    return NextResponse.json({
+        ok: true,
+        meta: { startMonth, endMonth: lastCommonMonth },
+        rows: wire
+    });
   } catch (e: any) {
     console.error('simulate API error:', e);
     return NextResponse.json({ ok: false, error: String(e?.message ?? 'An unknown error occurred during simulation.') }, { status: 500 });

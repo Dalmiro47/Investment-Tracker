@@ -206,9 +206,10 @@ export function simulatePlan(
       pos.units = toNum(units[pos.symbol] ?? dec(0), 8);
     });
 
-    const monthDate = parseISO(`${monthKey}-15`); // use a mid-month day to safely get a date object
+    // Use a mid-month day to safely get a date object, then format to EOM
+    const eomDate = endOfMonth(parseISO(`${monthKey}-15`));
     rows.push({
-      date: format(endOfMonth(monthDate), 'yyyy-MM-dd'),
+      date: format(eomDate, 'yyyy-MM-dd'),
       contribution: monthlyContribution,
       fees: toNum(fee),
       portfolioValue: toNum(portfolioValue),
@@ -216,5 +217,6 @@ export function simulatePlan(
     });
   }
 
-  return rows;
+  // Final safety: drop any accidental pre-start rows
+  return rows.filter(r => r.date.slice(0,7) >= planStartMonth);
 }
