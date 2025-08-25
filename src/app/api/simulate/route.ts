@@ -22,20 +22,6 @@ const monthsBetween = (start: string, end: string) => {
   return out;
 };
 
-const backfillLeft = (pts: Record<string, any>, months: string[]) => {
-  const available = Object.keys(pts).sort();
-  if (available.length === 0) return pts;
-  const first = available[0];
-  for (const m of months) {
-    if (m < first && !pts[m]) {
-      // clone first available price as constant
-      const p = pts[first];
-      pts[m] = { ...p, month: m, date: `${m}-01` };
-    }
-  }
-  return pts;
-};
-
 export async function POST(req: Request) {
   try {
     const { uid, plan, components } = await req.json();
@@ -68,24 +54,29 @@ export async function POST(req: Request) {
     const lastCommonMonth = lastMonths.sort()[0]; // earliest among those (intersection cap)
 
     endISO = format(endOfMonth(parseISO(`${lastCommonMonth}-01`)), 'yyyy-MM-dd');
-
-    // backfill left
+    
     const allMonthsInRange = monthsBetween(startMonth, lastCommonMonth);
+    
     for (const sym of Object.keys(perSymbol)) {
-      perSymbol[sym] = backfillLeft(perSymbol[sym], allMonthsInRange);
-      // Also ensure we have entries for *all* months in range (carry forward)
-      for (const m of allMonthsInRange) {
-        if (!perSymbol[sym][m]) {
-          // find the latest month < m
-          const prev = [...Object.keys(perSymbol[sym])].filter(x => x <= m).sort().pop();
-          if (prev) perSymbol[sym][m] = { ...perSymbol[sym][prev], month: m, date: `${m}-01` };
+        const pts = perSymbol[sym];
+        const firstRealMonth = Object.keys(pts).sort()[0];
+
+        // Carry-forward prices only AFTER the first real data point
+        for (const m of allMonthsInRange) {
+            if (m < firstRealMonth) continue; // Do not backfill before first real price
+            if (!pts[m]) {
+                // Find the latest month < m that exists
+                const prev = Object.keys(pts).filter(x => x < m).sort().pop();
+                if (prev) pts[m] = { ...pts[prev], month: m, date: `${m}-01` };
+            }
         }
-      }
-      // Trim any months beyond lastCommonMonth to avoid a trailing zero row
-      for (const m of Object.keys(perSymbol[sym])) {
-        if (m > lastCommonMonth) delete perSymbol[sym][m];
-      }
+        
+        // Trim any months beyond the common last month
+        for (const m of Object.keys(pts)) {
+            if (m > lastCommonMonth) delete pts[m];
+        }
     }
+
 
     const needsFx = currencies.size > 1 || (currencies.size === 1 && !currencies.has('EUR'));
     const fx = needsFx ? await getFXRatesServer(uid, startISO, endISO) : {};
