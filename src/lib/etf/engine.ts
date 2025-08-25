@@ -24,7 +24,23 @@ export interface PlanRow {
 
 type PriceMap = Record<string, Record<string, ETFPricePoint>>; // symbol -> month -> point
 type FXMap = Record<string, FXRatePoint>;                       // month -> point (EUR base)
-type EngineOptions = { allocationMode?: 'fixed' | 'rebalance' };
+type EngineOptions = { 
+  allocationMode?: 'fixed' | 'rebalance';
+  endMonth?: string;
+};
+
+
+const monthsBetween = (start: string, end: string) => {
+  const out: string[] = [];
+  const [sy, sm] = start.split('-').map(Number);
+  const [ey, em] = end.split('-').map(Number);
+  let y = sy, m = sm;
+  while (y < ey || (y === ey && m <= em)) {
+    out.push(`${y}-${String(m).padStart(2,'0')}`);
+    m++; if (m === 13) { m = 1; y++; }
+  }
+  return out;
+};
 
 
 export function getContributionForMonth(plan: ETFPlan, month: string): number {
@@ -51,10 +67,10 @@ export function simulatePlan(
 ): PlanRow[] {
   const allocationMode = options.allocationMode ?? (plan.rebalanceOnContribution ? 'rebalance' : 'fixed');
   
-  const start = endOfMonth(parseISO(plan.startDate));
   const planStartMonth = plan.startDate.slice(0,7);
-  const end = endOfMonth(new Date());
-  const months = eachMonthOfInterval({ start, end });
+  const endMonth = options.endMonth ?? new Date().toISOString().slice(0,7);
+  
+  const months = monthsBetween(planStartMonth, endMonth);
 
   // running state: units per symbol
   const units: Record<string, Big> = {};
@@ -65,9 +81,7 @@ export function simulatePlan(
 
   const rows: PlanRow[] = [];
 
-  for (const monthDate of months) {
-    const monthKey = format(monthDate, 'yyyy-MM');
-    
+  for (const monthKey of months) {
     // Engine Guard: Skip any month before the plan's start date.
     if (monthKey < planStartMonth) {
         continue;
@@ -192,6 +206,7 @@ export function simulatePlan(
       pos.units = toNum(units[pos.symbol] ?? dec(0), 8);
     });
 
+    const monthDate = parseISO(`${monthKey}-15`); // use a mid-month day to safely get a date object
     rows.push({
       date: format(endOfMonth(monthDate), 'yyyy-MM-dd'),
       contribution: monthlyContribution,

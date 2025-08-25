@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
     const startISO = format(startOfMonth(parseISO(plan.startDate)), 'yyyy-MM-dd');
     let endISO = format(endOfMonth(new Date()), 'yyyy-MM-dd');
-    const startMonth = startISO.slice(0, 7);
+    const startMonth = plan.startDate.slice(0, 7);
 
     const perSymbol: Record<string, Record<string, any>> = {};
     const currencies = new Set<string>();
@@ -103,7 +103,7 @@ export async function POST(req: Request) {
             if (m < firstRealMonth) continue; // Do not backfill before first real price
             if (!pts[m]) {
                 const prev = Object.keys(pts).filter(x => x < m).sort().pop();
-                if (prev) pts[m] = { ...pts[prev], month: m, date: `${m}-01` };
+                if (prev) pts[m] = { ...pts[prev], month: m, date: `${m}-01`, source: 'forward-fill' };
             }
         }
         
@@ -116,7 +116,7 @@ export async function POST(req: Request) {
     const needsFx = currencies.size > 1 || (currencies.size === 1 && !currencies.has('EUR'));
     const fx = needsFx ? await getFXRatesServer(uid, startISO, endISO) : {};
 
-    const simulationResult: PlanRow[] = simulatePlan(plan, components, perSymbol, fx);
+    const simulationResult: PlanRow[] = simulatePlan(plan, components, perSymbol, fx, { endMonth: lastCommonMonth });
 
     // API Guard: Sanitize the data to be plain objects and filter out pre-start rows
     const simStartMonth = plan.startDate.slice(0, 7);
