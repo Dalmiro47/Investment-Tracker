@@ -48,20 +48,15 @@ export async function POST(req: Request) {
     }));
 
     const monthsPerSymbol = Object.values(perSymbol).map(pts => monthKeys(pts));
-    if (monthsPerSymbol.some(ms => ms.length === 0)) {
-        // This case might be hit if a symbol has ZERO data in the entire plan range
-        const symbolsWithNoData = components
-            .filter((c:any) => (perSymbol[c.ticker] && Object.keys(perSymbol[c.ticker]).length === 0))
-            .map((c:any) => c.ticker);
-        
-        if(symbolsWithNoData.length > 0) {
-            return NextResponse.json({ 
-                ok: false, 
-                code: 'MISSING_PRICES',
-                message: `No price data found for: ${symbolsWithNoData.join(', ')}. Refresh data or add manual prices.`,
-                missing: [{ month: 'all', missingFor: symbolsWithNoData }]
-            }, { status: 400 });
-        }
+    if (monthsPerSymbol.every(ms => ms.length === 0)) {
+        // This case can happen if no data source has any data for any symbol yet.
+        const allSymbols = components.map((c:any) => c.ticker);
+        return NextResponse.json({ 
+            ok: false, 
+            code: 'MISSING_PRICES',
+            message: `No price data found for any symbols. Refresh data or add manual prices for the first month.`,
+            missing: [{ month: startMonth, missingFor: allSymbols }]
+        }, { status: 400 });
     }
     
     const lastMonths = monthsPerSymbol.filter(ms => ms.length > 0).map(ms => ms[ms.length - 1]);
@@ -75,7 +70,7 @@ export async function POST(req: Request) {
     const missingPrices: { month: string; missingFor: string[] }[] = [];
     for (const month of allMonthsInRange) {
         const lackingSymbols = components
-            .filter((c: any) => !perSymbol[c.ticker]?.[month])
+            .filter((c: any) => c.ticker && !perSymbol[c.ticker]?.[month])
             .map((c: any) => c.ticker);
         
         if (lackingSymbols.length > 0) {
