@@ -1,4 +1,5 @@
 
+
 import { db } from './firebase';
 import { collection, doc, writeBatch, getDocs, getDoc, addDoc, deleteDoc, serverTimestamp, query, Timestamp } from 'firebase/firestore';
 import type { ETFPlan, ETFComponent, ContributionStep } from './types.etf';
@@ -9,14 +10,49 @@ const planDoc = (uid: string, planId: string) => doc(db, 'users', uid, 'etfPlans
 const componentsCol = (uid: string, planId: string) => collection(db, 'users', uid, 'etfPlans', planId, 'components');
 const componentDoc = (uid: string, planId: string, compId: string) => doc(db, 'users', uid, 'etfPlans', planId, 'components', compId);
 
+function normalizeStart(raw: any): { startDate: string; startMonth: string } {
+  // raw can be a string 'YYYY-MM-dd', a Timestamp, or something legacy.
+  if (typeof raw === 'string') {
+    // Expecting 'YYYY-MM-dd' already; ensure month string too.
+    const startMonth = raw.slice(0, 7);
+    return { startDate: raw, startMonth };
+  }
+  if (raw && typeof raw.toDate === 'function') {
+    // Firestore Timestamp → normalize to local-agnostic month/day strings
+    const d: Date = (raw as Timestamp).toDate();
+    const start = startOfMonth(d);
+    return {
+      startDate: format(start, 'yyyy-MM-dd'),
+      startMonth: format(start, 'yyyy-MM'),
+    };
+  }
+  // Fallback: try Date constructor
+  const d = new Date(raw);
+  const start = startOfMonth(isNaN(d.getTime()) ? new Date() : d);
+  return {
+    startDate: format(start, 'yyyy-MM-dd'),
+    startMonth: format(start, 'yyyy-MM'),
+  };
+}
+
 function fromPlanDoc(snap: any): ETFPlan {
     const data = snap.data();
+    const norm = normalizeStart(data.startDate);
+
+    // Prefer stored startMonth if valid; otherwise use normalized
+    const storedStartMonth: string | undefined =
+        typeof data.startMonth === 'string' && /^\d{4}-\d{2}$/.test(data.startMonth)
+        ? data.startMonth
+        : undefined;
+
     return {
         id: snap.id,
         ...data,
-        startDate: (data.startDate as Timestamp).toDate().toISOString(),
+        startDate: norm.startDate,
+        startMonth: storedStartMonth ?? norm.startMonth,
     } as ETFPlan;
 }
+
 function fromComponentDoc(snap: any): ETFComponent {
     return {
         id: snap.id,
