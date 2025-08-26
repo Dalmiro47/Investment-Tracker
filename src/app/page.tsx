@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
@@ -82,7 +83,18 @@ export default function DashboardPage() {
       
       setInvestments(userInvestments);
       setEtfSummaries(etfSums);
-      setSellYears(years);
+
+      const yearSet = new Set<number>(years);
+      for (const s of etfSums) {
+        Object.keys(s.byYear ?? {}).forEach(y => {
+          const n = parseInt(y, 10);
+          if (!Number.isNaN(n)) yearSet.add(n);
+        });
+      }
+      yearSet.add(new Date().getFullYear());
+      const unifiedYears = Array.from(yearSet).sort((a,b) => b - a);
+      setSellYears(unifiedYears);
+      
       if (settings) {
         setTaxSettings(settings);
       }
