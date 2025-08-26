@@ -1,5 +1,4 @@
 
-
 import { db } from './firebase';
 import { collection, doc, writeBatch, getDocs, getDoc, addDoc, deleteDoc, serverTimestamp, query, Timestamp } from 'firebase/firestore';
 import type { ETFPlan, ETFComponent, ContributionStep } from './types.etf';
@@ -135,13 +134,14 @@ export async function deleteEtfPlan(uid: string, planId: string) {
     
     // Delete components subcollection
     const compsSnap = await getDocs(query(componentsCol(uid, planId)));
-    compsSnap.forEach(doc => batch.delete(doc.ref));
+    compsSnap.forEach(docu => batch.delete(docu.ref));
+
+    // Delete latest ETF sim summary
+    const latestSummaryRef = doc(db, 'users', uid, 'etfPlans', planId, 'latest_sim_summary');
+    batch.delete(latestSummaryRef);
 
     // Delete plan document
     batch.delete(planDoc(uid, planId));
     
-    // TODO: Consider deleting price data as well, or leave it for potential reuse.
-    // For now, we leave it to avoid long-running operations.
-
     await batch.commit();
 }

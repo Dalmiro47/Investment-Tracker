@@ -5,6 +5,8 @@ import { getPricePointsServer, getFXRatesServer } from '@/lib/firestore.etf.serv
 import { simulatePlan } from '@/lib/etf/engine';
 import type { PlanRow } from '@/lib/etf/engine';
 import { getStartMonth } from '@/lib/date-helpers';
+import { adminDb } from '@/lib/firebase-admin';
+import { buildSimSummary } from '@/lib/etf/sim-summary';
 
 export const runtime = 'nodejs'; // ensure Admin SDK works
 
@@ -126,6 +128,14 @@ export async function POST(req: Request) {
           derivedStartMonth: startMonth, 
           firstRowMonth: wire[0].date.slice(0,7) 
       });
+    }
+
+    try {
+        const summary = buildSimSummary(wire, startMonth, { planId: plan.id, title: plan.title, baseCurrency: plan.baseCurrency });
+        const ref = adminDb.doc(`users/${uid}/etfPlans/${plan.id}/latest_sim_summary`);
+        await ref.set(summary, { merge: true });
+    } catch (e) {
+        console.warn('Failed to persist latest ETF sim summary:', e);
     }
 
     return NextResponse.json({

@@ -1,12 +1,7 @@
 
-
-
-
-
-
 import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query, where, getDocs, collectionGroup, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues, TaxSettings } from './types';
+import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues, TaxSettings, EtfSimSummary } from './types';
 
 const investmentsCol = (uid: string) => collection(db, 'users', uid, 'investments');
 const txCol = (uid: string, invId: string) => collection(db, 'users', uid, 'investments', invId, 'transactions');
@@ -92,6 +87,13 @@ export async function getAllTransactionsForInvestments(
   });
   
   return transactionsMap;
+}
+
+export async function getAllEtfSummaries(uid: string): Promise<EtfSimSummary[]> {
+  const summariesRef = collectionGroup(db, 'latest_sim_summary');
+  const q = query(summariesRef, where('__name__', '>=', `users/${uid}/`), where('__name__', '<', `users/${uid}/\uffff`));
+  const snap = await getDocsFromServer(q);
+  return snap.docs.map(d => d.data() as EtfSimSummary);
 }
 
 export async function getSellYears(userId: string): Promise<number[]> {

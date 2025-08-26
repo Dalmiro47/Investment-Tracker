@@ -1,11 +1,10 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings } from '@/lib/types';
-import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings } from '@/lib/firestore';
+import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
+import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
@@ -33,7 +32,7 @@ import { db } from '@/lib/firebase';
 import { doc } from 'firebase/firestore';
 import { TransactionHistoryDialog } from '@/components/transaction-history-dialog';
 import { performancePct } from '@/lib/types';
-import { calculatePositionMetrics } from '@/lib/portfolio';
+import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
 
 
 export default function DashboardPage() {
@@ -41,6 +40,7 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const router = useRouter();
   const [investments, setInvestments] = useState<Investment[]>([]);
+  const [etfSummaries, setEtfSummaries] = useState<EtfSimSummary[]>([]);
   const [transactionsMap, setTransactionsMap] = useState<Record<string, Transaction[]>>({});
   const [sellYears, setSellYears] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
@@ -73,13 +73,15 @@ export default function DashboardPage() {
   const fetchAllData = async (userId: string) => {
     setLoading(true);
     try {
-      const [userInvestments, years, settings] = await Promise.all([
+      const [userInvestments, etfSums, years, settings] = await Promise.all([
         getInvestments(userId),
+        getAllEtfSummaries(userId),
         getSellYears(userId),
         getTaxSettings(userId),
       ]);
       
       setInvestments(userInvestments);
+      setEtfSummaries(etfSums);
       setSellYears(years);
       if (settings) {
         setTaxSettings(settings);
@@ -177,6 +179,11 @@ export default function DashboardPage() {
     }
     return metricsMap;
   }, [filteredAndSortedInvestments, transactionsMap, yearFilter]);
+  
+  const summaryData = useMemo(() => {
+    return aggregateByType(investments, transactionsMap, etfSummaries, yearFilter, isTaxView ? taxSettings : null);
+  }, [investments, transactionsMap, etfSummaries, yearFilter, isTaxView, taxSettings]);
+
 
   const handleAddClick = () => {
     setEditingInvestment(undefined);
@@ -276,8 +283,7 @@ export default function DashboardPage() {
         />
         <main className="p-4 sm:p-6 lg:p-8">
           <PortfolioSummary 
-            investments={investments} 
-            transactionsMap={transactionsMap} 
+            summaryData={summaryData}
             sellYears={sellYears} 
             isTaxView={isTaxView}
             taxSettings={taxSettings}

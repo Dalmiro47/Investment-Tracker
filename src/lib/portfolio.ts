@@ -1,5 +1,5 @@
 
-import type { Investment, Transaction, YearFilter, TaxSettings } from '@/lib/types';
+import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
 import { dec, add, sub, mul, div, toNum } from '@/lib/money';
 import { isCryptoSellTaxFree, calcCapitalTax, calcCryptoTax, CapitalTaxResult, CryptoTaxResult } from './tax';
 import { differenceInDays, parseISO } from 'date-fns';
@@ -176,9 +176,37 @@ export interface AggregatedSummary {
   taxSummary: YearTaxSummary | null;
 }
 
+function getEtfMetrics(etfSummaries: EtfSimSummary[], filter: YearFilter): {
+  costBasis: number, marketValue: number, realizedPL: number, unrealizedPL: number
+} {
+  let costBasis = 0;
+  let marketValue = 0;
+  let unrealizedPL = 0;
+  const realizedPL = 0; // ETFs are buy-and-hold, no realized P/L in this model
+
+  if (filter.kind === 'all') {
+      etfSummaries.forEach(s => {
+          costBasis += s.lifetime.contrib;
+          marketValue += s.lifetime.marketValue;
+          unrealizedPL += s.lifetime.unrealizedPL;
+      });
+  } else {
+      etfSummaries.forEach(s => {
+          const yearData = s.byYear[filter.year];
+          if (yearData) {
+              costBasis += yearData.contrib; // Cost basis for the year is the contribution for that year
+              marketValue += yearData.endValue;
+              unrealizedPL += yearData.unrealizedPL; // Use the lifetime P/L up to that year's end for a consistent view
+          }
+      });
+  }
+  return { costBasis, marketValue, realizedPL, unrealizedPL };
+}
+
 export function aggregateByType(
   investments: Investment[],
   transactionsMap: Record<string, Transaction[]>,
+  etfSummaries: EtfSimSummary[],
   filter: YearFilter,
   taxSettings: TaxSettings | null
 ): AggregatedSummary {
@@ -210,7 +238,7 @@ export function aggregateByType(
             .filter(p => p.purchaseValue > 0);
     }
     
-    // Step 2: Aggregate financial metrics by type
+    // Step 2: Aggregate financial metrics by type for manual investments
     const byType: Record<string, any> = {};
     metricsPerInvestment.forEach(p => {
         if (!byType[p.type]) {
@@ -239,14 +267,39 @@ export function aggregateByType(
         performancePct: toNum(t.purchaseValue.gt(0) ? div(t.totalPL, t.purchaseValue) : dec(0), 4),
         economicValue: toNum(add(t.marketValue, t.realizedPL)),
     }));
+
+    // Step 3: Add aggregated ETF data as a new row
+    if (etfSummaries.length > 0) {
+      const etfMetrics = getEtfMetrics(etfSummaries, filter);
+      if (etfMetrics.costBasis > 0 || etfMetrics.marketValue > 0) {
+        const totalPL = etfMetrics.realizedPL + etfMetrics.unrealizedPL;
+        rows.push({
+            type: 'ETF',
+            costBasis: etfMetrics.costBasis,
+            marketValue: etfMetrics.marketValue,
+            realizedPL: etfMetrics.realizedPL,
+            unrealizedPL: etfMetrics.unrealizedPL,
+            totalPL: totalPL,
+            performancePct: etfMetrics.costBasis > 0 ? totalPL / etfMetrics.costBasis : 0,
+            economicValue: etfMetrics.marketValue + etfMetrics.realizedPL,
+        });
+      }
+    }
     
+    // Step 4: Calculate final totals
     const totals = rows.reduce((acc, row) => {
         acc.costBasis += row.costBasis;
         acc.marketValue += row.marketValue;
         acc.realizedPL += row.realizedPL;
         acc.unrealizedPL += row.unrealizedPL;
         acc.totalPL += row.totalPL;
-        acc.purchaseValue = add(acc.purchaseValue, byType[row.type].purchaseValue);
+        const typeSummary = byType[row.type];
+        if(typeSummary) {
+          acc.purchaseValue = add(acc.purchaseValue, typeSummary.purchaseValue);
+        } else if (row.type === 'ETF') {
+          // For ETFs, the "purchase value" for performance calculation is just the cost basis (total contributions)
+          acc.purchaseValue = add(acc.purchaseValue, dec(row.costBasis));
+        }
         return acc;
     }, { costBasis: 0, marketValue: 0, realizedPL: 0, unrealizedPL: 0, totalPL: 0, purchaseValue: dec(0) });
 
@@ -260,7 +313,7 @@ export function aggregateByType(
         economicValue: totals.marketValue + totals.realizedPL,
     };
     
-    // Step 3: Calculate tax summary if applicable
+    // Step 5: Calculate tax summary if applicable
     let taxSummary: YearTaxSummary | null = null;
     if (filter.kind === 'year' && taxSettings) {
         const capitalIncome = metricsPerInvestment

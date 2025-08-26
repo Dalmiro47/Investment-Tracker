@@ -55,6 +55,34 @@ export interface Investment {
   updatedAt?: string;
 }
 
+export interface EtfSimYearBucket {
+  year: number;
+  contrib: number;
+  fees: number;
+  endValue: number;
+  endDate: string | null;
+  cumContribToDate: number;
+  unrealizedPL: number;
+  performance: number;
+};
+
+export interface EtfSimSummary {
+  planId: string;
+  title: string;
+  baseCurrency: 'EUR';
+  startMonth: string;
+  endMonth: string;
+  lastRunAt: string; // ISO
+  lifetime: {
+    contrib: number;
+    fees: number;
+    marketValue: number;
+    unrealizedPL: number;
+    performance: number;
+  };
+  byYear: Record<string, EtfSimYearBucket>;
+};
+
 
 // Schema for adding/editing a new investment (the initial purchase)
 export const investmentSchema = z.object({
@@ -132,5 +160,3 @@ export function performancePct(inv: Investment): number {
     
     return (totalValue - totalCost) / totalCost;
 }
-
-    

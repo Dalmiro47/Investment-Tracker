@@ -1,9 +1,8 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect } from 'react';
-import type { Investment, Transaction, YearFilter, TaxSettings } from '@/lib/types';
+import type { Investment, Transaction, YearFilter, TaxSettings, AggregatedSummary } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
@@ -11,7 +10,7 @@ import { PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
 import { TrendingUp, TrendingDown, Info, Scale } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatPercent, toNum } from '@/lib/money';
-import { aggregateByType, AggregatedSummary, YearTaxSummary } from '@/lib/portfolio';
+import { YearTaxSummary } from '@/lib/portfolio';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Skeleton } from './ui/skeleton';
 import { Button } from './ui/button';
@@ -126,8 +125,7 @@ const getSummaryContext = (filter: YearFilter): { title: string, description: st
 }
 
 interface PortfolioSummaryProps {
-    investments: Investment[];
-    transactionsMap: Record<string, Transaction[]>;
+    summaryData: AggregatedSummary | null;
     sellYears: number[];
     isTaxView: boolean;
     taxSettings: TaxSettings | null;
@@ -136,8 +134,7 @@ interface PortfolioSummaryProps {
 }
 
 export default function PortfolioSummary({ 
-    investments, 
-    transactionsMap, 
+    summaryData, 
     sellYears, 
     isTaxView, 
     taxSettings,
@@ -163,13 +160,6 @@ export default function PortfolioSummary({
         }
     };
 
-    const summaryData: AggregatedSummary | null = useMemo(() => {
-        if (investments.length === 0 || Object.keys(transactionsMap).length === 0) {
-            return null;
-        }
-        return aggregateByType(investments, transactionsMap, yearFilter, isTaxView ? taxSettings : null);
-    }, [investments, transactionsMap, yearFilter, isTaxView, taxSettings]);
-    
     const chartData = useMemo(() => {
         if (!summaryData) return [];
 
@@ -194,17 +184,8 @@ export default function PortfolioSummary({
 
     }, [summaryData, donutMode]);
 
-    if (investments.length === 0) {
+    if (!summaryData || summaryData.rows.length === 0) {
         return null;
-    }
-
-    if (!summaryData) {
-        return (
-            <Card>
-                <CardHeader><CardTitle className="font-headline text-2xl">Portfolio Summary</CardTitle></CardHeader>
-                <CardContent><Skeleton className="h-48 w-full" /></CardContent>
-            </Card>
-        )
     }
 
     const { rows, totals, taxSummary } = summaryData;
