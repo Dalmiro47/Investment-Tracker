@@ -402,11 +402,11 @@ export default function PortfolioSummary({
                                 />
                                 <Pie
                                     data={chartData} dataKey="value" nameKey="name"
-                                    cx="50%" cy="50%" outerRadius={100} innerRadius={60}
+                                    cx="50%" cy="50%" outerRadius={80} innerRadius={50}
                                     paddingAngle={2} labelLine={false}
                                     label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
                                         const RADIAN = Math.PI / 180;
-                                        const radius = innerRadius + (outerRadius - innerRadius) * 1.25;
+                                        const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
                                         const x = cx + radius * Math.cos(-midAngle * RADIAN);
                                         const y = cy + radius * Math.sin(-midAngle * RADIAN);
                                         const percentage = (percent * 100).toFixed(0);
