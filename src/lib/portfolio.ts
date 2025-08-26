@@ -2,7 +2,7 @@
 import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
 import { dec, add, sub, mul, div, toNum } from '@/lib/money';
 import { isCryptoSellTaxFree, calcCapitalTax, calcCryptoTax, CapitalTaxResult, CryptoTaxResult } from './tax';
-import { differenceInDays, parseISO } from 'date-fns';
+import { differenceInDays, parseISO, endOfYear } from 'date-fns';
 
 export interface PositionMetrics {
   // Base metrics
@@ -221,14 +221,38 @@ export function aggregateByType(
             }
         });
 
-        const isActive = (inv: Investment) => (inv.purchaseQuantity ?? 0) > (inv.totalSoldQty ?? 0);
+        // active today?
+        const isActiveToday = (inv: Investment) => (inv.purchaseQuantity ?? 0) > (inv.totalSoldQty ?? 0);
+
+        // existed by the end of the selected year?
+        const existedByYearEnd = (inv: Investment, year: number) => {
+          const p = parseISO(inv.purchaseDate);
+          // use UTC end-of-year to avoid TZ skews
+          const eoy = endOfYear(new Date(Date.UTC(year, 0, 1)));
+          return p.getTime() <= eoy.getTime();
+        };
 
         let include: (inv: Investment) => boolean;
         switch (filter.mode) {
-            case 'realized': include = (inv) => investmentsWithSellsInYear.has(inv.id); break;
-            case 'holdings': include = (inv) => isActive(inv); break;
-            case 'combined': default: include = (inv) => investmentsWithSellsInYear.has(inv.id) || isActive(inv); break;
+          case 'realized':
+            // only assets with sells in that year
+            include = (inv) => investmentsWithSellsInYear.has(inv.id);
+            break;
+
+          case 'holdings':
+            // open positions that already existed by year end
+            include = (inv) => isActiveToday(inv) && existedByYearEnd(inv, filter.year);
+            break;
+
+          case 'combined':
+          default:
+            // union of realized for that year + holdings that existed by year end
+            include = (inv) =>
+              investmentsWithSellsInYear.has(inv.id) ||
+              (isActiveToday(inv) && existedByYearEnd(inv, filter.year));
+            break;
         }
+
         metricsPerInvestment = investments
             .filter(include)
             .map(inv => calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], filter));
