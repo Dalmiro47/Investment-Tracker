@@ -132,7 +132,7 @@ export async function POST(req: Request) {
 
     try {
         const summary = buildSimSummary(wire, startMonth, { planId: plan.id, title: plan.title, baseCurrency: plan.baseCurrency });
-        const ref = adminDb.doc(`users/${uid}/etfPlans/${plan.id}/latest_sim_summary`);
+        const ref = adminDb.doc(`users/${uid}/etfPlans/${plan.id}/latest_sim_summary/latest`);
         await ref.set(summary, { merge: true });
     } catch (e) {
         console.warn('Failed to persist latest ETF sim summary:', e);

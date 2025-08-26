@@ -137,7 +137,7 @@ export async function deleteEtfPlan(uid: string, planId: string) {
     compsSnap.forEach(docu => batch.delete(docu.ref));
 
     // Delete latest ETF sim summary
-    const latestSummaryRef = doc(db, 'users', uid, 'etfPlans', planId, 'latest_sim_summary');
+    const latestSummaryRef = doc(db, 'users', uid, 'etfPlans', planId, 'latest_sim_summary', 'latest');
     batch.delete(latestSummaryRef);
 
     // Delete plan document

@@ -54,6 +54,7 @@ export function buildSimSummary(rows: PlanRow[], startMonth: string, planMeta: {
     if (!byYear[y]) byYear[y] = { year: parseInt(y), contrib: 0, fees: 0, endValue: 0, endDate: null, cumContribToDate: 0, unrealizedPL: 0, performance: 0 };
     byYear[y].contrib += r.contribution;
     byYear[y].fees += r.fees;
+    totalFees += r.fees;
     // overwrite so the last row in the year wins
     byYear[y].endValue = r.portfolioValue;
     byYear[y].endDate = r.date;

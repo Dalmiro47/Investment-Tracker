@@ -90,10 +90,19 @@ export async function getAllTransactionsForInvestments(
 }
 
 export async function getAllEtfSummaries(uid: string): Promise<EtfSimSummary[]> {
-  const summariesRef = collectionGroup(db, 'latest_sim_summary');
-  const q = query(summariesRef, where('__name__', '>=', `users/${uid}/`), where('__name__', '<', `users/${uid}/\uffff`));
-  const snap = await getDocsFromServer(q);
-  return snap.docs.map(d => d.data() as EtfSimSummary);
+  // list user's ETF plans
+  const plansRef = collection(db, 'users', uid, 'etfPlans');
+  const plansSnap = await getDocsFromServer(plansRef);
+
+  // fetch each plan's latest summary doc in parallel
+  const reads = plansSnap.docs.map(async (p) => {
+    const sRef = doc(db, 'users', uid, 'etfPlans', p.id, 'latest_sim_summary', 'latest');
+    const sSnap = await getDoc(sRef);
+    return sSnap.exists() ? (sSnap.data() as EtfSimSummary) : null;
+  });
+
+  const results = await Promise.all(reads);
+  return results.filter((x): x is EtfSimSummary => !!x);
 }
 
 export async function getSellYears(userId: string): Promise<number[]> {
