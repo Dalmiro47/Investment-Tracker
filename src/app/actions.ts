@@ -7,6 +7,7 @@ interface UpdateResult {
   success: boolean;
   message: string;
   updatedInvestments: Investment[];
+  failedInvestmentNames?: string[];
 }
 
 // Fetches price from Yahoo Finance for Stocks/ETFs
@@ -24,7 +25,7 @@ async function getStockPrice(ticker: string): Promise<number | null> {
     if (price) {
       return price;
     }
-    console.warn(`Price not found in response for stock/ETF ticker: ${ticker}`, response.data);
+    console.warn(`Price not found in response for stock/ETF ticker: ${ticker}`, JSON.stringify(response.data, null, 2));
     return null;
   } catch (error: any) {
     // Log more detailed error information
@@ -39,17 +40,22 @@ async function getCryptoPrice(id: string): Promise<number | null> {
   try {
     const response = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${id.toLowerCase()}&vs_currencies=eur`);
     const price = response.data[id.toLowerCase()]?.eur;
-    return price || null;
-  } catch (error) {
-    console.warn(`Failed to fetch price for crypto ID: ${id}`, error);
+    
+    if (price) {
+        return price;
+    }
+    console.warn(`Price not found in response for crypto ID: ${id}. Full response:`, JSON.stringify(response.data, null, 2));
+    return null;
+  } catch (error: any) {
+    console.error(`Failed to fetch price for crypto ID: ${id}. Status: ${error.response?.status}. Data: ${JSON.stringify(error.response?.data)}`);
     return null;
   }
 }
 
 export async function refreshInvestmentPrices(currentInvestments: Investment[]): Promise<UpdateResult> {
   try {
-    let failedCount = 0;
     const investmentsToUpdate: Investment[] = [];
+    const failedInvestments: string[] = [];
 
     const priceFetchPromises = currentInvestments.map(async (inv) => {
       // Do not refresh prices for sold investments
@@ -68,13 +74,14 @@ export async function refreshInvestmentPrices(currentInvestments: Investment[]):
       if (newPrice !== null && newPrice !== inv.currentValue) {
         investmentsToUpdate.push({ ...inv, currentValue: newPrice });
       } else if (newPrice === null && (inv.type === 'Stock' || inv.type === 'ETF' || inv.type === 'Crypto')) {
-        failedCount++;
+        failedInvestments.push(inv.name);
       }
     });
 
     await Promise.all(priceFetchPromises);
     
     const updatedCount = investmentsToUpdate.length;
+    const failedCount = failedInvestments.length;
 
     let message = `Successfully updated ${updatedCount} investments.`;
     if (failedCount > 0) {
@@ -84,7 +91,12 @@ export async function refreshInvestmentPrices(currentInvestments: Investment[]):
         message = 'All investment prices are already up-to-date.'
     }
 
-    return { success: true, updatedInvestments: investmentsToUpdate, message };
+    return { 
+        success: true, 
+        updatedInvestments: investmentsToUpdate, 
+        message, 
+        failedInvestmentNames: failedInvestments 
+    };
   } catch (error) {
     console.error('Error refreshing investment prices:', error);
     return { success: false, updatedInvestments: [], message: 'An unexpected error occurred while refreshing prices.' };
