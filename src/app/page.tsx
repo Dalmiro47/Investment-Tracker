@@ -139,26 +139,16 @@ export default function DashboardPage() {
         await fetchAllData(user.uid);
     }
 
-    const updatedCount = result.updatedInvestments.length;
     const failedCount = result.failedInvestmentNames?.length ?? 0;
     
-    let toastTitle = "Update Complete";
-    let toastDescription = `Successfully updated ${updatedCount} investments.`;
     let toastVariant: "default" | "destructive" = "default";
-
-    if (failedCount > 0) {
-        toastDescription += ` Failed to update: ${result.failedInvestmentNames?.join(', ')}. Please check their tickers.`;
-        if (updatedCount === 0) {
-            toastTitle = "Update Failed";
-            toastVariant = "destructive";
-        }
-    } else if (updatedCount === 0) {
-        toastDescription = 'All investment prices are already up-to-date.';
+    if (failedCount > 0 && result.updatedInvestments.length === 0) {
+        toastVariant = "destructive";
     }
 
     toast({
-        title: toastTitle,
-        description: toastDescription,
+        title: toastVariant === "destructive" ? "Update Failed" : "Update Complete",
+        description: result.message,
         variant: toastVariant,
         duration: failedCount > 0 ? 10000 : 5000,
     });

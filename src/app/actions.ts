@@ -158,11 +158,16 @@ export async function refreshInvestmentPrices(
     );
 
     const idByInvestmentId = new Map<string, string>();
+    const unresolvedCrypto = new Set<string>(); // mark unresolved once
+
     await Promise.all(
       cryptoItems.map(async (inv) => {
         const id = await resolveCryptoId(inv.ticker!);
-        if (id) idByInvestmentId.set(inv.id, id);
-        else failed.push(inv.name);
+        if (id) {
+          idByInvestmentId.set(inv.id, id);
+        } else {
+          unresolvedCrypto.add(inv.id); // <-- mark only; don't push to failed yet
+        }
       })
     );
 
@@ -171,15 +176,22 @@ export async function refreshInvestmentPrices(
     const cryptoPrices = await fetchCryptoPrices(cryptoIds);
 
     // 3) Apply crypto updates
+    const EPS = 1e-6; // tolerance for detecting change
     for (const inv of cryptoItems) {
-      const id = idByInvestmentId.get(inv.id);
-      const price =
-        id ? cryptoPrices[id.toLowerCase()] : undefined;
+      if (unresolvedCrypto.has(inv.id)) {
+        failed.push(inv.name); // count once here
+        continue;
+      }
+      const id = idByInvestmentId.get(inv.id)!;
+      const price = cryptoPrices[id.toLowerCase()];
+
       if (price == null) {
         failed.push(inv.name);
         continue;
       }
-      if (price !== inv.currentValue) {
+      
+      const curr = inv.currentValue ?? null;
+      if (curr === null || Math.abs(price - curr) > EPS) {
         updates.push({ ...inv, currentValue: price });
       }
     }
@@ -198,7 +210,8 @@ export async function refreshInvestmentPrices(
         failed.push(inv.name);
         return;
       }
-      if (price !== inv.currentValue) {
+      const curr = inv.currentValue ?? null;
+      if (curr === null || Math.abs(price - curr) > EPS) {
         updates.push({ ...inv, currentValue: price });
       }
     });
