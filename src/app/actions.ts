@@ -1,3 +1,4 @@
+
 'use server';
 
 import type { Investment } from '@/lib/types';
@@ -7,86 +8,237 @@ interface UpdateResult {
   success: boolean;
   message: string;
   updatedInvestments: Investment[];
+  failedInvestmentNames?: string[];
 }
 
-// Fetches price from Yahoo Finance for Stocks/ETFs
+/* ---------------- Helpers ---------------- */
+
+function compressNames(names: string[]): string {
+  const counts = names.reduce<Record<string, number>>((m, n) => {
+    m[n] = (m[n] ?? 0) + 1;
+    return m;
+  }, {});
+  return Object.entries(counts)
+    .map(([n, c]) => (c > 1 ? `${n} ×${c}` : n))
+    .join(', ');
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T) => Promise<R>
+): Promise<R[]> {
+  const queue = [...items];
+  const results: R[] = [];
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (queue.length) {
+      const item = queue.shift()!;
+      results.push(await fn(item));
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/* ---------------- Stocks / ETFs (Yahoo) ---------------- */
+
 async function getStockPrice(ticker: string): Promise<number | null> {
   if (!ticker) return null;
   try {
-    // Using the v8 chart endpoint can be more reliable
-    const response = await axios.get(`https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?region=DE&lang=en-US&interval=1d&range=1d`);
-    const result = response.data?.chart?.result?.[0];
-    const meta = result?.meta;
-    
-    // Prioritize the most "live" price available
-    const price = meta?.preMarketPrice || meta?.postMarketPrice || meta?.regularMarketPrice;
-    
-    if (price) {
-      return price;
-    }
-    console.warn(`Price not found in response for stock/ETF ticker: ${ticker}`, response.data);
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
+      ticker
+    )}?region=DE&lang=en-US&interval=1d&range=1d&includePrePost=true`;
+    const { data } = await axios.get(url);
+    const meta = data?.chart?.result?.[0]?.meta;
+    const price =
+      meta?.preMarketPrice ?? meta?.postMarketPrice ?? meta?.regularMarketPrice;
+    if (price != null) return price;
+    console.warn(`Price not found in Yahoo response for ${ticker}`, data);
     return null;
   } catch (error: any) {
-    // Log more detailed error information
-    console.error(`Failed to fetch price for stock/ETF ticker: ${ticker}. Status: ${error.response?.status}. Data: ${JSON.stringify(error.response?.data)}`);
+    console.error(
+      `Failed to fetch price for ${ticker}. Status: ${error.response?.status}. Data: ${JSON.stringify(
+        error.response?.data
+      )}`
+    );
     return null;
   }
 }
 
-// Fetches price from CoinGecko for Crypto
-async function getCryptoPrice(id: string): Promise<number | null> {
-  if (!id) return null;
+/* ---------------- Crypto (CoinGecko) ---------------- */
+
+const COINGECKO_ID_ALIASES: Record<string, string> = {
+  btc: 'bitcoin',
+  xbt: 'bitcoin',
+  bitcoin: 'bitcoin',
+  eth: 'ethereum',
+  ether: 'ethereum',
+  ethereum: 'ethereum',
+  sol: 'solana',
+  solana: 'solana',
+  ada: 'cardano',
+  bnb: 'binancecoin',
+  xrp: 'ripple',
+  doge: 'dogecoin',
+  matic: 'matic-network',
+  avax: 'avalanche-2',
+  dot: 'polkadot',
+};
+
+async function resolveCryptoId(symOrId: string): Promise<string | null> {
+  const key = symOrId?.trim().toLowerCase();
+  if (!key) return null;
+  if (COINGECKO_ID_ALIASES[key]) return COINGECKO_ID_ALIASES[key];
+
   try {
-    const response = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${id.toLowerCase()}&vs_currencies=eur`);
-    const price = response.data[id.toLowerCase()]?.eur;
-    return price || null;
-  } catch (error) {
-    console.warn(`Failed to fetch price for crypto ID: ${id}`, error);
-    return null;
+    const { data } = await axios.get(
+      `https://api.coingecko.com/api/v3/search?query=${encodeURIComponent(key)}`
+    );
+    const coins: any[] = data?.coins ?? [];
+    const bySymbol = coins.find((c) => c?.symbol?.toLowerCase() === key);
+    if (bySymbol?.id) return bySymbol.id;
+    const byId = coins.find((c) => c?.id?.toLowerCase() === key);
+    if (byId?.id) return byId.id;
+    if (coins[0]?.id) return coins[0].id;
+  } catch (err: any) {
+    console.warn(
+      `CoinGecko search failed for "${key}":`,
+      err.response?.status,
+      err.response?.data
+    );
   }
+  return null;
 }
 
-export async function refreshInvestmentPrices(currentInvestments: Investment[]): Promise<UpdateResult> {
-  try {
-    let failedCount = 0;
-    const investmentsToUpdate: Investment[] = [];
+// Batched crypto fetch
+async function fetchCryptoPrices(ids: string[]): Promise<Record<string, number>> {
+  const unique = Array.from(new Set(ids.map((i) => i.toLowerCase()))).filter(Boolean);
+  if (unique.length === 0) return {};
+  // CoinGecko simple/price allows a lot of ids; chunk for safety
+  const chunkSize = 150;
+  const chunks: string[][] = [];
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    chunks.push(unique.slice(i, i + chunkSize));
+  }
 
-    const priceFetchPromises = currentInvestments.map(async (inv) => {
-      // Do not refresh prices for sold investments
-      if (inv.status === 'Sold') {
-        return;
+  const out: Record<string, number> = {};
+  for (const group of chunks) {
+    try {
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(
+        group.join(',')
+      )}&vs_currencies=eur`;
+      const { data } = await axios.get(url);
+      for (const id of group) {
+        const p = data?.[id]?.eur;
+        if (p != null) out[id] = p;
+      }
+    } catch (error: any) {
+      console.error(
+        `CoinGecko batch failed (ids=${group.join(',')}). Status: ${error.response?.status}. Data: ${JSON.stringify(
+          error.response?.data
+        )}`
+      );
+    }
+  }
+  return out;
+}
+
+/* ---------------- Refresh pipeline ---------------- */
+
+export async function refreshInvestmentPrices(
+  currentInvestments: Investment[]
+): Promise<UpdateResult> {
+  try {
+    const updates: Investment[] = [];
+    const failed: string[] = [];
+
+    // 1) Prepare crypto ids
+    const cryptoItems = currentInvestments.filter(
+      (inv) => inv.status !== 'Sold' && inv.type === 'Crypto' && !!inv.ticker
+    );
+
+    const idByInvestmentId = new Map<string, string>();
+    const unresolvedCrypto = new Set<string>(); // mark unresolved once
+
+    await Promise.all(
+      cryptoItems.map(async (inv) => {
+        const id = await resolveCryptoId(inv.ticker!);
+        if (id) {
+          idByInvestmentId.set(inv.id, id);
+        } else {
+          unresolvedCrypto.add(inv.id); // <-- mark only; don't push to failed yet
+        }
+      })
+    );
+
+    // 2) Fetch crypto prices in one (batched) call
+    const cryptoIds = Array.from(new Set(Array.from(idByInvestmentId.values())));
+    const cryptoPrices = await fetchCryptoPrices(cryptoIds);
+
+    // 3) Apply crypto updates
+    const EPS = 1e-6; // tolerance for detecting change
+    for (const inv of cryptoItems) {
+      if (unresolvedCrypto.has(inv.id)) {
+        failed.push(inv.name); // count once here
+        continue;
+      }
+      const id = idByInvestmentId.get(inv.id)!;
+      const price = cryptoPrices[id.toLowerCase()];
+
+      if (price == null) {
+        failed.push(inv.name);
+        continue;
       }
       
-      let newPrice: number | null = null;
-      if ((inv.type === 'Stock' || inv.type === 'ETF') && inv.ticker) {
-        newPrice = await getStockPrice(inv.ticker);
-      } else if (inv.type === 'Crypto' && inv.ticker) {
-        newPrice = await getCryptoPrice(inv.ticker);
+      const curr = inv.currentValue ?? null;
+      if (curr === null || Math.abs(price - curr) > EPS) {
+        updates.push({ ...inv, currentValue: price });
       }
+    }
 
-      // Check if new price is valid and different from the old one (or if old one was null/0)
-      if (newPrice !== null && newPrice !== inv.currentValue) {
-        investmentsToUpdate.push({ ...inv, currentValue: newPrice });
-      } else if (newPrice === null && (inv.type === 'Stock' || inv.type === 'ETF' || inv.type === 'Crypto')) {
-        failedCount++;
+    // 4) Stocks/ETFs with limited concurrency (avoid throttling)
+    const stockEtfItems = currentInvestments.filter(
+      (inv) =>
+        inv.status !== 'Sold' &&
+        (inv.type === 'Stock' || inv.type === 'ETF') &&
+        !!inv.ticker
+    );
+
+    await mapWithConcurrency(stockEtfItems, 5, async (inv) => {
+      const price = await getStockPrice(inv.ticker!);
+      if (price == null) {
+        failed.push(inv.name);
+        return;
+      }
+      const curr = inv.currentValue ?? null;
+      if (curr === null || Math.abs(price - curr) > EPS) {
+        updates.push({ ...inv, currentValue: price });
       }
     });
 
-    await Promise.all(priceFetchPromises);
-    
-    const updatedCount = investmentsToUpdate.length;
+    // 5) Message
+    const updatedCount = updates.length;
+    const failedCount = failed.length;
 
     let message = `Successfully updated ${updatedCount} investments.`;
     if (failedCount > 0) {
-        message += ` Failed to fetch prices for ${failedCount} investments. Please check their tickers.`;
-    }
-    if(updatedCount === 0 && failedCount === 0) {
-        message = 'All investment prices are already up-to-date.'
+      message += ` Failed to update: ${compressNames(failed)}.`;
+    } else if (updatedCount === 0) {
+      message = 'All investment prices are already up-to-date.';
     }
 
-    return { success: true, updatedInvestments: investmentsToUpdate, message };
-  } catch (error) {
-    console.error('Error refreshing investment prices:', error);
-    return { success: false, updatedInvestments: [], message: 'An unexpected error occurred while refreshing prices.' };
+    return {
+      success: true,
+      updatedInvestments: updates,
+      message,
+      failedInvestmentNames: failed,
+    };
+  } catch (err) {
+    console.error('Error refreshing investment prices:', err);
+    return {
+      success: false,
+      updatedInvestments: [],
+      message: 'An unexpected error occurred while refreshing prices.',
+    };
   }
 }

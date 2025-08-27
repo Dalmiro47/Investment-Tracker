@@ -122,34 +122,39 @@ export default function DashboardPage() {
 
   const handleRefreshPrices = async () => {
     if (!user || isRefreshing) return;
-    
+
     setIsRefreshing(true);
     toast({ title: 'Refreshing Prices...', description: 'Please wait while we fetch the latest data.' });
-    
+
     const result = await refreshInvestmentPrices(investments);
 
     if (result.success && result.updatedInvestments.length > 0) {
         const batch = writeBatch(db);
-        
         result.updatedInvestments.forEach((updatedInv) => {
             const investmentRef = doc(db, 'users', user.uid, 'investments', updatedInv.id);
             batch.update(investmentRef, { currentValue: updatedInv.currentValue });
         });
-
         await batch.commit();
-
         await new Promise(resolve => setTimeout(resolve, 300));
         await fetchAllData(user.uid);
     }
 
+    const failedCount = result.failedInvestmentNames?.length ?? 0;
+    
+    let toastVariant: "default" | "destructive" = "default";
+    if (failedCount > 0 && result.updatedInvestments.length === 0) {
+        toastVariant = "destructive";
+    }
+
     toast({
-        title: "Update Complete",
+        title: toastVariant === "destructive" ? "Update Failed" : "Update Complete",
         description: result.message,
-        variant: result.success ? "default" : "destructive",
+        variant: toastVariant,
+        duration: failedCount > 0 ? 10000 : 5000,
     });
 
     setIsRefreshing(false);
-  }
+}
 
   const filteredAndSortedInvestments = useMemo(() => {
     let filtered = [...investments];
