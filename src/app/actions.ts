@@ -1,3 +1,4 @@
+
 'use server';
 
 import type { Investment } from '@/lib/types';
@@ -70,11 +71,17 @@ export async function refreshInvestmentPrices(currentInvestments: Investment[]):
         newPrice = await getCryptoPrice(inv.ticker);
       }
 
-      // Check if new price is valid and different from the old one (or if old one was null/0)
-      if (newPrice !== null && newPrice !== inv.currentValue) {
+      if (newPrice === null) {
+        // Only mark as failed if the type is one that should have a price
+        if (['Stock', 'ETF', 'Crypto'].includes(inv.type)) {
+            failedInvestments.push(inv.name);
+        }
+        return; // Skip to next investment
+      }
+
+      // Only add to update list if the new price is actually different
+      if (newPrice !== inv.currentValue) {
         investmentsToUpdate.push({ ...inv, currentValue: newPrice });
-      } else if (newPrice === null && (inv.type === 'Stock' || inv.type === 'ETF' || inv.type === 'Crypto')) {
-        failedInvestments.push(inv.name);
       }
     });
 
@@ -85,9 +92,8 @@ export async function refreshInvestmentPrices(currentInvestments: Investment[]):
 
     let message = `Successfully updated ${updatedCount} investments.`;
     if (failedCount > 0) {
-        message += ` Failed to fetch prices for ${failedCount} investments. Please check their tickers.`;
-    }
-    if(updatedCount === 0 && failedCount === 0) {
+        message += ` Failed to fetch prices for ${failedCount} investments: ${failedInvestments.join(', ')}.`;
+    } else if (updatedCount === 0 && failedCount === 0) {
         message = 'All investment prices are already up-to-date.'
     }
 
