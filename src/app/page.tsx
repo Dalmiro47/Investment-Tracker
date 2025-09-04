@@ -139,10 +139,8 @@ export default function DashboardPage() {
         await fetchAllData(user.uid);
     }
 
-    const failedCount = result.failedInvestmentNames?.length ?? 0;
-    
     let toastVariant: "default" | "destructive" = "default";
-    if (failedCount > 0 && result.updatedInvestments.length === 0) {
+    if ((result.failedInvestmentNames?.length ?? 0) > 0 && result.updatedInvestments.length === 0) {
         toastVariant = "destructive";
     }
 
@@ -150,11 +148,28 @@ export default function DashboardPage() {
         title: toastVariant === "destructive" ? "Update Failed" : "Update Complete",
         description: result.message,
         variant: toastVariant,
-        duration: failedCount > 0 ? 10000 : 5000,
+        duration: (result.failedInvestmentNames?.length ?? 0) > 0 ? 10000 : 5000,
     });
 
     setIsRefreshing(false);
 }
+
+  const typeCounts = useMemo(() => {
+    const counts: Record<InvestmentType, number> = {
+      'Stock': 0,
+      'Crypto': 0,
+      'ETF': 0,
+      'Savings': 0,
+      'Bond': 0,
+      'Real Estate': 0,
+    };
+    investments.forEach(inv => {
+      if (counts[inv.type] !== undefined) {
+        counts[inv.type]++;
+      }
+    });
+    return counts;
+  }, [investments]);
 
   const filteredAndSortedInvestments = useMemo(() => {
     let filtered = [...investments];
@@ -333,13 +348,13 @@ export default function DashboardPage() {
               <div className="w-full sm:w-auto">
                 <Tabs value={typeFilter} onValueChange={(value) => setTypeFilter(value as InvestmentType | 'All')}>
                   <TabsList className="flex-wrap h-auto">
-                    <TabsTrigger value="All">All Types</TabsTrigger>
-                    <TabsTrigger value="Stock">Stocks</TabsTrigger>
-                    <TabsTrigger value="Crypto">Crypto</TabsTrigger>
-                    <TabsTrigger value="ETF">ETFs</TabsTrigger>
-                    <TabsTrigger value="Savings">Savings</TabsTrigger>
-                    <TabsTrigger value="Bond">Bonds</TabsTrigger>
-                    <TabsTrigger value="Real Estate">Real Estate</TabsTrigger>
+                    <TabsTrigger value="All">All Types ({investments.length})</TabsTrigger>
+                    <TabsTrigger value="Stock">Stocks ({typeCounts.Stock})</TabsTrigger>
+                    <TabsTrigger value="Crypto">Crypto ({typeCounts.Crypto})</TabsTrigger>
+                    <TabsTrigger value="ETF">ETFs ({typeCounts.ETF + etfSummaries.length})</TabsTrigger>
+                    <TabsTrigger value="Savings">Savings ({typeCounts.Savings})</TabsTrigger>
+                    <TabsTrigger value="Bond">Bonds ({typeCounts.Bond})</TabsTrigger>
+                    <TabsTrigger value="Real Estate">Real Estate ({typeCounts['Real Estate']})</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
