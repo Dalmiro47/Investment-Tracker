@@ -3,6 +3,8 @@
 
 import type { Investment } from '@/lib/types';
 import axios from 'axios';
+import { dec, sub, EPS } from '@/lib/money';
+
 
 interface UpdateResult {
   success: boolean;
@@ -176,7 +178,6 @@ export async function refreshInvestmentPrices(
     const cryptoPrices = await fetchCryptoPrices(cryptoIds);
 
     // 3) Apply crypto updates
-    const EPS = 1e-6; // tolerance for detecting change
     for (const inv of cryptoItems) {
       if (unresolvedCrypto.has(inv.id)) {
         failed.push(inv.name); // count once here
@@ -191,7 +192,7 @@ export async function refreshInvestmentPrices(
       }
       
       const curr = inv.currentValue ?? null;
-      if (curr === null || Math.abs(price - curr) > EPS) {
+      if (curr === null || sub(dec(price), dec(curr)).abs().gt(EPS)) {
         updates.push({ ...inv, currentValue: price });
       }
     }
@@ -211,7 +212,7 @@ export async function refreshInvestmentPrices(
         return;
       }
       const curr = inv.currentValue ?? null;
-      if (curr === null || Math.abs(price - curr) > EPS) {
+      if (curr === null || sub(dec(price), dec(curr)).abs().gt(EPS)) {
         updates.push({ ...inv, currentValue: price });
       }
     });
