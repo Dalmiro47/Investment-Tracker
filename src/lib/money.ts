@@ -5,6 +5,8 @@ import Big from 'big.js';
 Big.DP = 20;
 Big.RM = Big.roundHalfUp;
 
+export const EPS = 1e-6;
+
 export const dec = (n?: number | string | null) => new Big(n ?? 0);
 
 export const add = (a: Big, b: Big) => a.plus(b);

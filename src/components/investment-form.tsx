@@ -209,7 +209,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                 <FormItem>
                   <FormLabel>Purchase Quantity</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="e.g. 50" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
+                    <Input type="number" step="any" placeholder="e.g. 0.12" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
                   </FormControl>
                    <FormDescription>
                     This is a one-time entry. Sells are added later.
@@ -226,7 +226,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                 <FormItem className={watchedType === 'Crypto' ? '' : 'md:col-span-2'}>
                   <FormLabel>Purchase Price (per unit)</FormLabel>
                   <FormControl>
-                    <Input type="number" placeholder="e.g. 150.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
+                    <Input type="number" step="any" placeholder="e.g. 150.50" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
