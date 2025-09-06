@@ -82,7 +82,6 @@ export default function InvestmentListView({
       };
     });
 
-    // % of portfolio
     const list = mode === 'flat' ? flat : agg;
     const econTotal = list.reduce(
       (s, r: any) => s + (r.economicValue ?? (r.marketValue + r.realizedPL)),
@@ -93,7 +92,6 @@ export default function InvestmentListView({
       r.percentPortfolio = econTotal > 0 ? ev / econTotal : 0;
     });
 
-    // Sorting
     if (mode === 'aggregated') {
       agg.sort((a, b) => b.economicValue - a.economicValue);
     } else {
@@ -116,7 +114,6 @@ export default function InvestmentListView({
     }
 
     return { rowsAgg: agg, rowsFlat: flat };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [investments, transactionsMap, yearFilter, mode, sortKey]);
 
   const rows: any[] = mode === 'flat' ? rowsFlat : rowsAgg;
@@ -125,7 +122,6 @@ export default function InvestmentListView({
     return <div className="text-center text-muted-foreground py-12">No matching assets for this view.</div>;
   }
 
-  // ===== Column visibility rules =====
   const isFlat = mode === 'flat';
   const isSoldView = isFlat && statusFilter === 'Sold';
   const isActiveView = isFlat && statusFilter === 'Active';
@@ -135,15 +131,15 @@ export default function InvestmentListView({
   const showPurchaseDateCol = isFlat;
 
   const showBoughtCol = isFlat && !isSoldView;
-  const showAvailCol = isFlat && !isSoldView;
-  const showSoldCols = isFlat && statusFilter === 'Sold';
-  const showBuyPrice = !isSoldView;
+  const showAvailCol  = isFlat && !isSoldView;
+  const showSoldCols  = isFlat && statusFilter === 'Sold';
+  const showBuyPrice  = !isSoldView;
   const showCurrentPriceCol = !isSoldView;
   const showCostBasisCol = !isSoldView;
   const showMarketValueCol = !isSoldView;
 
-  const showRealizedPLCol = !(isActiveView);
-  const showUnrealizedPLCol = !(isSoldView || isActiveView);
+  const showRealizedPLCol   = !(isFlat && statusFilter === 'Active');
+  const showUnrealizedPLCol = !(isSoldView || (isFlat && statusFilter === 'Active'));
 
   return (
     <div className="overflow-x-auto rounded-lg border bg-card/50">
@@ -154,20 +150,19 @@ export default function InvestmentListView({
             <th>Asset</th>
             {showPurchaseDateCol && <th>Purchase Date</th>}
             {showStatusCol && <th>Status</th>}
-
             {isFlat ? (
-                <>
-                    {showBoughtCol && <th className="text-right">Bought</th>}
-                    {showSoldCols && <th className="text-right">Sold</th>}
-                    {showAvailCol && <th className="text-right">Qty (avail.)</th>}
-                    {showBuyPrice && <th className="text-right">Buy Price</th>}
-                    {showSoldCols && <th className="text-right">Avg. Sell Price</th>}
-                    {showCurrentPriceCol && <th className="text-right">Current Price</th>}
-                </>
+              <>
+                {showBoughtCol && <th className="text-right">Bought</th>}
+                {showSoldCols && <th className="text-right">Sold</th>}
+                {showAvailCol && <th className="text-right">Qty (avail.)</th>}
+                {showBuyPrice && <th className="text-right">Buy Price</th>}
+                {showSoldCols && <th className="text-right">Avg. Sell Price</th>}
+                {showCurrentPriceCol && <th className="text-right">Current Price</th>}
+              </>
             ) : (
                 <>
-                    <th className="text-right">Quantity</th>
-                    <th className="text-right">Avg. Buy Price</th>
+                  <th className="text-right">Quantity</th>
+                  <th className="text-right">Avg. Buy Price</th>
                 </>
             )}
             
