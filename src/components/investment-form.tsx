@@ -77,6 +77,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
   });
 
   const isIA = watchedType === 'Interest Account';
+  const isEditing = !!investment;
 
   useEffect(() => {
     if (isOpen) {
@@ -105,7 +106,11 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
           values.purchasePricePerUnit = 0;
       }
       await Promise.resolve(
-        onSubmit(values, isIA ? startingBalance : undefined, isIA ? initialRatePct : undefined)
+        onSubmit(
+          values,
+          !isEditing && isIA ? startingBalance : undefined,
+          !isEditing && isIA ? initialRatePct : undefined
+        )
       );
   };
 
@@ -231,28 +236,32 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
 
             {isIA ? (
              <>
-                <div className="md:col-span-1">
-                    <FormLabel>Starting Balance (optional)</FormLabel>
-                    <Input
-                        type="number"
-                        step="any"
-                        value={startingBalance}
-                        onChange={(e) => setStartingBalance(parseFloat(e.target.value) || 0)}
-                        placeholder="e.g. 3,000.00"
-                    />
-                    <FormDescription>Recorded as a Deposit on the opening date.</FormDescription>
-                </div>
-                <div className="md:col-span-1">
-                    <FormLabel>Initial Interest Rate (%)</FormLabel>
-                    <Input
-                        type="number"
-                        step="0.01"
-                        value={initialRatePct}
-                        onChange={(e) => setInitialRatePct(parseFloat(e.target.value) || 0)}
-                        placeholder="e.g. 3.5"
-                    />
-                    <FormDescription>Annual rate from your bank.</FormDescription>
-                </div>
+               {!isEditing && (
+                  <>
+                    <div className="md:col-span-1">
+                        <FormLabel>Starting Balance (optional)</FormLabel>
+                        <Input
+                            type="number"
+                            step="any"
+                            value={startingBalance}
+                            onChange={(e) => setStartingBalance(parseFloat(e.target.value) || 0)}
+                            placeholder="e.g. 3,000.00"
+                        />
+                        <FormDescription>Recorded as a Deposit on the opening date.</FormDescription>
+                    </div>
+                    <div className="md:col-span-1">
+                        <FormLabel>Initial Interest Rate (%)</FormLabel>
+                        <Input
+                            type="number"
+                            step="0.01"
+                            value={initialRatePct}
+                            onChange={(e) => setInitialRatePct(parseFloat(e.target.value) || 0)}
+                            placeholder="e.g. 3.5"
+                        />
+                        <FormDescription>Annual rate from your bank.</FormDescription>
+                    </div>
+                  </>
+                )}
               </>
             ) : (
              <>

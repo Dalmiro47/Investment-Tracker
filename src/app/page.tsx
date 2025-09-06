@@ -36,7 +36,16 @@ import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
 import InvestmentListView from '@/components/investment-list';
 import type { SavingsRateChange } from '@/lib/types-savings';
 import type { PositionMetrics } from '@/lib/portfolio';
+import RateScheduleDialog from "@/components/rate-schedule-dialog";
 
+
+const todayISO = () => new Date().toISOString().slice(0,10);
+const getCurrentRate = (rates?: SavingsRateChange[]) => {
+  if (!rates || rates.length === 0) return null;
+  const t = todayISO();
+  const eligible = rates.filter(r => r.from <= t).sort((a,b)=>a.from.localeCompare(b.from));
+  return eligible.length ? eligible[eligible.length-1].annualRatePct : rates[0].annualRatePct;
+};
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -75,6 +84,8 @@ export default function DashboardPage() {
   });
 
   const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all' });
+  const [isRatesOpen, setIsRatesOpen] = React.useState(false);
+  const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
 
 
   const fetchAllData = async (userId: string) => {
@@ -334,6 +345,11 @@ export default function DashboardPage() {
         console.error("Failed to save tax settings:", error);
     }
   };
+
+  const handleManageRates = (inv: Investment) => {
+    setRatesInv(inv);
+    setIsRatesOpen(true);
+  };
   
   if (!user) {
     return null; // AuthProvider handles redirects
@@ -492,6 +508,8 @@ export default function DashboardPage() {
                     realizedPLYear={metrics?.realizedPLYear ?? 0}
                     dividendsYear={metrics?.dividendsYear ?? 0}
                     interestYear={metrics?.interestYear ?? 0}
+                    currentRatePct={getCurrentRate(rateSchedulesMap[investment.id])}
+                    onManageRates={() => handleManageRates(investment)}
                   />
                 )
               })}
@@ -544,8 +562,15 @@ export default function DashboardPage() {
             initialView={historyDialogView}
         />
       )}
+      {ratesInv && (
+        <RateScheduleDialog
+          isOpen={isRatesOpen}
+          onOpenChange={setIsRatesOpen}
+          investment={ratesInv}
+          rates={rateSchedulesMap[ratesInv.id]}
+          onChanged={async () => { if (user) await fetchAllData(user.uid); }}
+        />
+      )}
     </>
   );
 }
-
-    

@@ -38,6 +38,8 @@ interface InvestmentCardProps {
   realizedPLYear: number;
   dividendsYear: number;
   interestYear: number;
+  currentRatePct?: number | null;
+  onManageRates?: () => void;
 }
 
 const typeIcons: Record<Investment['type'], React.ReactNode> = {
@@ -61,6 +63,8 @@ export default function InvestmentCard({
   realizedPLYear,
   dividendsYear,
   interestYear,
+  currentRatePct,
+  onManageRates,
 }: InvestmentCardProps) {
   const { name, type, status, ticker, purchaseDate, realizedPnL } = investment;
   
@@ -115,6 +119,17 @@ export default function InvestmentCard({
   
   const totalTaxable = realizedPLYear + dividendsYear + interestYear;
 
+  const Stat = ({ label, value, trend }: { label: string, value: string, trend?: 'up' | 'down' }) => (
+    <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md text-center">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className={cn("font-headline text-xl font-bold flex items-center gap-1", trend === 'up' ? 'text-green-600' : trend === 'down' ? 'text-destructive' : '')}>
+        {trend === 'up' && <TrendingUp className="h-5 w-5" />}
+        {trend === 'down' && <TrendingDown className="h-5 w-5" />}
+        {value}
+      </span>
+    </div>
+  );
+
 
   return (
     <Card className="flex flex-col transition-all hover:shadow-lg hover:-translate-y-1">
@@ -124,7 +139,10 @@ export default function InvestmentCard({
             <span className="p-2 bg-secondary rounded-md text-primary">{typeIcons[type]}</span>
             <div>
               <CardTitle className="font-headline text-xl">{name}</CardTitle>
-              <CardDescription className="font-medium text-primary">{type} {ticker ? `(${ticker})` : ''}</CardDescription>
+              <CardDescription className="font-medium text-primary">
+                {type} {ticker ? `(${ticker})` : ""}
+                {isIA && typeof currentRatePct === "number" ? ` • ${currentRatePct.toFixed(2)}%` : ""}
+              </CardDescription>
             </div>
           </div>
            <div className="flex items-center gap-1">
@@ -187,6 +205,12 @@ export default function InvestmentCard({
                   <History className="mr-2 h-4 w-4" />
                   View History
                 </DropdownMenuItem>
+                {isIA && onManageRates && (
+                  <DropdownMenuItem onClick={onManageRates}>
+                    <History className="mr-2 h-4 w-4" />
+                    Manage Rates
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onEdit}>
                   <Edit className="mr-2 h-4 w-4" />
@@ -249,33 +273,11 @@ export default function InvestmentCard({
             )}
           </div>
         ) : isIA ? (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md">
-                <span className="text-xs text-muted-foreground">Net Deposits</span>
-                <span className="font-headline text-xl font-bold">
-                  {formatCurrency(netDeposits)}
-                </span>
-              </div>
-              <div className="flex flex-col items-center justify-center p-3 bg-primary/10 rounded-md">
-                <span className="text-xs text-muted-foreground">Balance</span>
-                <span className="font-headline text-xl font-bold text-primary">
-                  {formatCurrency(balance)}
-                </span>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="text-center">
-                <div className="text-sm text-muted-foreground">Accrued Interest</div>
-                <div className={cn("font-bold text-lg", accrued >= 0 ? "text-green-600" : "text-destructive")}>
-                  {formatCurrency(accrued)}
-                </div>
-              </div>
-              <div className="text-center">
-                <div className="text-sm text-muted-foreground">Performance</div>
-                <div className="font-bold text-lg">{formatPercent(perf)}</div>
-              </div>
-            </div>
+           <div className="grid grid-cols-2 gap-3">
+            <Stat label="Net Deposits" value={formatCurrency(netDeposits)} />
+            <Stat label="Balance" value={formatCurrency(balance)} />
+            <Stat label="Accrued Interest" value={formatCurrency(accrued)} trend={accrued >= 0 ? 'up' : 'down'} />
+            <Stat label="Performance" value={formatPercent(perf)} />
           </div>
         ) : (
           <div className="space-y-4">

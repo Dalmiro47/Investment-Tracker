@@ -413,3 +413,12 @@ export async function updateTaxSettings(uid: string, settings: TaxSettings) {
   const ref = settingsDoc(uid, 'tax');
   await setDoc(ref, settings, { merge: true });
 }
+
+export async function addRateChange(
+  uid: string,
+  invId: string,
+  change: { from: string; annualRatePct: number }
+) {
+  const ref = collection(db, 'users', uid, 'investments', invId, 'rateSchedule');
+  await addDoc(ref, change);
+}
