@@ -37,6 +37,7 @@ import InvestmentListView from '@/components/investment-list';
 import type { SavingsRateChange } from '@/lib/types-savings';
 import type { PositionMetrics } from '@/lib/portfolio';
 import RateScheduleDialog from "@/components/rate-schedule-dialog";
+import { parseISO, endOfYear } from 'date-fns';
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -174,6 +175,48 @@ export default function DashboardPage() {
     setIsRefreshing(false);
 }
 
+  // Investments scoped to the selected year for the LIST + tab counts
+  const investmentsYearScoped = React.useMemo(() => {
+    // start with all, then apply year rules for the list UX
+    let subset = [...investments];
+
+    if (yearFilter.kind === 'year') {
+      const y = yearFilter.year;
+
+      // sells in year
+      const soldThisYear = new Set<string>();
+      Object.entries(transactionsMap).forEach(([invId, txs]) => {
+        if (txs.some(tx => tx.type === 'Sell' && new Date(tx.date).getFullYear() === y)) {
+          soldThisYear.add(invId);
+        }
+      });
+
+      const purchasedInYear = (inv: Investment) => {
+        const d = parseISO(inv.purchaseDate);
+        return d.getFullYear() === y;
+      };
+      const isActive = (inv: Investment) =>
+        (inv.purchaseQuantity ?? 0) > (inv.totalSoldQty ?? 0) || inv.type === 'Interest Account';
+
+      switch (yearFilter.mode) {
+        case 'realized':
+          subset = subset.filter(inv => soldThisYear.has(inv.id));
+          break;
+        case 'holdings':
+          subset = subset.filter(inv => isActive(inv) && purchasedInYear(inv));
+          break;
+        case 'combined':
+        default:
+          subset = subset.filter(inv =>
+            soldThisYear.has(inv.id) || (isActive(inv) && purchasedInYear(inv))
+          );
+          break;
+      }
+    }
+
+    return subset;
+  }, [investments, transactionsMap, yearFilter]);
+
   const typeCounts = React.useMemo(() => {
     const counts: Record<InvestmentType | 'All', number> = {
       'All': 0,
@@ -186,7 +229,7 @@ export default function DashboardPage() {
     };
     
     let totalManual = 0;
-    investments.forEach(inv => {
+    investmentsYearScoped.forEach(inv => {
       if (counts[inv.type] !== undefined) {
         counts[inv.type]++;
         totalManual++;
@@ -197,37 +240,38 @@ export default function DashboardPage() {
     counts['All'] = totalManual + etfSummaries.length;
 
     return counts;
-  }, [investments, etfSummaries]);
+  }, [investmentsYearScoped, etfSummaries]);
 
   const filteredAndSortedInvestments = React.useMemo(() => {
-    let filtered = [...investments];
+    let filtered = [...investmentsYearScoped]; // <-- year scoped first
 
     if (typeFilter !== 'All') {
       filtered = filtered.filter(inv => inv.type === typeFilter);
     }
-
     if (statusFilter !== 'All') {
       filtered = filtered.filter(inv => inv.status === statusFilter);
     }
-    
+
     return filtered.sort((a, b) => {
       switch (sortKey) {
         case 'performance':
           return performancePct(b) - performancePct(a);
-        case 'totalAmount':
-           const availableA = a.purchaseQuantity - (a.totalSoldQty ?? 0);
-           const availableB = b.purchaseQuantity - (b.totalSoldQty ?? 0);
-           const totalA = (a.currentValue ?? 0) * availableA;
-           const totalB = (b.currentValue ?? 0) * availableB;
-           return totalB - totalA;
+        case 'totalAmount': {
+          const availableA = a.purchaseQuantity - (a.totalSoldQty ?? 0);
+          const availableB = b.purchaseQuantity - (b.totalSoldQty ?? 0);
+          const totalA = (a.currentValue ?? 0) * availableA;
+          const totalB = (b.currentValue ?? 0) * availableB;
+          return totalB - totalA;
+        }
         case 'purchaseDate':
-        default:
+        default: {
           const dateA = a.purchaseDate ? new Date(a.purchaseDate).getTime() : 0;
           const dateB = b.purchaseDate ? new Date(b.purchaseDate).getTime() : 0;
           return dateB - dateA;
+        }
       }
     });
-  }, [investments, typeFilter, statusFilter, sortKey]);
+  }, [investmentsYearScoped, typeFilter, statusFilter, sortKey]);
 
   const investmentMetrics = React.useMemo(() => {
     const metricsMap = new Map<string, ReturnType<typeof calculatePositionMetrics>>();
@@ -481,6 +525,7 @@ export default function DashboardPage() {
                 mode={listMode}
                 sortKey={sortKey}
                 statusFilter={statusFilter}
+                activeTypeFilter={typeFilter}
                 onViewHistory={(id) => {
                   const inv = investments.find((i) => i.id === id);
                   if (inv) handleHistoryClick(inv);

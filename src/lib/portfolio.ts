@@ -47,6 +47,10 @@ export type AggregatedSymbolRow = {
   costBasis: number;
   marketValue: number;
 
+  // NEW: per-unit prices for the aggregated row
+  buyPrice: number;       // weighted by remaining qty
+  currentPrice: number;   // marketValue / availableQty
+
   realizedPL: number;
   unrealizedPL: number;
   totalPL: number;
@@ -248,6 +252,10 @@ export function aggregateBySymbol(
         costBasis: 0,
         marketValue: 0,
 
+        // NEW
+        buyPrice: 0,
+        currentPrice: 0,
+
         realizedPL: 0,
         unrealizedPL: 0,
         totalPL: 0,
@@ -266,8 +274,10 @@ export function aggregateBySymbol(
     a.buyQty += metrics.buyQty;
     a.availableQty += metrics.availableQty;
 
-    // cost basis of remaining shares for this lot = availableQty * buyPrice
-    a.costBasis += metrics.availableQty * metrics.buyPrice;
+    // ✅ IA uses Net Deposits as “cost basis”; others use remaining qty × buy price
+    a.costBasis += metrics.type === 'Interest Account'
+      ? metrics.purchaseValue
+      : metrics.availableQty * metrics.buyPrice;
 
     a.marketValue += metrics.marketValue;
     a.realizedPL += metrics.realizedPLDisplay;
@@ -278,10 +288,17 @@ export function aggregateBySymbol(
     a.purchaseValue += metrics.purchaseValue;
   }
 
-  const rows: AggregatedSymbolRow[] = Array.from(byKey.values()).map((a) => ({
-    ...a,
-    performancePct: a.purchaseValue > 0 ? a.totalPL / a.purchaseValue : 0,
-  }));
+  const rows: AggregatedSymbolRow[] = Array.from(byKey.values()).map((a) => {
+    const buyPrice = a.availableQty > 0 ? a.costBasis / a.availableQty : 0;
+    const currentPrice = a.availableQty > 0 ? a.marketValue / a.availableQty : 0;
+    return {
+      ...a,
+      buyPrice,
+      currentPrice,
+      performancePct: a.purchaseValue > 0 ? a.totalPL / a.purchaseValue : 0,
+    };
+  });
+
 
   const totalEconomic = rows.reduce((s, r) => s + r.economicValue, 0);
   rows.forEach((r) => {
@@ -527,5 +544,7 @@ export function aggregateByType(
 
     return { rows, totals: finalTotals, taxSummary };
 }
+
+    
 
     
