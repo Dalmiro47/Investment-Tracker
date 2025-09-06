@@ -220,8 +220,7 @@ export default function DashboardPage() {
 
   const investmentMetrics = React.useMemo(() => {
     const metricsMap = new Map<string, ReturnType<typeof calculatePositionMetrics>>();
-    if (Object.keys(transactionsMap).length > 0 || Object.keys(rateSchedulesMap).length > 0) {
-      filteredAndSortedInvestments.forEach(inv => {
+    filteredAndSortedInvestments.forEach(inv => {
         const metrics = calculatePositionMetrics(
             inv, 
             transactionsMap[inv.id] ?? [], 
@@ -229,8 +228,7 @@ export default function DashboardPage() {
             rateSchedulesMap[inv.id]
         );
         metricsMap.set(inv.id, metrics);
-      });
-    }
+    });
     return metricsMap;
   }, [filteredAndSortedInvestments, transactionsMap, yearFilter, rateSchedulesMap]);
   
@@ -549,3 +547,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    

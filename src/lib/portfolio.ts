@@ -1,5 +1,5 @@
 
-import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
+import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary } from './types';
 import { dec, add, sub, mul, div, toNum } from '@/lib/money';
 import { isCryptoSellTaxFree, calcCapitalTax, calcCryptoTax, CapitalTaxResult, CryptoTaxResult } from './tax';
 import { differenceInDays, parseISO, endOfYear } from 'date-fns';
@@ -60,7 +60,7 @@ export type AggregatedSymbolRow = {
 export function calculatePositionMetrics(
   inv: Investment,
   txs: Transaction[],
-  filter: YearFilter,
+  yearFilter: YearFilter,
   rates?: SavingsRateChange[]
 ): PositionMetrics {
   
@@ -89,18 +89,20 @@ export function calculatePositionMetrics(
     const unrealizedPL  = result.totalInterest;
     const realizedPLAll = 0;
 
-    const yrInterest = filter.kind === 'year' ? (result.byYearInterest[String(filter.year)] ?? 0) : 0;
+    const yrInterest = yearFilter.kind === 'year' ? (result.byYearInterest[String(yearFilter.year)] ?? 0) : 0;
 
     const totalPLDisplay = unrealizedPL;
     const performancePct = purchaseValue > 0 ? totalPLDisplay / purchaseValue : 0;
 
     return {
-      buyQty: 0, buyPrice: 0, soldQtyAll: 0, availableQty: 0,
-      purchaseValue, marketValue,
-      realizedPLAll, realizedPLYear: 0, unrealizedPL,
-      shortTermCryptoGainYear: 0, capitalGainsYear: 0,
-      dividendsYear: 0, interestYear: yrInterest,
-      realizedPLDisplay: 0, totalPLDisplay, performancePct,
+      ...zeroMetrics,
+      purchaseValue,
+      marketValue,
+      unrealizedPL,
+      interestYear: yrInterest,
+      realizedPLDisplay: 0,
+      totalPLDisplay,
+      performancePct,
       type: inv.type,
     };
   }
@@ -484,14 +486,14 @@ export function aggregateByType(
         const capitalTaxResult = calcCapitalTax({
             year: filter.year,
             filing: taxSettings.filingStatus,
-            churchRate: taxSettings.churchTaxRate,
+            churchRate: taxSettings.churchRate,
             capitalIncome: capitalIncome
         });
         
         const cryptoTaxResult = calcCryptoTax({
             year: filter.year,
             marginalRate: taxSettings.cryptoMarginalRate,
-            churchRate: taxSettings.churchTaxRate,
+            churchRate: taxSettings.churchRate,
             shortTermGains: shortTermCryptoGains
         });
 
@@ -505,3 +507,5 @@ export function aggregateByType(
 
     return { rows, totals: finalTotals, taxSummary };
 }
+
+    
