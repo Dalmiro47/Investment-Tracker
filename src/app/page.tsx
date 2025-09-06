@@ -35,6 +35,7 @@ import { performancePct } from '@/lib/types';
 import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
 import InvestmentListView from '@/components/investment-list';
 import type { SavingsRateChange } from '@/lib/types-savings';
+import type { PositionMetrics } from '@/lib/portfolio';
 
 
 export default function DashboardPage() {
@@ -78,13 +79,14 @@ export default function DashboardPage() {
   const fetchAllData = async (userId: string) => {
     setLoading(true);
     try {
-      const [userInvestments, etfSums, years, settings, rateSchedules] = await Promise.all([
+      const [userInvestments, etfSums, years, settings] = await Promise.all([
         getInvestments(userId),
         getAllEtfSummaries(userId),
         getSellYears(userId),
         getTaxSettings(userId),
-        getAllRateSchedules(userId, investments)
       ]);
+      
+      const rateSchedules = await getAllRateSchedules(userId, userInvestments);
       
       setInvestments(userInvestments);
       setEtfSummaries(etfSums);
@@ -279,12 +281,13 @@ export default function DashboardPage() {
     
     const isEditing = !!editingInvestment;
     try {
-        if (isEditing) {
-          await updateInvestment(user.uid, editingInvestment!.id, values);
+        let invId = editingInvestment?.id;
+        if (isEditing && invId) {
+          await updateInvestment(user.uid, invId, values);
         } else {
-          const newId = await addInvestment(user.uid, values);
+          invId = await addInvestment(user.uid, values);
           if (values.type === 'Interest Account' && startingBalance && startingBalance > 0) {
-              await addTransaction(user.uid, newId, {
+              await addTransaction(user.uid, invId, {
                   type: 'Deposit',
                   date: values.purchaseDate,
                   amount: startingBalance,
@@ -476,6 +479,7 @@ export default function DashboardPage() {
                   <InvestmentCard 
                     key={investment.id} 
                     investment={investment} 
+                    metrics={metrics}
                     isTaxView={isTaxView}
                     onEdit={() => handleEditClick(investment)}
                     onDelete={() => handleDeleteClick(investment.id)}
