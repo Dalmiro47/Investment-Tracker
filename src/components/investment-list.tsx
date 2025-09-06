@@ -33,11 +33,9 @@ export default function InvestmentListView({
   onViewHistory,
   onAddTransaction,
 }: Props) {
-  const { rowsAgg, rowsFlat } = useMemo(() => {
-    // Aggregated rows (by symbol)
+  const { rowsAgg, rowsFlat, hasSoldInFlat } = useMemo(() => {
     const agg = aggregateBySymbol(investments, transactionsMap, yearFilter).rows;
 
-    // Flat rows (one row per investment) with card-parity fields
     const flat = investments.map((inv) => {
       const m = calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], yearFilter);
       const txs = transactionsMap[inv.id] ?? [];
@@ -50,29 +48,26 @@ export default function InvestmentListView({
       const buyPrice = Number(inv.purchasePricePerUnit) || 0;
       const currentPrice = Number(inv.currentValue ?? 0);
 
-      const costBasis = m.availableQty * buyPrice;          // matches card (remaining)
-      const marketValue = m.marketValue;                    // matches card (remaining)
+      const costBasis = m.availableQty * buyPrice;
+      const marketValue = m.marketValue;
       const economicValue = marketValue + m.realizedPLDisplay;
 
       return {
         key: inv.id,
         invId: inv.id,
         type: inv.type,
-        status: inv.status,                 // New
+        status: inv.status,
         name: inv.name,
         ticker: inv.ticker ?? null,
         purchaseDate: inv.purchaseDate ?? null,
 
-        // card parity
-        boughtQty: buyQtyOriginal,          // “Bought”
-        soldQty,                            // “Sold”
-        availableQty: m.availableQty,       // “Available”
-        buyPrice,                           // “Buy Price”
-        avgSellPrice,                       // “Avg. Sell Price”
-        currentPrice,                       // “Current Price”
+        boughtQty: buyQtyOriginal,
+        soldQty,
+        availableQty: m.availableQty,
+        buyPrice,
+        avgSellPrice,
+        currentPrice,
 
-        // existing columns
-        positions: 1,
         costBasis,
         marketValue,
         realizedPL: m.realizedPLDisplay,
@@ -84,7 +79,7 @@ export default function InvestmentListView({
       };
     });
 
-    // % of portfolio within the displayed set
+    // % portfolio
     const list = mode === 'flat' ? flat : agg;
     const econTotal = list.reduce(
       (s, r: any) => s + (r.economicValue ?? (r.marketValue + r.realizedPL)),
@@ -95,11 +90,10 @@ export default function InvestmentListView({
       r.percentPortfolio = econTotal > 0 ? ev / econTotal : 0;
     });
 
-    // Sorting:
+    // Sorting
     if (mode === 'aggregated') {
       agg.sort((a, b) => b.economicValue - a.economicValue);
     } else {
-      // Flat: respect page sort
       switch (sortKey) {
         case 'performance':
           flat.sort((a, b) => b.performancePct - a.performancePct);
@@ -112,24 +106,23 @@ export default function InvestmentListView({
           flat.sort((a, b) => {
             const ta = a.purchaseDate ? new Date(a.purchaseDate).getTime() : 0;
             const tb = b.purchaseDate ? new Date(b.purchaseDate).getTime() : 0;
-            return tb - ta; // newest first
+            return tb - ta;
           });
           break;
       }
     }
 
-    return { rowsAgg: agg, rowsFlat: flat };
+    // show sell-specific columns only if at least one Sold is visible
+    const hasSoldInFlat = flat.some(r => r.status === 'Sold');
+
+    return { rowsAgg: agg, rowsFlat: flat, hasSoldInFlat };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [investments, transactionsMap, yearFilter, mode, sortKey]);
 
   const rows: any[] = mode === 'flat' ? rowsFlat : rowsAgg;
 
   if (rows.length === 0) {
-    return (
-      <div className="text-center text-muted-foreground py-12">
-        No matching assets for this view.
-      </div>
-    );
+    return <div className="text-center text-muted-foreground py-12">No matching assets for this view.</div>;
   }
 
   return (
@@ -141,13 +134,15 @@ export default function InvestmentListView({
             <th>Asset</th>
             {mode === 'flat' && <th>Purchase Date</th>}
             {mode === 'flat' && <th>Status</th>}
-            <th className="text-right">Positions</th>
+            {/* Positions removed */}
+            {/* Bought remains useful & compact, so keep it always */}
             {mode === 'flat' && <th className="text-right">Bought</th>}
-            {mode === 'flat' && <th className="text-right">Sold</th>}
+            {/* Show these only when there’s at least one Sold in view */}
+            {mode === 'flat' && hasSoldInFlat && <th className="text-right">Sold</th>}
             <th className="text-right">Qty (avail.)</th>
-            {mode === 'flat' && <th className="text-right">Buy Price</th>}
-            {mode === 'flat' && <th className="text-right">Avg. Sell Price</th>}
-            {mode === 'flat' && <th className="text-right">Current Price</th>}
+            <th className="text-right">Buy Price</th>
+            {mode === 'flat' && hasSoldInFlat && <th className="text-right">Avg. Sell Price</th>}
+            <th className="text-right">Current Price</th>
             <th className="text-right">Cost Basis</th>
             <th className="text-right">Market Value</th>
             <th className="text-right">Realized P/L</th>
@@ -159,73 +154,74 @@ export default function InvestmentListView({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.key} className="border-t last:border-b [&>td]:px-4 [&>td]:py-3">
-              {showTypeColumn && <td className="font-medium">{r.type}</td>}
-              <td className="font-medium">
-                {r.name}{r.ticker ? <span className="text-muted-foreground"> ({r.ticker})</span> : null}
-              </td>
-
-              {mode === 'flat' && (
-                <>
-                  <td className="text-muted-foreground">
-                    {r.purchaseDate ? format(parseISO(r.purchaseDate), 'dd MMM yyyy') : '—'}
-                  </td>
-                  <td className="text-muted-foreground">{r.status}</td>
-                </>
-              )}
-
-              <td className="text-right">1</td>
-
-              {mode === 'flat' && (
-                <>
-                  <td className="text-right">{fmtQty(r.boughtQty)}</td>
-                  <td className="text-right">{fmtQty(r.soldQty)}</td>
-                </>
-              )}
-
-              <td className="text-right">{fmtQty(r.availableQty)}</td>
-
-              {mode === 'flat' && (
-                <>
-                  <td className="text-right">{fmtEur.format(r.buyPrice)}</td>
-                  <td className="text-right">{r.avgSellPrice != null ? fmtEur.format(r.avgSellPrice) : '—'}</td>
-                  <td className="text-right">{fmtEur.format(r.currentPrice)}</td>
-                </>
-              )}
-
-              <td className="text-right">{fmtEur.format(r.costBasis)}</td>
-              <td className="text-right">{fmtEur.format(r.marketValue)}</td>
-
-              <td className={`text-right ${plClass(r.realizedPL)}`}>{fmtEur.format(r.realizedPL)}</td>
-              <td className={`text-right ${plClass(r.unrealizedPL)}`}>{fmtEur.format(r.unrealizedPL)}</td>
-              <td className={`text-right ${plClass(r.totalPL)}`}>{fmtEur.format(r.totalPL)}</td>
-
-              <td className={`text-right ${plClass(r.performancePct)}`}>{fmtPct(r.performancePct)}</td>
-              <td className="text-right">{fmtPct(r.percentPortfolio ?? 0)}</td>
-
-              {mode === 'flat' && (
-                <td className="text-right">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      title="View History"
-                      className="px-2 py-1 rounded hover:bg-muted"
-                      onClick={() => onViewHistory?.(r.invId)}
-                    >
-                      <History className="h-4 w-4" />
-                    </button>
-                    <button
-                      title="Add Transaction"
-                      className="px-2 py-1 rounded hover:bg-muted"
-                      onClick={() => onAddTransaction?.(r.invId)}
-                    >
-                      <PlusCircle className="h-4 w-4" />
-                    </button>
-                  </div>
+          {rows.map((r) => {
+            const isSold = r.status === 'Sold';
+            return (
+              <tr key={r.key} className="border-t last:border-b [&>td]:px-4 [&>td]:py-3">
+                {showTypeColumn && <td className="font-medium">{r.type}</td>}
+                <td className="font-medium">
+                  {r.name}{r.ticker ? <span className="text-muted-foreground"> ({r.ticker})</span> : null}
                 </td>
-              )}
-            </tr>
-          ))}
+                {mode === 'flat' && (
+                  <>
+                    <td className="text-muted-foreground">
+                      {r.purchaseDate ? format(parseISO(r.purchaseDate), 'dd MMM yyyy') : '—'}
+                    </td>
+                    <td className="text-muted-foreground">{r.status}</td>
+                  </>
+                )}
+
+                {/* Positions removed */}
+
+                {mode === 'flat' && (
+                  <td className="text-right">{fmtQty(r.boughtQty)}</td>
+                )}
+
+                {mode === 'flat' && hasSoldInFlat && (
+                  <td className="text-right">{isSold ? fmtQty(r.soldQty) : '—'}</td>
+                )}
+
+                <td className="text-right">{fmtQty(r.availableQty)}</td>
+                <td className="text-right">{fmtEur.format(r.buyPrice)}</td>
+
+                {mode === 'flat' && hasSoldInFlat && (
+                  <td className="text-right">
+                    {isSold && r.avgSellPrice != null ? fmtEur.format(r.avgSellPrice) : '—'}
+                  </td>
+                )}
+
+                <td className="text-right">{fmtEur.format(r.currentPrice)}</td>
+                <td className="text-right">{fmtEur.format(r.costBasis)}</td>
+                <td className="text-right">{fmtEur.format(r.marketValue)}</td>
+                <td className={`text-right ${plClass(r.realizedPL)}`}>{fmtEur.format(r.realizedPL)}</td>
+                <td className={`text-right ${plClass(r.unrealizedPL)}`}>{fmtEur.format(r.unrealizedPL)}</td>
+                <td className={`text-right ${plClass(r.totalPL)}`}>{fmtEur.format(r.totalPL)}</td>
+                <td className={`text-right ${plClass(r.performancePct)}`}>{fmtPct(r.performancePct)}</td>
+                <td className="text-right">{fmtPct(r.percentPortfolio ?? 0)}</td>
+
+                {mode === 'flat' && (
+                  <td className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <button
+                        title="View History"
+                        className="px-2 py-1 rounded hover:bg-muted"
+                        onClick={() => onViewHistory?.(r.invId)}
+                      >
+                        <History className="h-4 w-4" />
+                      </button>
+                      <button
+                        title="Add Transaction"
+                        className="px-2 py-1 rounded hover:bg-muted"
+                        onClick={() => onAddTransaction?.(r.invId)}
+                      >
+                        <PlusCircle className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </td>
+                )}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
