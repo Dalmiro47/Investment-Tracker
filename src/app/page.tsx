@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries, getAllRateSchedules, addTransaction } from '@/lib/firestore';
@@ -42,38 +42,38 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  const [investments, setInvestments] = useState<Investment[]>([]);
-  const [etfSummaries, setEtfSummaries] = useState<EtfSimSummary[]>([]);
-  const [transactionsMap, setTransactionsMap] = useState<Record<string, Transaction[]>>({});
-  const [rateSchedulesMap, setRateSchedulesMap] = useState<Record<string, SavingsRateChange[]>>({});
-  const [sellYears, setSellYears] = useState<number[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isTaxView, setIsTaxView] = useState(false);
-  const [typeFilter, setTypeFilter] = useState<InvestmentType | 'All'>('All');
-  const [statusFilter, setStatusFilter] = useState<InvestmentStatus | 'All'>('All');
-  const [sortKey, setSortKey] = useState<SortKey>('purchaseDate');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [listMode, setListMode] = useState<'aggregated' | 'flat'>('aggregated');
+  const [investments, setInvestments] = React.useState<Investment[]>([]);
+  const [etfSummaries, setEtfSummaries] = React.useState<EtfSimSummary[]>([]);
+  const [transactionsMap, setTransactionsMap] = React.useState<Record<string, Transaction[]>>({});
+  const [rateSchedulesMap, setRateSchedulesMap] = React.useState<Record<string, SavingsRateChange[]>>({});
+  const [sellYears, setSellYears] = React.useState<number[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [isTaxView, setIsTaxView] = React.useState(false);
+  const [typeFilter, setTypeFilter] = React.useState<InvestmentType | 'All'>('All');
+  const [statusFilter, setStatusFilter] = React.useState<InvestmentStatus | 'All'>('All');
+  const [sortKey, setSortKey] = React.useState<SortKey>('purchaseDate');
+  const [viewMode, setViewMode] = React.useState<'grid' | 'list'>('grid');
+  const [listMode, setListMode] = React.useState<'aggregated' | 'flat'>('aggregated');
 
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingInvestment, setEditingInvestment] = useState<Investment | undefined>(undefined);
+  const [isFormOpen, setIsFormOpen] = React.useState(false);
+  const [editingInvestment, setEditingInvestment] = React.useState<Investment | undefined>(undefined);
   
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [deletingInvestmentId, setDeletingInvestmentId] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+  const [deletingInvestmentId, setDeletingInvestmentId] = React.useState<string | null>(null);
 
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [historyDialogView, setHistoryDialogView] = useState<'list' | 'form'>('list');
-  const [viewingHistoryInvestment, setViewingHistoryInvestment] = useState<Investment | undefined>(undefined);
+  const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
+  const [historyDialogView, setHistoryDialogView] = React.useState<'list' | 'form'>('list');
+  const [viewingHistoryInvestment, setViewingHistoryInvestment] = React.useState<Investment | undefined>(undefined);
 
-  const [isTaxSettingsOpen, setIsTaxSettingsOpen] = useState(false);
-  const [taxSettings, setTaxSettings] = useState<TaxSettings>({
+  const [isTaxSettingsOpen, setIsTaxSettingsOpen] = React.useState(false);
+  const [taxSettings, setTaxSettings] = React.useState<TaxSettings>({
     filingStatus: 'single',
     churchTaxRate: 0,
     cryptoMarginalRate: 0.42, // Default to a higher rate
   });
 
-  const [yearFilter, setYearFilter] = useState<YearFilter>({ kind: 'all' });
+  const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all' });
 
 
   const fetchAllData = async (userId: string) => {
@@ -122,7 +122,7 @@ export default function DashboardPage() {
   };
 
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (user) {
       fetchAllData(user.uid);
     }
@@ -162,7 +162,7 @@ export default function DashboardPage() {
     setIsRefreshing(false);
 }
 
-  const typeCounts = useMemo(() => {
+  const typeCounts = React.useMemo(() => {
     const counts: Record<InvestmentType | 'All', number> = {
       'All': 0,
       'Stock': 0,
@@ -187,7 +187,7 @@ export default function DashboardPage() {
     return counts;
   }, [investments, etfSummaries]);
 
-  const filteredAndSortedInvestments = useMemo(() => {
+  const filteredAndSortedInvestments = React.useMemo(() => {
     let filtered = [...investments];
 
     if (typeFilter !== 'All') {
@@ -217,7 +217,7 @@ export default function DashboardPage() {
     });
   }, [investments, typeFilter, statusFilter, sortKey]);
 
-  const investmentMetrics = useMemo(() => {
+  const investmentMetrics = React.useMemo(() => {
     const metricsMap = new Map<string, ReturnType<typeof calculatePositionMetrics>>();
     if (Object.keys(transactionsMap).length > 0 || Object.keys(rateSchedulesMap).length > 0) {
       filteredAndSortedInvestments.forEach(inv => {
@@ -233,7 +233,7 @@ export default function DashboardPage() {
     return metricsMap;
   }, [filteredAndSortedInvestments, transactionsMap, yearFilter, rateSchedulesMap]);
   
-  const summaryData = useMemo(() => {
+  const summaryData = React.useMemo(() => {
     return aggregateByType(investments, transactionsMap, etfSummaries, yearFilter, isTaxView ? taxSettings : null, rateSchedulesMap);
   }, [investments, transactionsMap, etfSummaries, yearFilter, isTaxView, taxSettings, rateSchedulesMap]);
 
@@ -276,16 +276,19 @@ export default function DashboardPage() {
   }
 
 
-  const handleFormSubmit = async (values: InvestmentFormValues, startingBalance?: number) => {
+  const handleFormSubmit = async (
+    values: InvestmentFormValues,
+    startingBalance?: number,
+    initialRatePct?: number
+  ) => {
     if (!user) return;
     
     const isEditing = !!editingInvestment;
     try {
-        let invId = editingInvestment?.id;
-        if (isEditing && invId) {
-          await updateInvestment(user.uid, invId, values);
+        if (isEditing && editingInvestment) {
+          await updateInvestment(user.uid, editingInvestment.id, values);
         } else {
-          invId = await addInvestment(user.uid, values);
+          const invId = await addInvestment(user.uid, values, initialRatePct);
           if (values.type === 'Interest Account' && startingBalance && startingBalance > 0) {
               await addTransaction(user.uid, invId, {
                   type: 'Deposit',

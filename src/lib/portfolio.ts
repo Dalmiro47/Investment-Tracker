@@ -76,7 +76,7 @@ export function calculatePositionMetrics(
       .filter(t => t.type === 'Deposit' || t.type === 'Withdrawal')
       .map(t => ({
         date: t.date.slice(0,10),
-        amount: t.type === 'Deposit' ? t.totalAmount : -t.totalAmount,
+        amount: t.totalAmount,
       }));
     const result = computeSavings({
       transactions: savingsTx,

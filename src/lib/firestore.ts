@@ -36,11 +36,15 @@ export async function getInvestments(uid: string): Promise<Investment[]> {
   return q.docs.map(fromInvestmentDoc);
 }
 
-export async function addInvestment(uid: string, data: InvestmentFormValues): Promise<string> {
+export async function addInvestment(
+  uid: string,
+  data: InvestmentFormValues,
+  initialRatePct?: number
+): Promise<string> {
   const investmentData = {
     ...data,
     purchaseDate: toTS(data.purchaseDate),
-    currentValue: data.type === 'Interest Account' ? (data as any).startingBalance ?? 0 : data.purchasePricePerUnit,
+    currentValue: data.type === 'Interest Account' ? 0 : data.purchasePricePerUnit,
     totalSoldQty: 0,
     realizedProceeds: 0,
     realizedPnL: 0,
@@ -54,7 +58,10 @@ export async function addInvestment(uid: string, data: InvestmentFormValues): Pr
 
   if (data.type === 'Interest Account') {
       const rateScheduleRef = collection(db, 'users', uid, 'investments', newDocRef.id, 'rateSchedule');
-      await addDoc(rateScheduleRef, { from: data.purchaseDate.toISOString().slice(0,10), annualRatePct: 2.0 });
+      await addDoc(rateScheduleRef, {
+        from: data.purchaseDate.toISOString().slice(0,10),
+        annualRatePct: (typeof initialRatePct === 'number' ? initialRatePct : 2.0),
+      });
   }
   return newDocRef.id;
 }
@@ -169,6 +176,10 @@ export async function addTransaction(uid: string, invId: string, t: TransactionF
 
     const inv = fromInvestmentDoc(invSnap);
 
+    if (inv.type === 'Interest Account' && (t.type === 'Sell' || t.type === 'Dividend' || t.type === 'Interest')) {
+      throw new Error('Interest Accounts only support Deposit and Withdrawal.');
+    }
+
     // Current aggregates (defaulting to 0)
     let totalSoldQty      = inv.totalSoldQty      ?? 0;
     let realizedProceeds  = inv.realizedProceeds  ?? 0;
@@ -208,7 +219,8 @@ export async function addTransaction(uid: string, invId: string, t: TransactionF
 
     // Recompute status from available qty
     const availableQty = Math.max(0, (inv.purchaseQuantity ?? 0) - totalSoldQty);
-    const status: Investment['status'] = availableQty > 1e-6 ? 'Active' : 'Sold';
+    const status: Investment['status'] =
+      inv.type === 'Interest Account' ? 'Active' : (availableQty > 1e-6 ? 'Active' : 'Sold');
 
     // 1) Update parent aggregates atomically
     tx.update(invRef, {
@@ -292,6 +304,10 @@ export async function updateTransaction(uid: string, invId: string, txId: string
     if (!invSnap.exists()) throw new Error('Investment not found');
     const inv = fromInvestmentDoc(invSnap);
 
+    if (inv.type === 'Interest Account' && (newTxData.type === 'Sell' || newTxData.type === 'Dividend' || newTxData.type === 'Interest')) {
+      throw new Error('Interest Accounts only support Deposit and Withdrawal.');
+    }
+
     const oldTxSnap = await transaction.get(txRef);
     if (!oldTxSnap.exists()) throw new Error('Transaction to update not found');
     const oldTx = fromTxDoc(oldTxSnap);
@@ -301,7 +317,8 @@ export async function updateTransaction(uid: string, invId: string, txId: string
 
     const totalSoldQty = (inv.totalSoldQty ?? 0) + deltas.soldQty;
     const availableQty = Math.max(0, inv.purchaseQuantity - totalSoldQty);
-    const status: Investment['status'] = availableQty > 1e-6 ? 'Active' : 'Sold';
+    const status: Investment['status'] = 
+      inv.type === 'Interest Account' ? 'Active' : (availableQty > 1e-6 ? 'Active' : 'Sold');
     
     // WRITES
     // 1) Update parent investment with deltas
@@ -345,7 +362,8 @@ export async function deleteTransaction(uid: string, invId: string, txId: string
 
         const totalSoldQty = (inv.totalSoldQty ?? 0) + deltas.soldQty;
         const availableQty = Math.max(0, inv.purchaseQuantity - totalSoldQty);
-        const status: Investment['status'] = availableQty > 1e-6 ? 'Active' : 'Sold';
+        const status: Investment['status'] =
+          inv.type === 'Interest Account' ? 'Active' : (availableQty > 1e-6 ? 'Active' : 'Sold');
 
         // WRITES
         // 1) Update parent investment by subtracting the old transaction's values

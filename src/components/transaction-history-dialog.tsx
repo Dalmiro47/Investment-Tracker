@@ -75,6 +75,11 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
     resolver: zodResolver(transactionSchema),
   });
 
+  const typeOptions =
+    investment.type === 'Interest Account'
+      ? ['Deposit', 'Withdrawal'] as const
+      : ['Sell', 'Dividend', 'Interest'] as const;
+
   useEffect(() => {
     if (editingTransaction) {
       form.reset({
@@ -83,15 +88,16 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
         amount: editingTransaction.type !== 'Sell' ? editingTransaction.totalAmount : 0,
       });
     } else {
+      const defaultType = typeOptions[0];
       form.reset({
-        type: "Sell",
+        type: defaultType,
         date: new Date(),
-        quantity: availableQty(investment),
-        pricePerUnit: investment.currentValue ?? 0,
+        quantity: defaultType === 'Sell' ? availableQty(investment) : 0,
+        pricePerUnit: defaultType === 'Sell' ? (investment.currentValue ?? 0) : 0,
         amount: 0,
       });
     }
-  }, [editingTransaction, form, investment]);
+  }, [editingTransaction, form, investment, typeOptions]);
 
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -130,9 +136,9 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                     <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                    <SelectItem value="Sell">Sell</SelectItem>
-                    <SelectItem value="Dividend">Dividend</SelectItem>
-                    <SelectItem value="Interest">Interest</SelectItem>
+                      {typeOptions.map(o => (
+                        <SelectItem key={o} value={o}>{o}</SelectItem>
+                      ))}
                     </SelectContent>
                 </Select>
                 </FormItem>
@@ -202,13 +208,13 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
             </div>
         )}
 
-        {(watchedType === 'Dividend' || watchedType === 'Interest') && (
+        {(watchedType !== 'Sell') && (
             <FormField
             control={form.control}
             name="amount"
             render={({ field }) => (
                 <FormItem>
-                <FormLabel>Total Amount Received (€)</FormLabel>
+                <FormLabel>Total Amount (€)</FormLabel>
                 <FormControl>
                     <Input type="number" step="any" placeholder="e.g. 50.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
                 </FormControl>
@@ -368,6 +374,8 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                                 tx.type === 'Sell' && 'text-red-500',
                                 tx.type === 'Dividend' && 'text-blue-500',
                                 tx.type === 'Interest' && 'text-purple-500',
+                                tx.type === 'Deposit' && 'text-green-500',
+                                tx.type === 'Withdrawal' && 'text-orange-500',
                             )}>
                               {tx.type}
                             </span>

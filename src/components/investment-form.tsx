@@ -41,7 +41,7 @@ import { Label } from "./ui/label"
 interface InvestmentFormProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: InvestmentFormValues, startingBalance?: number) => void;
+  onSubmit: (values: InvestmentFormValues, startingBalance?: number, initialRatePct?: number) => void;
   investment?: Investment;
 }
 
@@ -64,6 +64,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [startingBalance, setStartingBalance] = useState<number>(0);
+  const [initialRatePct, setInitialRatePct] = useState<number>(2);
   
   const watchedType = useWatch({
     control: form.control,
@@ -75,6 +76,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
   useEffect(() => {
     if (isOpen) {
         setStartingBalance(0);
+        setInitialRatePct(2);
         const valuesToReset = investment 
             ? {
                 ...investment,
@@ -93,7 +95,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
           values.purchaseQuantity = 0;
           values.purchasePricePerUnit = 0;
       }
-      onSubmit(values, isIA ? startingBalance : undefined);
+      onSubmit(values, isIA ? startingBalance : undefined, isIA ? initialRatePct : undefined);
   };
 
   const isSubmitting = form.formState.isSubmitting;
@@ -216,7 +218,32 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
               )}
             />
 
-            {!isIA ? (
+            {isIA ? (
+             <>
+                <div className="md:col-span-1">
+                    <FormLabel>Starting Balance (optional)</FormLabel>
+                    <Input
+                        type="number"
+                        step="any"
+                        value={startingBalance}
+                        onChange={(e) => setStartingBalance(parseFloat(e.target.value) || 0)}
+                        placeholder="e.g. 3,000.00"
+                    />
+                    <FormDescription>Recorded as a Deposit on the opening date.</FormDescription>
+                </div>
+                <div className="md:col-span-1">
+                    <FormLabel>Initial Interest Rate (%)</FormLabel>
+                    <Input
+                        type="number"
+                        step="0.01"
+                        value={initialRatePct}
+                        onChange={(e) => setInitialRatePct(parseFloat(e.target.value) || 0)}
+                        placeholder="e.g. 3.5"
+                    />
+                    <FormDescription>Annual rate from your bank.</FormDescription>
+                </div>
+              </>
+            ) : (
              <>
                 <FormField
                 control={form.control}
@@ -249,18 +276,6 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                 )}
                 />
             </>
-            ) : (
-                <div className="md:col-span-1">
-                    <FormLabel>Starting Balance (optional)</FormLabel>
-                    <Input
-                        type="number"
-                        step="any"
-                        value={startingBalance}
-                        onChange={(e) => setStartingBalance(parseFloat(e.target.value) || 0)}
-                        placeholder="e.g. 3,000.00"
-                    />
-                    <FormDescription>Will be recorded as a Deposit on the opening date.</FormDescription>
-                </div>
             )}
 
 
