@@ -97,7 +97,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
         amount: 0,
       });
     }
-  }, [editingTransaction, form, investment, typeOptions]);
+  }, [editingTransaction, investment, typeOptions]);
 
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
