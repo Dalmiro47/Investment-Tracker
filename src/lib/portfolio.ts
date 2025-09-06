@@ -32,6 +32,28 @@ export interface PositionMetrics {
   type: Investment['type'];
 }
 
+export type AggregatedSymbolRow = {
+  key: string;
+  name: string;
+  ticker?: string | null;
+  type: Investment['type'];
+  positions: number;
+
+  buyQty: number;
+  availableQty: number;
+  costBasis: number;
+  marketValue: number;
+
+  realizedPL: number;
+  unrealizedPL: number;
+  totalPL: number;
+  performancePct: number;
+
+  economicValue: number; // marketValue + realizedPL (what donuts use)
+  percentPortfolio?: number;
+};
+
+
 export function calculatePositionMetrics(
   inv: Investment,
   txs: Transaction[],
@@ -142,6 +164,80 @@ export function calculatePositionMetrics(
     performancePct: toNum(performancePct, 4),
     type: inv.type,
   };
+}
+
+export function aggregateBySymbol(
+  investments: Investment[],
+  transactionsMap: Record<string, Transaction[]>,
+  filter: YearFilter
+): { rows: AggregatedSymbolRow[]; totals: { economicValue: number } } {
+  type Acc = AggregatedSymbolRow & { purchaseValue: number };
+  const byKey = new Map<string, Acc>();
+
+  const keyOf = (inv: Investment) =>
+    `${inv.type}:${(inv.ticker || inv.name).toLowerCase()}`;
+
+  for (const inv of investments) {
+    const metrics = calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], filter);
+    const key = keyOf(inv);
+
+    if (!byKey.has(key)) {
+      byKey.set(key, {
+        key,
+        name: inv.name,
+        ticker: inv.ticker ?? null,
+        type: inv.type,
+        positions: 0,
+
+        buyQty: 0,
+        availableQty: 0,
+        costBasis: 0,
+        marketValue: 0,
+
+        realizedPL: 0,
+        unrealizedPL: 0,
+        totalPL: 0,
+        performancePct: 0,
+
+        economicValue: 0,
+        percentPortfolio: 0,
+
+        // internal for perf calc
+        purchaseValue: 0,
+      });
+    }
+
+    const a = byKey.get(key)!;
+    a.positions += 1;
+    a.buyQty += metrics.buyQty;
+    a.availableQty += metrics.availableQty;
+
+    // cost basis of remaining shares for this lot = availableQty * buyPrice
+    a.costBasis += metrics.availableQty * metrics.buyPrice;
+
+    a.marketValue += metrics.marketValue;
+    a.realizedPL += metrics.realizedPLDisplay;
+    a.unrealizedPL += metrics.unrealizedPL;
+    a.totalPL += metrics.totalPLDisplay;
+    a.economicValue += metrics.marketValue + metrics.realizedPLDisplay;
+
+    a.purchaseValue += metrics.purchaseValue;
+  }
+
+  const rows: AggregatedSymbolRow[] = Array.from(byKey.values()).map((a) => ({
+    ...a,
+    performancePct: a.purchaseValue > 0 ? a.totalPL / a.purchaseValue : 0,
+  }));
+
+  const totalEconomic = rows.reduce((s, r) => s + r.economicValue, 0);
+  rows.forEach((r) => {
+    r.percentPortfolio = totalEconomic > 0 ? r.economicValue / totalEconomic : 0;
+  });
+
+  // Sort by economic value desc by default
+  rows.sort((a, b) => b.economicValue - a.economicValue);
+
+  return { rows, totals: { economicValue: totalEconomic } };
 }
 
 
