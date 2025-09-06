@@ -1,3 +1,4 @@
+
 "use client"
 
 import { useState, useEffect, useMemo, useRef } from "react";
@@ -112,7 +113,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                 amount: 0,
             });
         }
-    }, [editingTransaction, typeOptions, investment]);
+    }, [editingTransaction, typeOptions, investment, form]);
 
 
     const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -316,6 +317,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
         if (!user || !deletingTransactionId) return;
         try {
             await deleteTransaction(user.uid, investment.id, deletingTransactionId);
+            await fetchTransactions();
             onTransactionAdded(); // Refetch
             setDeletingTransactionId(null);
         } catch (error) {
@@ -372,7 +374,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {!isIA && (
+                                            {investment.type !== 'Interest Account' && (
                                                 <TableRow className="bg-muted/30">
                                                     <TableCell><span className="font-semibold text-green-500">Buy</span></TableCell>
                                                     <TableCell>{format(parseISO(investment.purchaseDate), 'dd MMM yyyy')}</TableCell>

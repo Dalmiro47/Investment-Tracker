@@ -41,7 +41,11 @@ import { Label } from "./ui/label"
 interface InvestmentFormProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (values: InvestmentFormValues, startingBalance?: number, initialRatePct?: number) => void;
+  onSubmit: (
+    values: InvestmentFormValues,
+    startingBalance?: number,
+    initialRatePct?: number
+  ) => Promise<void> | void;
   investment?: Investment;
 }
 
@@ -90,12 +94,14 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
     }
   }, [investment, form, isOpen]);
 
-  const handleFormSubmit = (values: InvestmentFormValues) => {
+  const handleFormSubmit = async (values: InvestmentFormValues) => {
       if (isIA) {
           values.purchaseQuantity = 0;
           values.purchasePricePerUnit = 0;
       }
-      onSubmit(values, isIA ? startingBalance : undefined, isIA ? initialRatePct : undefined);
+      await Promise.resolve(
+        onSubmit(values, isIA ? startingBalance : undefined, isIA ? initialRatePct : undefined)
+      );
   };
 
   const isSubmitting = form.formState.isSubmitting;
