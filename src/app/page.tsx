@@ -34,6 +34,7 @@ import { doc } from 'firebase/firestore';
 import { TransactionHistoryDialog } from '@/components/transaction-history-dialog';
 import { performancePct } from '@/lib/types';
 import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
+import InvestmentListView from '@/components/investment-list';
 
 
 export default function DashboardPage() {
@@ -50,6 +51,8 @@ export default function DashboardPage() {
   const [typeFilter, setTypeFilter] = useState<InvestmentType | 'All'>('All');
   const [statusFilter, setStatusFilter] = useState<InvestmentStatus | 'All'>('All');
   const [sortKey, setSortKey] = useState<SortKey>('purchaseDate');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [listMode, setListMode] = useState<'aggregated' | 'flat'>('aggregated');
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | undefined>(undefined);
@@ -155,7 +158,8 @@ export default function DashboardPage() {
 }
 
   const typeCounts = useMemo(() => {
-    const counts: Record<InvestmentType, number> = {
+    const counts: Record<InvestmentType | 'All', number> = {
+      'All': 0,
       'Stock': 0,
       'Crypto': 0,
       'ETF': 0,
@@ -163,13 +167,20 @@ export default function DashboardPage() {
       'Bond': 0,
       'Real Estate': 0,
     };
+    
+    let totalManual = 0;
     investments.forEach(inv => {
       if (counts[inv.type] !== undefined) {
         counts[inv.type]++;
+        totalManual++;
       }
     });
+
+    counts['ETF'] += etfSummaries.length;
+    counts['All'] = totalManual + etfSummaries.length;
+
     return counts;
-  }, [investments]);
+  }, [investments, etfSummaries]);
 
   const filteredAndSortedInvestments = useMemo(() => {
     let filtered = [...investments];
@@ -328,6 +339,39 @@ export default function DashboardPage() {
                 <SlidersHorizontal className="h-5 w-5 text-muted-foreground"/>
                 <h2 className="text-lg font-semibold">Filters &amp; Sorting</h2>
               </div>
+              <div className="flex items-center gap-2 ml-4">
+                <div className="rounded-md border p-1">
+                  <button
+                    className={`px-3 py-1 rounded ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                    onClick={() => setViewMode('grid')}
+                  >
+                    Cards
+                  </button>
+                  <button
+                    className={`px-3 py-1 rounded ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                    onClick={() => setViewMode('list')}
+                  >
+                    List
+                  </button>
+                </div>
+
+                {viewMode === 'list' && (
+                  <div className="rounded-md border p-1">
+                    <button
+                      className={`px-3 py-1 rounded ${listMode === 'aggregated' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                      onClick={() => setListMode('aggregated')}
+                    >
+                      Aggregated
+                    </button>
+                    <button
+                      className={`px-3 py-1 rounded ${listMode === 'flat' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                      onClick={() => setListMode('flat')}
+                    >
+                      Flat
+                    </button>
+                  </div>
+                )}
+              </div>
               <div className="flex-grow" />
               <div className="flex items-center gap-4 w-full sm:w-auto">
                  <Button onClick={handleRefreshPrices} disabled={isRefreshing}>
@@ -348,10 +392,10 @@ export default function DashboardPage() {
               <div className="w-full sm:w-auto">
                 <Tabs value={typeFilter} onValueChange={(value) => setTypeFilter(value as InvestmentType | 'All')}>
                   <TabsList className="flex-wrap h-auto">
-                    <TabsTrigger value="All">All Types ({investments.length})</TabsTrigger>
+                    <TabsTrigger value="All">All Types ({typeCounts.All})</TabsTrigger>
                     <TabsTrigger value="Stock">Stocks ({typeCounts.Stock})</TabsTrigger>
                     <TabsTrigger value="Crypto">Crypto ({typeCounts.Crypto})</TabsTrigger>
-                    <TabsTrigger value="ETF">ETFs ({typeCounts.ETF + etfSummaries.length})</TabsTrigger>
+                    <TabsTrigger value="ETF">ETFs ({typeCounts.ETF})</TabsTrigger>
                     <TabsTrigger value="Savings">Savings ({typeCounts.Savings})</TabsTrigger>
                     <TabsTrigger value="Bond">Bonds ({typeCounts.Bond})</TabsTrigger>
                     <TabsTrigger value="Real Estate">Real Estate ({typeCounts['Real Estate']})</TabsTrigger>
@@ -388,7 +432,25 @@ export default function DashboardPage() {
              <div className="flex justify-center items-center py-16">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
-          ) : filteredAndSortedInvestments.length > 0 ? (
+          ) : viewMode === 'list' ? (
+              <InvestmentListView
+                investments={filteredAndSortedInvestments}
+                transactionsMap={transactionsMap}
+                yearFilter={yearFilter}
+                showTypeColumn={typeFilter === 'All'}
+                mode={listMode}
+                sortKey={sortKey}
+                statusFilter={statusFilter}
+                onViewHistory={(id) => {
+                  const inv = investments.find((i) => i.id === id);
+                  if (inv) handleHistoryClick(inv);
+                }}
+                onAddTransaction={(id) => {
+                  const inv = investments.find((i) => i.id === id);
+                  if (inv) handleAddTransactionClick(inv);
+                }}
+              />
+            ) : filteredAndSortedInvestments.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {filteredAndSortedInvestments.map(investment => {
                 const metrics = investmentMetrics.get(investment.id);
