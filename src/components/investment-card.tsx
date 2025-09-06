@@ -84,20 +84,20 @@ export default function InvestmentCard({
   const avgSellPrice = div(dec(investment.realizedProceeds), soldQty);
   
   // --- IA values come from metrics ----
-  const iaNetDeposits   = isIA ? (metrics?.purchaseValue ?? 0)  : 0;
-  const iaBalance       = isIA ? (metrics?.marketValue ?? 0)    : 0;
-  const iaAccrued       = isIA ? (metrics?.unrealizedPL ?? 0)   : 0;
-  const iaPerfPct       = isIA ? (metrics?.performancePct ?? 0) : 0;
+  const netDeposits  = isIA ? (metrics?.purchaseValue  ?? 0) : 0;
+  const balance      = isIA ? (metrics?.marketValue    ?? 0) : 0;
+  const accrued      = isIA ? (metrics?.unrealizedPL   ?? 0) : 0;
+  const perf         = isIA ? (metrics?.performancePct ?? 0) : 0;
   
   // --- Display-ready values (rounded) ---
-  const displayCostBasis = isIA ? iaNetDeposits : toNum(costBasisNonIA);
-  const displayMarketValue = isIA ? iaBalance : toNum(marketValueNonIA);
+  const displayCostBasis = toNum(costBasisNonIA);
+  const displayMarketValue = toNum(marketValueNonIA);
   const displayRealizedValue = toNum(dec(investment.realizedProceeds));
-  const displayUnrealizedPL = isIA ? iaAccrued : toNum(unrealizedPLNonIA);
-  const displayRealizedPL = toNum(dec(realizedPnL));
-  const displayTotalPL = isIA ? iaAccrued : toNum(totalPLNonIA);
+  const displayUnrealizedPL = toNum(unrealizedPLNonIA);
+  const displayRealizedPL = toNum(realizedPnL);
+  const displayTotalPL = toNum(totalPLNonIA);
   const displayAvgSellPrice = toNum(avgSellPrice);
-  const performance = isIA ? iaPerfPct : toNum(performanceNonIA);
+  const performance = isIA ? perf : toNum(performanceNonIA);
 
   const isCrypto = investment.type === 'Crypto';
   const cryptoTax = isCrypto ? getCryptoTaxInfo(investment) : null;
@@ -254,26 +254,26 @@ export default function InvestmentCard({
               <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md">
                 <span className="text-xs text-muted-foreground">Net Deposits</span>
                 <span className="font-headline text-xl font-bold">
-                  {formatCurrency(iaNetDeposits)}
+                  {formatCurrency(netDeposits)}
                 </span>
               </div>
               <div className="flex flex-col items-center justify-center p-3 bg-primary/10 rounded-md">
                 <span className="text-xs text-muted-foreground">Balance</span>
                 <span className="font-headline text-xl font-bold text-primary">
-                  {formatCurrency(iaBalance)}
+                  {formatCurrency(balance)}
                 </span>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="text-center">
                 <div className="text-sm text-muted-foreground">Accrued Interest</div>
-                <div className={cn("font-bold text-lg", iaAccrued >= 0 ? "text-green-600" : "text-destructive")}>
-                  {formatCurrency(iaAccrued)}
+                <div className={cn("font-bold text-lg", accrued >= 0 ? "text-green-600" : "text-destructive")}>
+                  {formatCurrency(accrued)}
                 </div>
               </div>
               <div className="text-center">
                 <div className="text-sm text-muted-foreground">Performance</div>
-                <div className="font-bold text-lg">{formatPercent(iaPerfPct)}</div>
+                <div className="font-bold text-lg">{formatPercent(perf)}</div>
               </div>
             </div>
           </div>
@@ -350,7 +350,7 @@ export default function InvestmentCard({
       <CardFooter className="flex-col items-start text-xs text-muted-foreground pt-4">
           {purchaseDate && (
             <div>
-                Purchased on {format(parseISO(purchaseDate), 'dd MMM yyyy')}
+                {isIA ? 'Started on ' : 'Purchased on '}{format(parseISO(purchaseDate), 'dd MMM yyyy')}
             </div>
           )}
           {isCrypto && cryptoTax?.taxFreeDate && (

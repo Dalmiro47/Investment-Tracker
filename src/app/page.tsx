@@ -58,6 +58,7 @@ export default function DashboardPage() {
 
   const [isFormOpen, setIsFormOpen] = React.useState(false);
   const [editingInvestment, setEditingInvestment] = React.useState<Investment | undefined>(undefined);
+  const [prefillType, setPrefillType] = React.useState<InvestmentType | undefined>(undefined);
   
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
   const [deletingInvestmentId, setDeletingInvestmentId] = React.useState<string | null>(null);
@@ -238,8 +239,9 @@ export default function DashboardPage() {
   }, [investments, transactionsMap, etfSummaries, yearFilter, isTaxView, taxSettings, rateSchedulesMap]);
 
 
-  const handleAddClick = () => {
+  const handleAddClick = (prefill?: InvestmentType) => {
     setEditingInvestment(undefined);
+    setPrefillType(prefill);
     setIsFormOpen(true);
   };
 
@@ -405,7 +407,7 @@ export default function DashboardPage() {
                   <Briefcase className="mr-2 h-4 w-4" />
                   ETF Plans
                 </Button>
-                 <Button onClick={handleAddClick}>
+                 <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add Investment
                 </Button>
@@ -500,7 +502,7 @@ export default function DashboardPage() {
             <div className="text-center py-16">
               <h3 className="text-xl font-semibold text-foreground">No Investments Found</h3>
               <p className="text-muted-foreground mt-2">Add a new investment to get started.</p>
-               <Button onClick={handleAddClick} className="mt-4">
+               <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)} className="mt-4">
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add First Investment
                 </Button>
@@ -513,6 +515,7 @@ export default function DashboardPage() {
         onOpenChange={setIsFormOpen}
         onSubmit={handleFormSubmit}
         investment={editingInvestment}
+        initialType={prefillType}
       />
       <TaxSettingsDialog
         isOpen={isTaxSettingsOpen}

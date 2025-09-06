@@ -47,6 +47,7 @@ interface InvestmentFormProps {
     initialRatePct?: number
   ) => Promise<void> | void;
   investment?: Investment;
+  initialType?: InvestmentType;
 }
 
 const defaultFormValues: InvestmentFormValues = {
@@ -60,7 +61,7 @@ const defaultFormValues: InvestmentFormValues = {
 };
 
 
-export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: InvestmentFormProps) {
+export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, initialType }: InvestmentFormProps) {
   const form = useForm<InvestmentFormValues>({
     resolver: zodResolver(investmentSchema),
     defaultValues: defaultFormValues,
@@ -88,11 +89,15 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                 ticker: investment.ticker ?? "",
                 stakingOrLending: investment.stakingOrLending ?? false,
               }
-            : { ...defaultFormValues, purchaseDate: new Date() };
+            : {
+                ...defaultFormValues,
+                purchaseDate: new Date(),
+                type: initialType ?? defaultFormValues.type,
+              };
 
         form.reset(valuesToReset);
     }
-  }, [investment, form, isOpen]);
+  }, [investment, form, isOpen, initialType]);
 
   const handleFormSubmit = async (values: InvestmentFormValues) => {
       if (isIA) {

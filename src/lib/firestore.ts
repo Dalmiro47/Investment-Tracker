@@ -24,10 +24,11 @@ const fromInvestmentDoc = (snap: any): Investment => {
 
 const fromTxDoc = (snap: any): Transaction => {
   const d = snap.data();
+  const dt = (d.date?.toDate ? d.date.toDate() : new Date(d.date)) as Date;
   return {
     id: snap.id,
     ...d,
-    date: (d.date as Timestamp).toDate().toISOString(),
+    date: dt.toISOString(),
   } as Transaction;
 };
 
@@ -179,6 +180,14 @@ export async function addTransaction(uid: string, invId: string, t: TransactionF
     if (inv.type === 'Interest Account' && (t.type === 'Sell' || t.type === 'Dividend' || t.type === 'Interest')) {
       throw new Error('Interest Accounts only support Deposit and Withdrawal.');
     }
+    
+    // prevent oversell
+    if (t.type === 'Sell') {
+      const available = Math.max(0, (inv.purchaseQuantity ?? 0) - (inv.totalSoldQty ?? 0));
+      if (t.quantity > available + 1e-8) {
+        throw new Error(`Sell quantity exceeds available quantity (${available}).`);
+      }
+    }
 
     // Current aggregates (defaulting to 0)
     let totalSoldQty      = inv.totalSoldQty      ?? 0;
@@ -316,6 +325,12 @@ export async function updateTransaction(uid: string, invId: string, txId: string
     const { deltas, newTotalAmount } = calculateDeltas(oldTx, newTxData, inv.purchasePricePerUnit);
 
     const totalSoldQty = (inv.totalSoldQty ?? 0) + deltas.soldQty;
+    
+    if (totalSoldQty > inv.purchaseQuantity + 1e-8) {
+      const available = Math.max(0, inv.purchaseQuantity - (inv.totalSoldQty ?? 0));
+      throw new Error(`Sell quantity exceeds available quantity (${available}).`);
+    }
+
     const availableQty = Math.max(0, inv.purchaseQuantity - totalSoldQty);
     const status: Investment['status'] = 
       inv.type === 'Interest Account' ? 'Active' : (availableQty > 1e-6 ? 'Active' : 'Sold');
