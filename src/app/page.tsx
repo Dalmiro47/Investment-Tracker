@@ -52,6 +52,7 @@ export default function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState<InvestmentStatus | 'All'>('All');
   const [sortKey, setSortKey] = useState<SortKey>('purchaseDate');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+  const [listMode, setListMode] = useState<'aggregated' | 'flat'>('aggregated');
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | undefined>(undefined);
@@ -353,6 +354,23 @@ export default function DashboardPage() {
                     List
                   </button>
                 </div>
+
+                {viewMode === 'list' && (
+                  <div className="rounded-md border p-1">
+                    <button
+                      className={`px-3 py-1 rounded ${listMode === 'aggregated' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                      onClick={() => setListMode('aggregated')}
+                    >
+                      Aggregated
+                    </button>
+                    <button
+                      className={`px-3 py-1 rounded ${listMode === 'flat' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                      onClick={() => setListMode('flat')}
+                    >
+                      Flat
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="flex-grow" />
               <div className="flex items-center gap-4 w-full sm:w-auto">
@@ -416,10 +434,11 @@ export default function DashboardPage() {
             </div>
           ) : viewMode === 'list' ? (
               <InvestmentListView
-                investments={filteredAndSortedInvestments} // already filtered by type/status
+                investments={filteredAndSortedInvestments}
                 transactionsMap={transactionsMap}
                 yearFilter={yearFilter}
                 showTypeColumn={typeFilter === 'All'}
+                mode={listMode}
               />
             ) : filteredAndSortedInvestments.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
