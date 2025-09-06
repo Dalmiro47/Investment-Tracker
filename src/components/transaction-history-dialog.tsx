@@ -1,4 +1,5 @@
 
+
 "use client"
 
 import { useState, useEffect } from "react";
@@ -73,6 +74,13 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
   
   const form = useForm<TransactionFormValues>({
     resolver: zodResolver(transactionSchema),
+    defaultValues: {
+      type: "Sell",
+      date: new Date(),
+      quantity: 0,
+      pricePerUnit: 0,
+      amount: 0,
+    }
   });
 
   const typeOptions =
