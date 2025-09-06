@@ -439,6 +439,7 @@ export default function DashboardPage() {
                 yearFilter={yearFilter}
                 showTypeColumn={typeFilter === 'All'}
                 mode={listMode}
+                sortKey={sortKey}
                 onViewHistory={(id) => {
                   const inv = investments.find((i) => i.id === id);
                   if (inv) handleHistoryClick(inv);

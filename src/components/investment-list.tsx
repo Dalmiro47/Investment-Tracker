@@ -1,13 +1,15 @@
 'use client';
 
 import React, { useMemo } from 'react';
-import type { Investment, Transaction, YearFilter } from '@/lib/types';
+import type { Investment, Transaction, YearFilter, SortKey } from '@/lib/types';
 import { aggregateBySymbol, calculatePositionMetrics } from '@/lib/portfolio';
 import { format, parseISO } from 'date-fns';
 import { History, PlusCircle } from 'lucide-react';
 
 const fmtEur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
 const fmtPct = (v: number) => `${(v * 100).toFixed(2)} %`;
+const plClass = (v: number) =>
+  v > 1e-6 ? 'text-emerald-500' : v < -1e-6 ? 'text-red-500' : 'text-foreground';
 
 type Props = {
   /** Investments already filtered by type/status on the page */
@@ -21,7 +23,9 @@ type Props = {
   /** "aggregated" (by symbol) or "flat" (one row per investment) */
   mode?: 'aggregated' | 'flat';
 
-  /** Flat-mode actions */
+  /** sorting to apply in FLAT mode */
+  sortKey?: SortKey;
+
   onViewHistory?: (investmentId: string) => void;
   onAddTransaction?: (investmentId: string) => void;
 };
@@ -32,6 +36,7 @@ export default function InvestmentListView({
   yearFilter,
   showTypeColumn = false,
   mode = 'aggregated',
+  sortKey,
   onViewHistory,
   onAddTransaction,
 }: Props) {
@@ -68,19 +73,26 @@ export default function InvestmentListView({
 
     // Compute % of portfolio within the currently displayed set
     const list = mode === 'flat' ? flat : agg;
-    const econTotal = list.reduce((s, r) => s + ((r as any).economicValue ?? (r.marketValue + r.realizedPL)), 0);
-    list.forEach((r) => {
-      const ev = ((r as any).economicValue ?? (r.marketValue + r.realizedPL)) as number;
-      (r as any).percentPortfolio = econTotal > 0 ? ev / econTotal : 0;
+    const econTotal = list.reduce(
+      (s, r: any) => s + (r.economicValue ?? (r.marketValue + r.realizedPL)),
+      0
+    );
+    list.forEach((r: any) => {
+      const ev = r.economicValue ?? (r.marketValue + r.realizedPL);
+      r.percentPortfolio = econTotal > 0 ? ev / econTotal : 0;
     });
 
-    // Consistent sorting: economic value desc
-    agg.sort((a, b) => b.economicValue - a.economicValue);
-    flat.sort((a, b) => b.economicValue - a.economicValue);
+    // Sorting
+    if (mode === 'aggregated') {
+      // consistent for aggregated
+      agg.sort((a, b) => b.economicValue - a.economicValue);
+    }
+    // The `investments` prop is already sorted by the page-level component,
+    // so `flat` will reflect that sort automatically. No re-sorting is needed here.
 
     return { rowsAgg: agg, rowsFlat: flat };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [investments, transactionsMap, yearFilter, mode]);
+  }, [investments, transactionsMap, yearFilter, mode, sortKey]);
 
   const rows: any[] = mode === 'flat' ? rowsFlat : rowsAgg;
 
@@ -132,17 +144,11 @@ export default function InvestmentListView({
               <td className="text-right">{fmtEur.format(r.costBasis)}</td>
               <td className="text-right">{fmtEur.format(r.marketValue)}</td>
 
-              <td className={`text-right ${r.realizedPL >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                {fmtEur.format(r.realizedPL)}
-              </td>
-              <td className={`text-right ${r.unrealizedPL >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                {fmtEur.format(r.unrealizedPL)}
-              </td>
-              <td className={`text-right ${r.totalPL >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
-                {fmtEur.format(r.totalPL)}
-              </td>
+              <td className={`text-right ${plClass(r.realizedPL)}`}>{fmtEur.format(r.realizedPL)}</td>
+              <td className={`text-right ${plClass(r.unrealizedPL)}`}>{fmtEur.format(r.unrealizedPL)}</td>
+              <td className={`text-right ${plClass(r.totalPL)}`}>{fmtEur.format(r.totalPL)}</td>
 
-              <td className="text-right">{fmtPct(r.performancePct)}</td>
+              <td className={`text-right ${plClass(r.performancePct)}`}>{fmtPct(r.performancePct)}</td>
               <td className="text-right">{fmtPct(r.percentPortfolio ?? 0)}</td>
 
               {mode === 'flat' && (
