@@ -13,7 +13,7 @@ export interface PositionMetrics {
   buyPrice: number;
   soldQtyAll: number;
   availableQty: number;
-  purchaseValue: number; // The full original cost, does not decrease with sells
+  purchaseValue: number; // The full original cost, does not decrease with sells. For IA: Net Deposits.
   marketValue: number;
   
   // P&L Metrics
@@ -64,11 +64,12 @@ export function calculatePositionMetrics(
   rates?: SavingsRateChange[]
 ): PositionMetrics {
   
-  const zeroMetrics: Omit<PositionMetrics, 'type'> = {
+  const zeroMetrics: Omit<PositionMetrics, 'type'> & {type: Investment['type']} = {
     buyQty: 0, buyPrice: 0, soldQtyAll: 0, availableQty: 0, purchaseValue: 0, marketValue: 0,
     realizedPLAll: 0, realizedPLYear: 0, unrealizedPL: 0, shortTermCryptoGainYear: 0,
     capitalGainsYear: 0, dividendsYear: 0, interestYear: 0,
-    realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0
+    realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0,
+    type: inv.type,
   };
 
   // ✅ Interest Account: compute from transactions only
@@ -108,7 +109,7 @@ export function calculatePositionMetrics(
 
 
   if (!inv.purchaseQuantity || inv.purchaseQuantity <= 0) {
-    return { ...zeroMetrics, type: inv.type };
+    return zeroMetrics;
   }
 
   const buyQty = dec(inv.purchaseQuantity);
@@ -410,12 +411,18 @@ export function aggregateByType(
             };
         }
         const t = byType[p.type];
-        t.costBasis = add(t.costBasis, mul(dec(p.availableQty), dec(p.buyPrice)));
-        t.marketValue = add(t.marketValue, dec(p.marketValue));
-        t.realizedPL = add(t.realizedPL, dec(p.realizedPLDisplay));
+
+        // ✅ Use Net Deposits for Interest Accounts; stock-like cost basis for the rest
+        const lotCostBasis = p.type === 'Interest Account'
+          ? dec(p.purchaseValue)                                   // Net Deposits
+          : mul(dec(p.availableQty), dec(p.buyPrice));             // Remaining qty × buy price
+      
+        t.costBasis    = add(t.costBasis, lotCostBasis);
+        t.marketValue  = add(t.marketValue, dec(p.marketValue));
+        t.realizedPL   = add(t.realizedPL, dec(p.realizedPLDisplay));
         t.unrealizedPL = add(t.unrealizedPL, dec(p.unrealizedPL));
-        t.totalPL = add(t.totalPL, dec(p.totalPLDisplay));
-        t.purchaseValue = add(t.purchaseValue, dec(p.purchaseValue));
+        t.totalPL      = add(t.totalPL, dec(p.totalPLDisplay));
+        t.purchaseValue= add(t.purchaseValue, dec(p.purchaseValue));
     });
 
     const rows = Object.values(byType).map(t => ({
