@@ -88,10 +88,10 @@ export default function InvestmentCard({
   const avgSellPrice = div(dec(investment.realizedProceeds), soldQty);
   
   // --- IA values come from metrics ----
-  const netDeposits  = isIA ? (metrics?.purchaseValue  ?? 0) : 0;
-  const balance      = isIA ? (metrics?.marketValue    ?? 0) : 0;
-  const accrued      = isIA ? (metrics?.unrealizedPL   ?? 0) : 0;
-  const perf         = isIA ? (metrics?.performancePct ?? 0) : 0;
+  const netDeposits  = metrics?.purchaseValue  ?? 0;
+  const balance      = metrics?.marketValue    ?? 0;
+  const accrued      = metrics?.unrealizedPL   ?? 0;
+  const perf         = metrics?.performancePct ?? 0;
   
   // --- Display-ready values (rounded) ---
   const displayCostBasis = toNum(costBasisNonIA);
@@ -156,38 +156,59 @@ export default function InvestmentCard({
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>Field Explanations</DialogTitle>
-                        <DialogDescription>Here's how each value on the card is calculated.</DialogDescription>
+                        <DialogDescription>Here's how each value on the card is calculated for this investment type.</DialogDescription>
                     </DialogHeader>
-                    <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4">
-                        <div>
-                            <h4 className="font-semibold">Cost Basis</h4>
-                            <p className="text-muted-foreground">The original purchase price of the assets you currently still own. It ignores the cost of shares you've already sold. <br/><code className="text-xs">Formula: Available Quantity × Original Purchase Price per Unit</code></p>
+                    {isIA ? (
+                        <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4 py-4">
+                            <div>
+                                <h4 className="font-semibold">Net Deposits</h4>
+                                <p className="text-muted-foreground">The total amount of cash you have moved into this account, minus any withdrawals. It is your principal investment.<br/><code className="text-xs">Formula: Sum of all Deposits - Sum of all Withdrawals</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Balance</h4>
+                                <p className="text-muted-foreground">The current total value of your account, including your principal and any interest that has accrued over time.<br/><code className="text-xs">Formula: Net Deposits + Accrued Interest</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Accrued Interest</h4>
+                                <p className="text-muted-foreground">The total interest earned to date, calculated based on the account's rate schedule and daily balances. This is your "unrealized" gain.<br/><code className="text-xs">Formula: Calculated daily via savings engine</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Performance</h4>
+                                <p className="text-muted-foreground">The total return on your investment, shown as a percentage.<br/><code className="text-xs">Formula: (Accrued Interest / Net Deposits) × 100</code></p>
+                            </div>
                         </div>
-                         <div>
-                            <h4 className="font-semibold">Market Value</h4>
-                            <p className="text-muted-foreground">The current value of the shares/units you still hold. <br/><code className="text-xs">Formula: Available Quantity × Current Price</code></p>
+                    ) : (
+                        <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4 py-4">
+                            <div>
+                                <h4 className="font-semibold">Cost Basis</h4>
+                                <p className="text-muted-foreground">The original purchase price of the assets you currently still own. It ignores the cost of shares you've already sold. <br/><code className="text-xs">Formula: Available Quantity × Original Purchase Price per Unit</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Market Value</h4>
+                                <p className="text-muted-foreground">The current value of the shares/units you still hold. <br/><code className="text-xs">Formula: Available Quantity × Current Price</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Bought, Sold, Available</h4>
+                                <p className="text-muted-foreground"><span className="font-medium text-foreground">Bought:</span> The total quantity you initially purchased. <br/><span className="font-medium text-foreground">Sold:</span> The total quantity you have sold via transactions. <br/><span className="font-medium text-foreground">Available:</span> The quantity you currently still hold (`Bought - Sold`).</p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Buy Price, Avg. Sell Price, Current Price</h4>
+                                <p className="text-muted-foreground"><span className="font-medium text-foreground">Buy Price:</span> The price per unit you paid at the initial purchase. <br/><span className="font-medium text-foreground">Avg. Sell Price:</span> The weighted average price of all your sales (`Total Sale Proceeds / Total Quantity Sold`). <br/><span className="font-medium text-foreground">Current Price:</span> The latest market price for one unit.</p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Unrealized P/L</h4>
+                                <p className="text-muted-foreground">Your "paper" profit or loss on the assets you still hold. <br/><code className="text-xs">Formula: (Current Price - Buy Price) × Available Quantity</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Realized P/L</h4>
+                                <p className="text-muted-foreground">Your "locked-in" profit or loss from all completed sales. This value is filtered by the year you select in the summary. <br/><code className="text-xs">Formula: (Avg. Sell Price - Buy Price) × Sold Quantity</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Total P/L (Performance)</h4>
+                                <p className="text-muted-foreground">The overall profit or loss, combining realized and unrealized amounts. The percentage shows the total return on your original investment. <br/><code className="text-xs">Total P/L Formula: Unrealized P/L + Realized P/L</code> <br/> <code className="text-xs">Performance % Formula: Total P/L / Total Cost</code></p>
+                            </div>
                         </div>
-                        <div>
-                            <h4 className="font-semibold">Bought, Sold, Available</h4>
-                            <p className="text-muted-foreground"><span className="font-medium text-foreground">Bought:</span> The total quantity you initially purchased. <br/><span className="font-medium text-foreground">Sold:</span> The total quantity you have sold via transactions. <br/><span className="font-medium text-foreground">Available:</span> The quantity you currently still hold (`Bought - Sold`).</p>
-                        </div>
-                        <div>
-                            <h4 className="font-semibold">Buy Price, Avg. Sell Price, Current Price</h4>
-                            <p className="text-muted-foreground"><span className="font-medium text-foreground">Buy Price:</span> The price per unit you paid at the initial purchase. <br/><span className="font-medium text-foreground">Avg. Sell Price:</span> The weighted average price of all your sales (`Total Sale Proceeds / Total Quantity Sold`). <br/><span className="font-medium text-foreground">Current Price:</span> The latest market price for one unit.</p>
-                        </div>
-                        <div>
-                            <h4 className="font-semibold">Unrealized P/L</h4>
-                            <p className="text-muted-foreground">Your "paper" profit or loss on the assets you still hold. <br/><code className="text-xs">Formula: (Current Price - Buy Price) × Available Quantity</code></p>
-                        </div>
-                        <div>
-                            <h4 className="font-semibold">Realized P/L</h4>
-                            <p className="text-muted-foreground">Your "locked-in" profit or loss from all completed sales. This value is filtered by the year you select in the summary. <br/><code className="text-xs">Formula: (Avg. Sell Price - Buy Price) × Sold Quantity</code></p>
-                        </div>
-                         <div>
-                            <h4 className="font-semibold">Total P/L (Performance)</h4>
-                            <p className="text-muted-foreground">The overall profit or loss, combining realized and unrealized amounts. The percentage shows the total return on your original investment. <br/><code className="text-xs">Total P/L Formula: Unrealized P/L + Realized P/L</code> <br/> <code className="text-xs">Performance % Formula: Total P/L / Total Cost</code></p>
-                        </div>
-                    </div>
+                    )}
                 </DialogContent>
             </Dialog>
             <DropdownMenu>
