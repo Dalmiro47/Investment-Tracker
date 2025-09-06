@@ -4,7 +4,6 @@ import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary } 
 import { dec, add, sub, mul, div, toNum } from '@/lib/money';
 import { isCryptoSellTaxFree, calcCapitalTax, calcCryptoTax, CapitalTaxResult, CryptoTaxResult } from './tax';
 import { differenceInDays, parseISO, endOfYear } from 'date-fns';
-import { computeSavings } from '@/lib/savings';
 import type { SavingsRateChange } from './types-savings';
 
 
@@ -72,41 +71,41 @@ export function calculatePositionMetrics(
     realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0
   };
 
+  // ✅ Interest Account: compute from transactions only
   if (inv.type === 'Interest Account') {
-    const savingsTx = txs
-      .filter(t => t.type === 'Deposit' || t.type === 'Withdrawal')
-      .map(t => ({
-        date: t.date.slice(0,10),
-        amount: t.totalAmount,
-      }));
-    const result = computeSavings({
-      transactions: savingsTx,
-      rates: rates ?? [{ from: inv.purchaseDate.slice(0,10), annualRatePct: 0 }],
-      valuationDate: new Date().toISOString().slice(0,10),
-    });
+    const netDeposits = txs.reduce((sum, t) => {
+      if (t.type === 'Deposit' || t.type === 'Withdrawal') return sum + t.totalAmount; // withdrawals already negative
+      return sum;
+    }, 0);
 
-    const purchaseValue = result.netDeposits;
-    const marketValue   = result.finalBalance;
-    const unrealizedPL  = result.totalInterest;
-    const realizedPLAll = 0;
+    const accruedInterest = txs.reduce((sum, t) => (
+      t.type === 'Interest' ? sum + t.totalAmount : sum
+    ), 0);
 
-    const yrInterest = yearFilter.kind === 'year' ? (result.byYearInterest[String(yearFilter.year)] ?? 0) : 0;
+    const interestYear = yearFilter.kind === 'year'
+      ? txs.reduce((sum, t) => {
+          if (t.type !== 'Interest') return sum;
+          const y = new Date(t.date).getFullYear();
+          return sum + (y === yearFilter.year ? t.totalAmount : 0);
+        }, 0)
+      : 0;
 
-    const totalPLDisplay = unrealizedPL;
-    const performancePct = purchaseValue > 0 ? totalPLDisplay / purchaseValue : 0;
+    const marketValue   = Math.max(0, netDeposits + accruedInterest);
+    const performancePct = netDeposits > 0 ? (accruedInterest / netDeposits) : 0;
 
     return {
       ...zeroMetrics,
-      purchaseValue,
-      marketValue,
-      unrealizedPL,
-      interestYear: yrInterest,
+      purchaseValue: netDeposits,   // Net Deposits
+      marketValue,                  // Balance
+      unrealizedPL: accruedInterest, // Accrued Interest
+      interestYear,
       realizedPLDisplay: 0,
-      totalPLDisplay,
+      totalPLDisplay: accruedInterest,
       performancePct,
       type: inv.type,
     };
   }
+
 
   if (!inv.purchaseQuantity || inv.purchaseQuantity <= 0) {
     return { ...zeroMetrics, type: inv.type };
