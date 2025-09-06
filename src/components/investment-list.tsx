@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useMemo } from 'react';
@@ -187,14 +188,25 @@ export default function InvestmentListView({
             <th>Asset</th>
             {showPurchaseDateCol && <th>Purchase Date</th>}
             {showStatusCol && <th>Status</th>}
-            {showBoughtCol && <th className="text-right">Bought</th>}
-            {showSoldCols && <th className="text-right">Sold</th>}
-            {showAvailCol && <th className="text-right">Qty (avail.)</th>}
-            {showBuyPrice && <th className="text-right">Buy Price</th>}
-            {showSoldCols && <th className="text-right">Avg. Sell Price</th>}
-            {showCurrentPriceCol && <th className="text-right">Current Price</th>}
-            {showCostBasisCol && <th className="text-right">Cost Basis</th>}
-            {showMarketValueCol && <th className="text-right">Market Value</th>}
+            {isFlat ? (
+                <>
+                  {showBoughtCol && <th className="text-right">Bought</th>}
+                  {showSoldCols && <th className="text-right">Sold</th>}
+                  {showAvailCol && <th className="text-right">Qty (avail.)</th>}
+                  {showBuyPrice && <th className="text-right">Buy Price</th>}
+                  {showSoldCols && <th className="text-right">Avg. Sell Price</th>}
+                  {showCurrentPriceCol && <th className="text-right">Current Price</th>}
+                  {showCostBasisCol && <th className="text-right">Cost Basis</th>}
+                </>
+              ) : (
+                <>
+                  <th className="text-right">Buy Price</th>
+                  <th className="text-right">Current Price</th>
+                  <th className="text-right">Cost Basis</th>
+                </>
+              )
+            }
+            <th className="text-right">Market Value</th>
             {showRealizedPLCol && <th className="text-right">Realized P/L</th>}
             {showUnrealizedPLCol && <th className="text-right">Unrealized P/L</th>}
             <th className="text-right">Total P/L</th>
@@ -217,16 +229,25 @@ export default function InvestmentListView({
                 {showPurchaseDateCol && <td className="text-muted-foreground">{r.purchaseDate ? format(parseISO(r.purchaseDate), 'dd MMM yyyy') : '—'}</td>}
                 {showStatusCol && <td className="text-muted-foreground">{r.status}</td>}
 
-                {showBoughtCol && <td className="text-right">{isIARow ? '—' : fmtQty(r.boughtQty)}</td>}
-                {showSoldCols && <td className="text-right">{isIARow ? '—' : (isSoldRow ? fmtQty(r.soldQty) : '—')}</td>}
-                {showAvailCol && <td className="text-right">{isIARow ? '—' : fmtQty(r.availableQty)}</td>}
+                { isFlat ? (
+                    <>
+                      {showBoughtCol && <td className="text-right">{isIARow ? '—' : fmtQty(r.boughtQty)}</td>}
+                      {showSoldCols && <td className="text-right">{isIARow ? '—' : (isSoldRow ? fmtQty(r.soldQty) : '—')}</td>}
+                      {showAvailCol && <td className="text-right">{isIARow ? '—' : fmtQty(r.availableQty)}</td>}
+                      {showBuyPrice && <td className="text-right">{isIARow ? '—' : fmtEur.format(r.buyPrice)}</td>}
+                      {showSoldCols && <td className="text-right">{isIARow ? '—' : (isSoldRow && r.avgSellPrice != null ? fmtEur.format(r.avgSellPrice) : '—')}</td>}
+                      {showCurrentPriceCol && <td className="text-right">{isIARow ? '—' : fmtEur.format(r.currentPrice)}</td>}
+                      {showCostBasisCol && <td className="text-right" title={isIARow ? "Net Deposits" : undefined}>{fmtEur.format(r.costBasis)}</td>}
+                    </>
+                ) : (
+                    <>
+                      <td className="text-right">{r.availableQty > 0 ? fmtEur.format(r.buyPrice) : '—'}</td>
+                      <td className="text-right">{r.availableQty > 0 ? fmtEur.format(r.currentPrice) : '—'}</td>
+                      <td className="text-right" title={isIARow ? "Net Deposits" : ""}>{fmtEur.format(r.costBasis)}</td>
+                    </>
+                )}
 
-                {showBuyPrice && <td className="text-right">{isIARow ? '—' : fmtEur.format(r.buyPrice)}</td>}
-                {showSoldCols && <td className="text-right">{isIARow ? '—' : (isSoldRow && r.avgSellPrice != null ? fmtEur.format(r.avgSellPrice) : '—')}</td>}
-                {showCurrentPriceCol && <td className="text-right">{isIARow ? '—' : fmtEur.format(r.currentPrice)}</td>}
-
-                {showCostBasisCol && <td className="text-right" title={isIARow ? "Net Deposits" : undefined}>{fmtEur.format(r.costBasis)}</td>}
-                {showMarketValueCol && <td className="text-right" title={isIARow ? "Balance" : undefined}>{fmtEur.format(r.marketValue)}</td>}
+                <td className="text-right" title={isIARow ? "Balance" : undefined}>{fmtEur.format(r.marketValue)}</td>
 
                 {showRealizedPLCol && <td className={`text-right ${plClass(r.realizedPL)}`}>{fmtEur.format(r.realizedPL)}</td>}
                 {showUnrealizedPLCol && <td className={`text-right ${plClass(r.unrealizedPL)}`} title={isIARow ? "Accrued Interest" : undefined}>{fmtEur.format(r.unrealizedPL)}</td>}
@@ -250,3 +271,5 @@ export default function InvestmentListView({
     </div>
   );
 }
+
+    
