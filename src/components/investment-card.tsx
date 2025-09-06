@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { dec, toNum, formatCurrency, formatQty, formatPercent, div, mul, sub, add } from '@/lib/money';
 import { getCryptoTaxInfo, estimateCardTax } from '@/lib/tax';
+import { performancePct as calculatePerformancePct } from '@/lib/types';
 
 import {
   DropdownMenu,
@@ -70,14 +71,16 @@ export default function InvestmentCard({
   
   // Fix: Round availableQty to handle floating point inaccuracies
   const availableQty = sub(purchaseQty, soldQty).round(8);
-  const costBasis = mul(availableQty, purchasePrice);
+  const costBasis = isIA ? dec(investment.purchaseQuantity) : mul(availableQty, purchasePrice);
   
-  const marketValue = mul(availableQty, currentPrice);
+  const marketValue = isIA ? dec(investment.currentValue) : mul(availableQty, currentPrice);
 
-  const unrealizedPL = availableQty.eq(0) ? dec(0) : sub(marketValue, costBasis);
+  const unrealizedPL = isIA ? dec(investment.unrealizedPnL) : (availableQty.eq(0) ? dec(0) : sub(marketValue, costBasis));
   const totalPL = add(unrealizedPL, dec(realizedPnL));
   
-  const performance = div(totalPL, mul(purchaseQty, purchasePrice));
+  const performance = isIA 
+    ? (costBasis.gt(0) ? div(unrealizedPL, costBasis) : dec(0))
+    : div(totalPL, mul(purchaseQty, purchasePrice));
 
   const avgSellPrice = div(dec(investment.realizedProceeds), soldQty);
   
@@ -245,26 +248,26 @@ export default function InvestmentCard({
               <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md">
                 <span className="text-xs text-muted-foreground">Net Deposits</span>
                 <span className="font-headline text-xl font-bold">
-                  {formatCurrency(investment.purchaseQuantity)}
+                  {formatCurrency(displayCostBasis)}
                 </span>
               </div>
               <div className="flex flex-col items-center justify-center p-3 bg-primary/10 rounded-md">
                 <span className="text-xs text-muted-foreground">Balance</span>
                 <span className="font-headline text-xl font-bold text-primary">
-                  {formatCurrency(investment.currentValue ?? 0)}
+                  {formatCurrency(displayMarketValue)}
                 </span>
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="text-center">
                 <div className="text-sm text-muted-foreground">Accrued Interest</div>
-                <div className={cn("font-bold text-lg", (investment.unrealizedPnL ?? 0) >= 0 ? "text-green-600" : "text-destructive")}>
-                  {formatCurrency(investment.unrealizedPnL ?? 0)}
+                <div className={cn("font-bold text-lg", displayUnrealizedPL >= 0 ? "text-green-600" : "text-destructive")}>
+                  {formatCurrency(displayUnrealizedPL)}
                 </div>
               </div>
               <div className="text-center">
                 <div className="text-sm text-muted-foreground">Performance</div>
-                <div className="font-bold text-lg">{formatPercent(performancePct(investment))}</div>
+                <div className="font-bold text-lg">{formatPercent(toNum(performance))}</div>
               </div>
             </div>
           </div>
@@ -332,7 +335,7 @@ export default function InvestmentCard({
              <div className="text-center pt-2">
                 <div className="text-sm text-muted-foreground">Total P/L (Performance)</div>
                 <div className={cn("flex items-center justify-center font-bold text-xl", displayTotalPL >= 0 ? "text-green-600" : "text-destructive")}>
-                  {formatCurrency(displayTotalPL)} ({formatPercent(performance)})
+                  {formatCurrency(displayTotalPL)} ({formatPercent(toNum(performance))})
                 </div>
               </div>
           </div>
@@ -364,3 +367,5 @@ export default function InvestmentCard({
     </Card>
   );
 }
+
+    
