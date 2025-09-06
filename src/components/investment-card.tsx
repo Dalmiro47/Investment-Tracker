@@ -60,6 +60,8 @@ export default function InvestmentCard({
 }: InvestmentCardProps) {
   const { name, type, status, ticker, purchaseDate, realizedPnL } = investment;
   
+  const isIA = investment.type === 'Interest Account';
+
   // --- High-Precision Calculations ---
   const purchasePrice = dec(investment.purchasePricePerUnit);
   const currentPrice = dec(investment.currentValue);
@@ -237,6 +239,35 @@ export default function InvestmentCard({
               </div>
             )}
           </div>
+        ) : isIA ? (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md">
+                <span className="text-xs text-muted-foreground">Net Deposits</span>
+                <span className="font-headline text-xl font-bold">
+                  {formatCurrency(investment.purchaseQuantity)}
+                </span>
+              </div>
+              <div className="flex flex-col items-center justify-center p-3 bg-primary/10 rounded-md">
+                <span className="text-xs text-muted-foreground">Balance</span>
+                <span className="font-headline text-xl font-bold text-primary">
+                  {formatCurrency(investment.currentValue ?? 0)}
+                </span>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="text-center">
+                <div className="text-sm text-muted-foreground">Accrued Interest</div>
+                <div className={cn("font-bold text-lg", (investment.unrealizedPnL ?? 0) >= 0 ? "text-green-600" : "text-destructive")}>
+                  {formatCurrency(investment.unrealizedPnL ?? 0)}
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-sm text-muted-foreground">Performance</div>
+                <div className="font-bold text-lg">{formatPercent(performancePct(investment))}</div>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="space-y-4">
              <div className="grid grid-cols-2 gap-2">
@@ -333,5 +364,3 @@ export default function InvestmentCard({
     </Card>
   );
 }
-
-    

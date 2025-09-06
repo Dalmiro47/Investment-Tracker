@@ -36,11 +36,11 @@ export async function getInvestments(uid: string): Promise<Investment[]> {
   return q.docs.map(fromInvestmentDoc);
 }
 
-export async function addInvestment(uid: string, data: InvestmentFormValues) {
+export async function addInvestment(uid: string, data: InvestmentFormValues): Promise<string> {
   const investmentData = {
     ...data,
     purchaseDate: toTS(data.purchaseDate),
-    currentValue: data.purchasePricePerUnit, // Start with the purchase price
+    currentValue: data.type === 'Interest Account' ? (data as any).startingBalance ?? 0 : data.purchasePricePerUnit,
     totalSoldQty: 0,
     realizedProceeds: 0,
     realizedPnL: 0,
@@ -53,10 +53,10 @@ export async function addInvestment(uid: string, data: InvestmentFormValues) {
   const newDocRef = await addDoc(investmentsCol(uid), investmentData);
 
   if (data.type === 'Interest Account') {
-      // Add a default rate schedule
       const rateScheduleRef = collection(db, 'users', uid, 'investments', newDocRef.id, 'rateSchedule');
-      await addDoc(rateScheduleRef, { from: data.purchaseDate.toISOString().slice(0,10), annualRatePct: 1.0 });
+      await addDoc(rateScheduleRef, { from: data.purchaseDate.toISOString().slice(0,10), annualRatePct: 2.0 });
   }
+  return newDocRef.id;
 }
 
 export async function updateInvestment(uid: string, invId: string, patch: Partial<InvestmentFormValues>) {
@@ -380,5 +380,3 @@ export async function updateTaxSettings(uid: string, settings: TaxSettings) {
   const ref = settingsDoc(uid, 'tax');
   await setDoc(ref, settings, { merge: true });
 }
-
-    

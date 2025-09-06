@@ -11,5 +11,3 @@ export type SavingsRateChange = {
 };
 
 export type SavingsAccrualMode = 'DAILY_COMPOUND_ACT365';
-
-    

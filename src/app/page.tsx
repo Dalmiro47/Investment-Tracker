@@ -1,11 +1,10 @@
 
-
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
-import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries, getAllRateSchedules } from '@/lib/firestore';
+import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries, getAllRateSchedules, addTransaction } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
@@ -218,18 +217,23 @@ export default function DashboardPage() {
 
   const investmentMetrics = useMemo(() => {
     const metricsMap = new Map<string, ReturnType<typeof calculatePositionMetrics>>();
-    if (Object.keys(transactionsMap).length > 0) {
+    if (Object.keys(transactionsMap).length > 0 || Object.keys(rateSchedulesMap).length > 0) {
       filteredAndSortedInvestments.forEach(inv => {
-        const metrics = calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], yearFilter);
+        const metrics = calculatePositionMetrics(
+            inv, 
+            transactionsMap[inv.id] ?? [], 
+            yearFilter, 
+            rateSchedulesMap[inv.id]
+        );
         metricsMap.set(inv.id, metrics);
       });
     }
     return metricsMap;
-  }, [filteredAndSortedInvestments, transactionsMap, yearFilter]);
+  }, [filteredAndSortedInvestments, transactionsMap, yearFilter, rateSchedulesMap]);
   
   const summaryData = useMemo(() => {
-    return aggregateByType(investments, transactionsMap, etfSummaries, yearFilter, isTaxView ? taxSettings : null);
-  }, [investments, transactionsMap, etfSummaries, yearFilter, isTaxView, taxSettings]);
+    return aggregateByType(investments, transactionsMap, etfSummaries, yearFilter, isTaxView ? taxSettings : null, rateSchedulesMap);
+  }, [investments, transactionsMap, etfSummaries, yearFilter, isTaxView, taxSettings, rateSchedulesMap]);
 
 
   const handleAddClick = () => {
@@ -270,15 +274,24 @@ export default function DashboardPage() {
   }
 
 
-  const handleFormSubmit = async (values: InvestmentFormValues) => {
+  const handleFormSubmit = async (values: InvestmentFormValues, startingBalance?: number) => {
     if (!user) return;
     
     const isEditing = !!editingInvestment;
     try {
         if (isEditing) {
-          await updateInvestment(user.uid, editingInvestment.id, values);
+          await updateInvestment(user.uid, editingInvestment!.id, values);
         } else {
-          await addInvestment(user.uid, values);
+          const newId = await addInvestment(user.uid, values);
+          if (values.type === 'Interest Account' && startingBalance && startingBalance > 0) {
+              await addTransaction(user.uid, newId, {
+                  type: 'Deposit',
+                  date: values.purchaseDate,
+                  amount: startingBalance,
+                  quantity: 0,
+                  pricePerUnit: 0,
+              });
+          }
         }
         await fetchAllData(user.uid);
         setIsFormOpen(false);
@@ -440,6 +453,7 @@ export default function DashboardPage() {
               <InvestmentListView
                 investments={filteredAndSortedInvestments}
                 transactionsMap={transactionsMap}
+                rateSchedulesMap={rateSchedulesMap}
                 yearFilter={yearFilter}
                 showTypeColumn={typeFilter === 'All'}
                 mode={listMode}
@@ -525,5 +539,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
-    

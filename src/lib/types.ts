@@ -90,8 +90,8 @@ export const investmentSchema = z.object({
   type: z.enum(['Stock', 'Bond', 'Crypto', 'Real Estate', 'ETF', 'Interest Account']),
   ticker: z.string().optional(),
   purchaseDate: z.date({ required_error: "Purchase date is required." }),
-  purchaseQuantity: z.coerce.number().positive({ message: "Quantity must be positive." }),
-  purchasePricePerUnit: z.coerce.number().nonnegative({ message: "Purchase price must be zero or more." }),
+  purchaseQuantity: z.coerce.number().nonnegative(),
+  purchasePricePerUnit: z.coerce.number().nonnegative(),
   stakingOrLending: z.boolean().optional(),
 }).superRefine((data, ctx) => {
     const tickerRequiredTypes: InvestmentType[] = ['Stock', 'ETF', 'Crypto'];
@@ -160,5 +160,3 @@ export function performancePct(inv: Investment): number {
     
     return (totalValue - totalCost) / totalCost;
 }
-
-    

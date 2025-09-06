@@ -3,6 +3,9 @@ import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary } 
 import { dec, add, sub, mul, div, toNum } from '@/lib/money';
 import { isCryptoSellTaxFree, calcCapitalTax, calcCryptoTax, CapitalTaxResult, CryptoTaxResult } from './tax';
 import { differenceInDays, parseISO, endOfYear } from 'date-fns';
+import { computeSavings } from '@/lib/savings';
+import type { SavingsRateChange } from '@/lib/types-savings';
+
 
 export interface PositionMetrics {
   // Base metrics
@@ -57,7 +60,8 @@ export type AggregatedSymbolRow = {
 export function calculatePositionMetrics(
   inv: Investment,
   txs: Transaction[],
-  filter: YearFilter
+  filter: YearFilter,
+  rates?: SavingsRateChange[]
 ): PositionMetrics {
   
   const zeroMetrics: Omit<PositionMetrics, 'type'> = {
@@ -66,6 +70,40 @@ export function calculatePositionMetrics(
     capitalGainsYear: 0, dividendsYear: 0, interestYear: 0,
     realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0
   };
+
+  if (inv.type === 'Interest Account') {
+    const savingsTx = txs
+      .filter(t => t.type === 'Deposit' || t.type === 'Withdrawal')
+      .map(t => ({
+        date: t.date.slice(0,10),
+        amount: t.type === 'Deposit' ? t.totalAmount : -t.totalAmount,
+      }));
+    const result = computeSavings({
+      transactions: savingsTx,
+      rates: rates ?? [{ from: inv.purchaseDate.slice(0,10), annualRatePct: 0 }],
+      valuationDate: new Date().toISOString().slice(0,10),
+    });
+
+    const purchaseValue = result.netDeposits;
+    const marketValue   = result.finalBalance;
+    const unrealizedPL  = result.totalInterest;
+    const realizedPLAll = 0;
+
+    const yrInterest = filter.kind === 'year' ? (result.byYearInterest[String(filter.year)] ?? 0) : 0;
+
+    const totalPLDisplay = unrealizedPL;
+    const performancePct = purchaseValue > 0 ? totalPLDisplay / purchaseValue : 0;
+
+    return {
+      buyQty: 0, buyPrice: 0, soldQtyAll: 0, availableQty: 0,
+      purchaseValue, marketValue,
+      realizedPLAll, realizedPLYear: 0, unrealizedPL,
+      shortTermCryptoGainYear: 0, capitalGainsYear: 0,
+      dividendsYear: 0, interestYear: yrInterest,
+      realizedPLDisplay: 0, totalPLDisplay, performancePct,
+      type: inv.type,
+    };
+  }
 
   if (!inv.purchaseQuantity || inv.purchaseQuantity <= 0) {
     return { ...zeroMetrics, type: inv.type };
@@ -304,7 +342,8 @@ export function aggregateByType(
   transactionsMap: Record<string, Transaction[]>,
   etfSummaries: EtfSimSummary[],
   filter: YearFilter,
-  taxSettings: TaxSettings | null
+  taxSettings: TaxSettings | null,
+  rateSchedulesMap: Record<string, SavingsRateChange[]>
 ): AggregatedSummary {
     let metricsPerInvestment: PositionMetrics[] = [];
     
@@ -318,7 +357,7 @@ export function aggregateByType(
         });
 
         // active today?
-        const isActiveToday = (inv: Investment) => (inv.purchaseQuantity ?? 0) > (inv.totalSoldQty ?? 0);
+        const isActiveToday = (inv: Investment) => (inv.purchaseQuantity ?? 0) > (inv.totalSoldQty ?? 0) || inv.type === 'Interest Account';
 
         // existed by the end of the selected year?
         const existedByYearEnd = (inv: Investment, year: number) => {
@@ -351,11 +390,11 @@ export function aggregateByType(
 
         metricsPerInvestment = investments
             .filter(include)
-            .map(inv => calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], filter));
+            .map(inv => calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], filter, rateSchedulesMap[inv.id]));
     } else {
         metricsPerInvestment = investments
-            .map(inv => calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], filter))
-            .filter(p => p.purchaseValue > 0);
+            .map(inv => calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], filter, rateSchedulesMap[inv.id]))
+            .filter(p => p.purchaseValue > 0 || p.type === 'Interest Account');
     }
     
     // Step 2: Aggregate financial metrics by type for manual investments
@@ -466,5 +505,3 @@ export function aggregateByType(
 
     return { rows, totals: finalTotals, taxSummary };
 }
-
-    
