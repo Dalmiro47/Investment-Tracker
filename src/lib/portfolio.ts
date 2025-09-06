@@ -4,6 +4,7 @@ import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary } 
 import { dec, add, sub, mul, div, toNum } from '@/lib/money';
 import { isCryptoSellTaxFree, calcCapitalTax, calcCryptoTax, CapitalTaxResult, CryptoTaxResult } from './tax';
 import { differenceInDays, parseISO, endOfYear } from 'date-fns';
+import { computeSavings } from '@/lib/savings';
 import type { SavingsRateChange } from './types-savings';
 
 
@@ -72,36 +73,42 @@ export function calculatePositionMetrics(
     type: inv.type,
   };
 
-  // ✅ Interest Account: compute from transactions only
+  // ✅ Interest Account: compute using rate schedule + transactions
   if (inv.type === 'Interest Account') {
-    const netDeposits = txs.reduce((sum, t) => {
-      if (t.type === 'Deposit' || t.type === 'Withdrawal') return sum + t.totalAmount; // withdrawals already negative
-      return sum;
-    }, 0);
+    // deposits are positive, withdrawals are already negative in totalAmount
+    const cashTx = txs
+      .filter(t => t.type === 'Deposit' || t.type === 'Withdrawal')
+      .map(t => ({ date: t.date.slice(0,10), amount: t.totalAmount }));
 
-    const accruedInterest = txs.reduce((sum, t) => (
-      t.type === 'Interest' ? sum + t.totalAmount : sum
-    ), 0);
+    const schedule = (rates && rates.length > 0)
+      ? rates
+      : [{ from: inv.purchaseDate.slice(0,10), annualRatePct: 0 }];
 
-    const interestYear = yearFilter.kind === 'year'
-      ? txs.reduce((sum, t) => {
-          if (t.type !== 'Interest') return sum;
-          const y = new Date(t.date).getFullYear();
-          return sum + (y === yearFilter.year ? t.totalAmount : 0);
-        }, 0)
+    const valuationDate = new Date().toISOString().slice(0,10);
+
+    const result = computeSavings({
+      transactions: cashTx,
+      rates: schedule,
+      valuationDate,
+    });
+
+    const purchaseValue = result.netDeposits;      // Net Deposits
+    const marketValue   = result.finalBalance;     // Balance (principal + accrued)
+    const accrued       = result.totalInterest;    // Accrued Interest (to date)
+    const interestYear  = yearFilter.kind === 'year'
+      ? (result.byYearInterest?.[String(yearFilter.year)] ?? 0)
       : 0;
 
-    const marketValue   = Math.max(0, netDeposits + accruedInterest);
-    const performancePct = netDeposits > 0 ? (accruedInterest / netDeposits) : 0;
+    const performancePct = purchaseValue > 0 ? (accrued / purchaseValue) : 0;
 
     return {
       ...zeroMetrics,
-      purchaseValue: netDeposits,   // Net Deposits
-      marketValue,                  // Balance
-      unrealizedPL: accruedInterest, // Accrued Interest
+      purchaseValue,
+      marketValue,
+      unrealizedPL: accrued,
       interestYear,
       realizedPLDisplay: 0,
-      totalPLDisplay: accruedInterest,
+      totalPLDisplay: accrued,
       performancePct,
       type: inv.type,
     };
@@ -109,7 +116,7 @@ export function calculatePositionMetrics(
 
 
   if (!inv.purchaseQuantity || inv.purchaseQuantity <= 0) {
-    return zeroMetrics;
+    return { ...zeroMetrics, type: inv.type };
   }
 
   const buyQty = dec(inv.purchaseQuantity);
