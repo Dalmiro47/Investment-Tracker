@@ -2,7 +2,7 @@
 
 "use client"
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { getTransactions, addTransaction, deleteTransaction, updateTransaction } from "@/lib/firestore";
@@ -83,12 +83,21 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
     }
   });
 
-  const typeOptions =
-    investment.type === 'Interest Account'
-      ? ['Deposit', 'Withdrawal'] as const
-      : ['Sell', 'Dividend', 'Interest'] as const;
+  const typeOptions = useMemo(
+    () =>
+      investment.type === 'Interest Account'
+        ? (['Deposit', 'Withdrawal'] as const)
+        : (['Sell', 'Dividend', 'Interest'] as const),
+    [investment.type]
+  );
+  
+  const initKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
+    const initKey = `${editingTransaction?.id ?? 'new'}|${typeOptions.join(',')}`;
+    if (initKeyRef.current === initKey) return; 
+    initKeyRef.current = initKey;
+
     if (editingTransaction) {
       form.reset({
         ...editingTransaction,
@@ -105,7 +114,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
         amount: 0,
       });
     }
-  }, [editingTransaction, investment, typeOptions]);
+  }, [editingTransaction, typeOptions, investment, form]);
 
 
   const [isCalendarOpen, setIsCalendarOpen] = useState(false);
@@ -320,6 +329,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
     ...transactions,
   ].sort((a,b) => +new Date(b.date) - +new Date(a.date));
 
+  const isIA = investment.type === 'Interest Account';
 
   return (
     <>
@@ -333,7 +343,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
             </DialogTitle>
             <DialogDescription>
               {view === 'form' 
-                ? 'Record a sale or income for this investment.'
+                ? isIA ? 'Record a deposit or withdrawal for this interest account.' : 'Record a sale or income for this investment.'
                 : 'View and manage all transactions for this investment.'}
             </DialogDescription>
           </DialogHeader>
@@ -356,22 +366,24 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                       <TableRow>
                         <TableHead>Type</TableHead>
                         <TableHead>Date</TableHead>
-                        <TableHead className="text-right">Quantity</TableHead>
-                        <TableHead className="text-right">Price/Unit</TableHead>
-                        <TableHead className="text-right">Total Amount</TableHead>
+                        <TableHead className="text-right">{isIA ? '-' : 'Quantity'}</TableHead>
+                        <TableHead className="text-right">{isIA ? '-' : 'Price/Unit'}</TableHead>
+                        <TableHead className="text-right">{isIA ? 'Amount' : 'Total Amount'}</TableHead>
                         <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
                         {/* Initial Purchase Row */}
-                       <TableRow className="bg-muted/30">
-                          <TableCell><span className="font-semibold text-green-500">Buy</span></TableCell>
-                          <TableCell>{format(parseISO(investment.purchaseDate), 'dd MMM yyyy')}</TableCell>
-                          <TableCell className="text-right font-mono">{formatQuantity(investment.purchaseQuantity)}</TableCell>
-                          <TableCell className="text-right font-mono">{formatCurrency(investment.purchasePricePerUnit)}</TableCell>
-                          <TableCell className="text-right font-mono">{formatCurrency(investment.purchaseQuantity * investment.purchasePricePerUnit)}</TableCell>
-                          <TableCell></TableCell>
-                       </TableRow>
+                       {!isIA && (
+                         <TableRow className="bg-muted/30">
+                            <TableCell><span className="font-semibold text-green-500">Buy</span></TableCell>
+                            <TableCell>{format(parseISO(investment.purchaseDate), 'dd MMM yyyy')}</TableCell>
+                            <TableCell className="text-right font-mono">{formatQuantity(investment.purchaseQuantity)}</TableCell>
+                            <TableCell className="text-right font-mono">{formatCurrency(investment.purchasePricePerUnit)}</TableCell>
+                            <TableCell className="text-right font-mono">{formatCurrency(investment.purchaseQuantity * investment.purchasePricePerUnit)}</TableCell>
+                            <TableCell></TableCell>
+                         </TableRow>
+                       )}
                        
                        {/* Other Transactions */}
                       {allTransactionsForDisplay.map((tx) => (
@@ -416,7 +428,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                       {allTransactionsForDisplay.length === 0 && (
                         <TableRow>
                             <TableCell colSpan={6} className="text-center text-muted-foreground py-8">
-                                No other transactions recorded yet.
+                                No transactions recorded yet.
                             </TableCell>
                         </TableRow>
                       )}
