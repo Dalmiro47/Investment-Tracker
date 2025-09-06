@@ -9,6 +9,7 @@ import type {
   YearFilter,
   SortKey,
   InvestmentStatus,
+  InvestmentType,
 } from '@/lib/types';
 import { aggregateBySymbol, calculatePositionMetrics } from '@/lib/portfolio';
 import { format, parseISO } from 'date-fns';
@@ -18,6 +19,9 @@ import type { SavingsRateChange } from '@/lib/types-savings';
 const fmtEur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
 const fmtQty = (v: number, d = 6) => v.toFixed(d);
 const fmtPct = (v: number) => `${(v * 100).toFixed(2)} %`;
+const fmtRate = (v: number | null | undefined) =>
+  v == null ? '—' : `${v.toFixed(2)} %`;
+
 const plClass = (v: number) =>
   v > 1e-6 ? 'text-emerald-500' : v < -1e-6 ? 'text-red-500' : 'text-foreground';
 
@@ -31,6 +35,13 @@ const cmpNullsLast = (a: number | null, b: number | null) => {
   return a - b;
 };
 
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const getCurrentRate = (rates?: SavingsRateChange[]) => {
+  if (!rates || rates.length === 0) return null;
+  const t = todayISO();
+  const eligible = rates.filter(r => r.from <= t).sort((a, b) => a.from.localeCompare(b.from));
+  return eligible.length ? eligible[eligible.length - 1].annualRatePct : rates[0].annualRatePct;
+};
 
 type Props = {
   investments: Investment[];
@@ -41,6 +52,7 @@ type Props = {
   mode?: 'aggregated' | 'flat';
   sortKey?: SortKey;
   statusFilter?: InvestmentStatus | 'All';
+  activeTypeFilter?: InvestmentType | 'All';
   onViewHistory?: (investmentId: string) => void;
   onAddTransaction?: (investmentId: string) => void;
 };
@@ -54,14 +66,20 @@ export default function InvestmentListView({
   mode = 'aggregated',
   sortKey,
   statusFilter = 'All',
+  activeTypeFilter = 'All',
   onViewHistory,
   onAddTransaction,
 }: Props) {
+  const IA_MODE = activeTypeFilter === 'Interest Account';
+
   const { rowsAgg, rowsFlat } = useMemo(() => {
     // ------- AGGREGATED -------
     const agg = aggregateBySymbol(investments, transactionsMap, yearFilter).rows.map(r => {
-      const avgBuyPrice = r.buyQty > 0 ? r.costBasis / r.buyQty : 0;
-      const relatedInvs = investments.filter(iv => (iv.ticker ?? iv.name) === (r.ticker ?? r.name));
+      // match related investments by same aggregation key
+      const aggKey = (iv: Investment) => `${iv.type}:${(iv.ticker || iv.name).toLowerCase()}`;
+      const relatedInvs = investments.filter(iv => aggKey(iv) === r.key);
+
+      // latest activity for sorting by date
       let latestActivityAt: number | null = null;
       for (const inv of relatedInvs) {
         const txs = transactionsMap[inv.id] ?? [];
@@ -74,51 +92,70 @@ export default function InvestmentListView({
           if (Number.isFinite(ts)) latestActivityAt = ts;
         }
       }
+
+      // current rate (for IA aggregated; assume one IA per row)
+      let currentRatePct: number | null = null;
+      if (relatedInvs.length > 0 && relatedInvs[0].type === 'Interest Account') {
+        currentRatePct = getCurrentRate(rateSchedulesMap?.[relatedInvs[0].id]);
+      }
+
       const marketValue = num(r.marketValue);
       const performancePct = num(r.performancePct);
       const economicValue = num(r.economicValue ?? (r.marketValue + r.realizedPL));
 
       return {
-        ...r, avgBuyPrice, latestActivityAt,
-        _sort_marketValue: marketValue, _sort_performancePct: performancePct, _sort_economicValue: economicValue,
+        ...r,
+        currentRatePct,
+        latestActivityAt,
+        _sort_marketValue: marketValue,
+        _sort_performancePct: performancePct,
+        _sort_economicValue: economicValue,
       };
     });
 
     // ------- FLAT -------
     const flat = investments.map((inv) => {
-        const m = calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], yearFilter, rateSchedulesMap?.[inv.id]);
-        const txs = transactionsMap[inv.id] ?? [];
-        const sells = txs.filter((t) => t.type === 'Sell');
-        const soldQty = sells.reduce((s, t) => s + (Number(t.quantity) || 0), 0);
-        const sellProceeds = sells.reduce((s, t) => s + (Number(t.totalAmount) || 0), 0);
-        const avgSellPrice = soldQty > 0 ? sellProceeds / soldQty : null;
+      const m = calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], yearFilter, rateSchedulesMap?.[inv.id]);
+      const txs = transactionsMap[inv.id] ?? [];
+      const sells = txs.filter((t) => t.type === 'Sell');
+      const soldQty = sells.reduce((s, t) => s + (Number(t.quantity) || 0), 0);
+      const sellProceeds = sells.reduce((s, t) => s + (Number(t.totalAmount) || 0), 0);
+      const avgSellPrice = soldQty > 0 ? sellProceeds / soldQty : null;
 
-        return {
-          key: inv.id,
-          invId: inv.id,
-          type: inv.type,
-          status: inv.status,
-          name: inv.name,
-          ticker: inv.ticker ?? null,
-          purchaseDate: inv.purchaseDate ?? null,
+      const isIA = inv.type === 'Interest Account';
+      const costBasis = isIA
+        ? m.purchaseValue
+        : m.availableQty * (Number(inv.purchasePricePerUnit) || 0);
 
-          boughtQty: Number(inv.purchaseQuantity) || 0,
-          soldQty,
-          availableQty: m.availableQty,
-          buyPrice: Number(inv.purchasePricePerUnit) || 0,
-          avgSellPrice,
-          currentPrice: Number(inv.currentValue ?? 0),
+      return {
+        key: inv.id,
+        invId: inv.id,
+        type: inv.type,
+        status: inv.status,
+        name: inv.name,
+        ticker: inv.ticker ?? null,
+        purchaseDate: inv.purchaseDate ?? null,
 
-          costBasis: m.availableQty * (Number(inv.purchasePricePerUnit) || 0),
-          marketValue: m.marketValue,
-          realizedPL: m.realizedPLDisplay,
-          unrealizedPL: m.unrealizedPL,
-          totalPL: m.totalPLDisplay,
-          performancePct: m.performancePct,
-          percentPortfolio: 0,
-          economicValue: m.marketValue + m.realizedPLDisplay,
-        };
-      });
+        boughtQty: Number(inv.purchaseQuantity) || 0,
+        soldQty,
+        availableQty: m.availableQty,
+        buyPrice: isIA ? 0 : (Number(inv.purchasePricePerUnit) || 0),
+        avgSellPrice,
+        currentPrice: isIA ? 0 : (Number(inv.currentValue ?? 0)),
+
+        // IA-aware values
+        costBasis,
+        marketValue: m.marketValue,             // IA: Balance
+        realizedPL: m.realizedPLDisplay,
+        unrealizedPL: m.unrealizedPL,           // IA: Accrued Interest
+        totalPL: m.totalPLDisplay,
+        performancePct: m.performancePct,
+        percentPortfolio: 0,
+        economicValue: m.marketValue + m.realizedPLDisplay,
+
+        currentRatePct: isIA ? getCurrentRate(rateSchedulesMap?.[inv.id]) : null,
+      };
+    });
 
     // % of portfolio
     const list = mode === 'flat' ? flat : agg;
@@ -143,9 +180,9 @@ export default function InvestmentListView({
         case 'performance': flat.sort((a, b) => b.performancePct - a.performancePct); break;
         case 'totalAmount': flat.sort((a, b) => b.marketValue - a.marketValue); break;
         case 'purchaseDate': default: flat.sort((a, b) => {
-            const ta = a.purchaseDate ? new Date(a.purchaseDate).getTime() : 0;
-            const tb = b.purchaseDate ? new Date(b.purchaseDate).getTime() : 0;
-            return tb - ta;
+          const ta = a.purchaseDate ? new Date(a.purchaseDate).getTime() : 0;
+          const tb = b.purchaseDate ? new Date(b.purchaseDate).getTime() : 0;
+          return tb - ta;
         }); break;
       }
     }
@@ -159,6 +196,51 @@ export default function InvestmentListView({
     return <div className="text-center text-muted-foreground py-12">No matching assets for this view.</div>;
   }
 
+  // --- IA-specific rendering when filter is Interest Accounts ---
+  if (IA_MODE) {
+    const showPercentPortfolioCol = mode === 'aggregated';
+    return (
+      <div className="overflow-x-auto rounded-lg border bg-card/50">
+        <table className="min-w-full text-sm">
+          <thead className="bg-muted/40 text-muted-foreground">
+            <tr className="[&>th]:px-4 [&>th]:py-3 text-left">
+              <th>Account</th>
+              <th className="text-right">Current Rate</th>
+              <th className="text-right">Net Deposits</th>
+              <th className="text-right">Balance</th>
+              <th className="text-right">Accrued Interest</th>
+              <th className="text-right">Performance</th>
+              {showPercentPortfolioCol && <th className="text-right">% of Portfolio</th>}
+              {mode === 'flat' && <th className="text-right">Actions</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key} className="border-t last:border-b [&>td]:px-4 [&>td]:py-3">
+                <td className="font-medium">{r.name}</td>
+                <td className="text-right">{fmtRate(r.currentRatePct)}</td>
+                <td className="text-right">{fmtEur.format(r.costBasis)}</td>
+                <td className="text-right">{fmtEur.format(r.marketValue)}</td>
+                <td className={`text-right ${plClass(r.unrealizedPL)}`}>{fmtEur.format(r.unrealizedPL)}</td>
+                <td className={`text-right ${plClass(r.performancePct)}`}>{fmtPct(r.performancePct)}</td>
+                {showPercentPortfolioCol && <td className="text-right">{fmtPct(r.percentPortfolio ?? 0)}</td>}
+                {mode === 'flat' && (
+                  <td className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <button title="View History" className="px-2 py-1 rounded hover:bg-muted" onClick={() => onViewHistory?.(r.invId)}><History className="h-4 w-4" /></button>
+                      <button title="Add Transaction" className="px-2 py-1 rounded hover:bg-muted" onClick={() => onAddTransaction?.(r.invId)}><PlusCircle className="h-4 w-4" /></button>
+                    </div>
+                  </td>
+                )}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+
+  // ---- Default (generic) table for all other types ----
   const isFlat = mode === 'flat';
   const isSoldView = isFlat && statusFilter === 'Sold';
   const isActiveView = isFlat && statusFilter === 'Active';
@@ -173,8 +255,6 @@ export default function InvestmentListView({
   const showBuyPrice  = !isSoldView;
   const showCurrentPriceCol = !isSoldView;
   const showCostBasisCol = !isSoldView;
-  const showMarketValueCol = !isSoldView;
-
   const showRealizedPLCol   = !(isFlat && statusFilter === 'Active');
   const showUnrealizedPLCol = !(isSoldView || (isFlat && statusFilter === 'Active'));
 
@@ -243,7 +323,7 @@ export default function InvestmentListView({
                     <>
                       <td className="text-right">{r.availableQty > 0 ? fmtEur.format(r.buyPrice) : '—'}</td>
                       <td className="text-right">{r.availableQty > 0 ? fmtEur.format(r.currentPrice) : '—'}</td>
-                      <td className="text-right" title={isIARow ? "Net Deposits" : ""}>{fmtEur.format(r.costBasis)}</td>
+                      <td className="text-right">{fmtEur.format(r.costBasis)}</td>
                     </>
                 )}
 
@@ -271,5 +351,3 @@ export default function InvestmentListView({
     </div>
   );
 }
-
-    

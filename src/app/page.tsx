@@ -481,6 +481,7 @@ export default function DashboardPage() {
                 mode={listMode}
                 sortKey={sortKey}
                 statusFilter={statusFilter}
+                activeTypeFilter={typeFilter}
                 onViewHistory={(id) => {
                   const inv = investments.find((i) => i.id === id);
                   if (inv) handleHistoryClick(inv);
