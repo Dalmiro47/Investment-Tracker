@@ -180,5 +180,3 @@ function allocateInterestByYear(
     remain -= chunkDays;
   }
 }
-
-    
