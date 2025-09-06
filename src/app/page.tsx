@@ -440,6 +440,7 @@ export default function DashboardPage() {
                 showTypeColumn={typeFilter === 'All'}
                 mode={listMode}
                 sortKey={sortKey}
+                statusFilter={statusFilter}
                 onViewHistory={(id) => {
                   const inv = investments.find((i) => i.id === id);
                   if (inv) handleHistoryClick(inv);
