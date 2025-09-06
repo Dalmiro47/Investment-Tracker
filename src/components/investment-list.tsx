@@ -121,29 +121,25 @@ export default function InvestmentListView({
     return <div className="text-center text-muted-foreground py-12">No matching assets for this view.</div>;
   }
 
-  // ===== Column visibility rules (NEW) =====
+  // ===== Column visibility rules (UPDATED) =====
   const isFlat = mode === 'flat';
   const isSoldView = isFlat && statusFilter === 'Sold';
   const isActiveView = isFlat && statusFilter === 'Active';
 
-  // 1) Hide % of Portfolio in Flat for all status filters
   const showPercentPortfolioCol = !isFlat;
-
-  // 2) Hide Status in Active/Sold; keep in All
   const showStatusCol = isFlat && statusFilter === 'All';
+  const showPurchaseDateCol = isFlat;  // <-- always show in Flat
 
-  // Base rules we already had
-  const showBoughtCol = isFlat && !isSoldView;             // show in Active/All
-  const showAvailCol  = isFlat && !isSoldView;             // show in Active/All
-  const showSoldCols  = isFlat && statusFilter === 'Sold'; // Sold-specific columns
-  const showBuyPrice  = !isSoldView;                       // keep for Active/All
-  const showCurrentPriceCol = !isSoldView;                 // hide for Sold
-  const showCostBasisCol = !isSoldView;                    // hide for Sold
-  const showMarketValueCol = !isSoldView;                  // hide for Sold
+  const showBoughtCol = isFlat && !isSoldView;
+  const showAvailCol  = isFlat && !isSoldView;
+  const showSoldCols  = isFlat && statusFilter === 'Sold';
+  const showBuyPrice  = !isSoldView;
+  const showCurrentPriceCol = !isSoldView;
+  const showCostBasisCol = !isSoldView;
+  const showMarketValueCol = !isSoldView;
 
-  // 3) P/L visibility: in Active, only Total P/L
-  const showRealizedPLCol   = !(isFlat && statusFilter === 'Active');                  // hide in Active
-  const showUnrealizedPLCol = !(isSoldView || (isFlat && statusFilter === 'Active'));  // hide in Sold and Active
+  const showRealizedPLCol   = !(isFlat && statusFilter === 'Active');
+  const showUnrealizedPLCol = !(isSoldView || (isFlat && statusFilter === 'Active'));
 
 
   return (
@@ -153,37 +149,27 @@ export default function InvestmentListView({
           <tr className="[&>th]:px-4 [&>th]:py-3 [&>th]:whitespace-nowrap text-left">
             {showTypeColumn && <th>Type</th>}
             <th>Asset</th>
-
-            {/* Status only in All */}
+            {showPurchaseDateCol && <th>Purchase Date</th>}
             {showStatusCol && <th>Status</th>}
-
-            {/* Quantities */}
             {showBoughtCol && <th className="text-right">Bought</th>}
             {showSoldCols && <th className="text-right">Sold</th>}
             {showAvailCol && <th className="text-right">Qty (avail.)</th>}
-
-            {/* Prices */}
             {showBuyPrice && <th className="text-right">Buy Price</th>}
             {showSoldCols && <th className="text-right">Avg. Sell Price</th>}
             {showCurrentPriceCol && <th className="text-right">Current Price</th>}
-
-            {/* Values */}
             {showCostBasisCol && <th className="text-right">Cost Basis</th>}
             {showMarketValueCol && <th className="text-right">Market Value</th>}
-
-            {/* P/L */}
             {showRealizedPLCol && <th className="text-right">Realized P/L</th>}
             {showUnrealizedPLCol && <th className="text-right">Unrealized P/L</th>}
             <th className="text-right">Total P/L</th>
-
             <th className="text-right">Performance</th>
             {showPercentPortfolioCol && <th className="text-right">% of Portfolio</th>}
             {isFlat && <th className="text-right">Actions</th>}
           </tr>
         </thead>
-
         <tbody>
           {rows.map((r) => {
+            const isSoldRow = r.status === 'Sold';
             return (
               <tr key={r.key} className="border-t last:border-b [&>td]:px-4 [&>td]:py-3">
                 {showTypeColumn && <td className="font-medium">{r.type}</td>}
@@ -191,16 +177,22 @@ export default function InvestmentListView({
                   {r.name}{r.ticker ? <span className="text-muted-foreground"> ({r.ticker})</span> : null}
                 </td>
 
+                {showPurchaseDateCol && (
+                  <td className="text-muted-foreground">
+                    {r.purchaseDate ? format(parseISO(r.purchaseDate), 'dd MMM yyyy') : '—'}
+                  </td>
+                )}
+
                 {showStatusCol && <td className="text-muted-foreground">{r.status}</td>}
 
                 {showBoughtCol && <td className="text-right">{fmtQty(r.boughtQty)}</td>}
-                {showSoldCols && <td className="text-right">{r.status === 'Sold' ? fmtQty(r.soldQty) : '—'}</td>}
+                {showSoldCols && <td className="text-right">{isSoldRow ? fmtQty(r.soldQty) : '—'}</td>}
                 {showAvailCol && <td className="text-right">{fmtQty(r.availableQty)}</td>}
 
                 {showBuyPrice && <td className="text-right">{fmtEur.format(r.buyPrice)}</td>}
                 {showSoldCols && (
                   <td className="text-right">
-                    {r.status === 'Sold' && r.avgSellPrice != null ? fmtEur.format(r.avgSellPrice) : '—'}
+                    {isSoldRow && r.avgSellPrice != null ? fmtEur.format(r.avgSellPrice) : '—'}
                   </td>
                 )}
                 {showCurrentPriceCol && <td className="text-right">{fmtEur.format(r.currentPrice)}</td>}
