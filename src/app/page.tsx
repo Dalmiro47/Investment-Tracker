@@ -439,6 +439,14 @@ export default function DashboardPage() {
                 yearFilter={yearFilter}
                 showTypeColumn={typeFilter === 'All'}
                 mode={listMode}
+                onViewHistory={(id) => {
+                  const inv = investments.find((i) => i.id === id);
+                  if (inv) handleHistoryClick(inv);
+                }}
+                onAddTransaction={(id) => {
+                  const inv = investments.find((i) => i.id === id);
+                  if (inv) handleAddTransactionClick(inv);
+                }}
               />
             ) : filteredAndSortedInvestments.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
