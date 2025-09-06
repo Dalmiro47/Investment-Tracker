@@ -9,7 +9,6 @@ import type { SavingsRateChange } from './types-savings';
 
 
 export interface PositionMetrics {
-  // Base metrics
   buyQty: number;
   buyPrice: number;
   soldQtyAll: number;
@@ -75,32 +74,39 @@ export function calculatePositionMetrics(
 
   // ✅ Interest Account: compute using rate schedule + transactions
   if (inv.type === 'Interest Account') {
-    // deposits are positive, withdrawals are already negative in totalAmount
+    // 1) Net Deposits straight from ledger (works even for "today")
+    const netDeposits = txs.reduce((sum, t) => {
+      if (t.type === 'Deposit' || t.type === 'Withdrawal') return sum + t.totalAmount; // withdrawals already negative
+      return sum;
+    }, 0);
+  
+    // 2) Prepare inputs for computeSavings just for interest accrual
     const cashTx = txs
       .filter(t => t.type === 'Deposit' || t.type === 'Withdrawal')
-      .map(t => ({ date: t.date.slice(0,10), amount: t.totalAmount }));
-
+      .map(t => ({ date: t.date.slice(0,10), amount: t.totalAmount }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  
     const schedule = (rates && rates.length > 0)
       ? rates
       : [{ from: inv.purchaseDate.slice(0,10), annualRatePct: 0 }];
-
+  
     const valuationDate = new Date().toISOString().slice(0,10);
-
-    const result = computeSavings({
+  
+    const res = computeSavings({
       transactions: cashTx,
       rates: schedule,
       valuationDate,
     });
-
-    const purchaseValue = result.netDeposits;      // Net Deposits
-    const marketValue   = result.finalBalance;     // Balance (principal + accrued)
-    const accrued       = result.totalInterest;    // Accrued Interest (to date)
-    const interestYear  = yearFilter.kind === 'year'
-      ? (result.byYearInterest?.[String(yearFilter.year)] ?? 0)
+  
+    const accrued      = res.totalInterest;                                   // unrealized interest
+    const interestYear = yearFilter.kind === 'year'
+      ? (res.byYearInterest?.[String(yearFilter.year)] ?? 0)
       : 0;
-
+  
+    const purchaseValue  = netDeposits;                                       // Net Deposits
+    const marketValue    = Math.max(0, netDeposits + accrued);                // Balance
     const performancePct = purchaseValue > 0 ? (accrued / purchaseValue) : 0;
-
+  
     return {
       ...zeroMetrics,
       purchaseValue,
