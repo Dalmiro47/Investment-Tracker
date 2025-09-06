@@ -129,7 +129,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
                       <SelectItem value="ETF">ETF</SelectItem>
                       <SelectItem value="Crypto">Crypto</SelectItem>
                       <SelectItem value="Bond">Bond</SelectItem>
-                      <SelectItem value="Savings">Savings</SelectItem>
+                      <SelectItem value="Interest Account">Interest Account</SelectItem>
                       <SelectItem value="Real Estate">Real Estate</SelectItem>
                     </SelectContent>
                   </Select>
@@ -266,3 +266,5 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment }: I
     </Dialog>
   )
 }
+
+    

@@ -2,6 +2,7 @@
 import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query, where, getDocs, collectionGroup, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues, TaxSettings, EtfSimSummary } from './types';
+import type { SavingsRateChange } from './types-savings';
 
 const investmentsCol = (uid: string) => collection(db, 'users', uid, 'investments');
 const txCol = (uid: string, invId: string) => collection(db, 'users', uid, 'investments', invId, 'transactions');
@@ -49,7 +50,13 @@ export async function addInvestment(uid: string, data: InvestmentFormValues) {
     createdAt: serverTimestamp(),
   };
 
-  await addDoc(investmentsCol(uid), investmentData);
+  const newDocRef = await addDoc(investmentsCol(uid), investmentData);
+
+  if (data.type === 'Interest Account') {
+      // Add a default rate schedule
+      const rateScheduleRef = collection(db, 'users', uid, 'investments', newDocRef.id, 'rateSchedule');
+      await addDoc(rateScheduleRef, { from: data.purchaseDate.toISOString().slice(0,10), annualRatePct: 1.0 });
+  }
 }
 
 export async function updateInvestment(uid: string, invId: string, patch: Partial<InvestmentFormValues>) {
@@ -62,9 +69,13 @@ export async function updateInvestment(uid: string, invId: string, patch: Partia
 export async function deleteInvestment(uid: string, invId: string) {
   const invRef = doc(db, 'users', uid, 'investments', invId);
   const txSnap = await getDocsFromServer(txCol(uid, invId));
+  const ratesSnap = await getDocsFromServer(collection(db, invRef.path, 'rateSchedule'));
+  
   const batch = writeBatch(db);
   txSnap.forEach(d => batch.delete(d.ref));
+  ratesSnap.forEach(d => batch.delete(d.ref));
   batch.delete(invRef);
+  
   await batch.commit();
 }
 
@@ -87,6 +98,25 @@ export async function getAllTransactionsForInvestments(
   });
   
   return transactionsMap;
+}
+
+export async function getRateSchedule(uid: string, invId: string): Promise<SavingsRateChange[]> {
+    const q = await getDocsFromServer(query(collection(db, 'users', uid, 'investments', invId, 'rateSchedule')));
+    return q.docs.map(d => d.data() as SavingsRateChange).sort((a, b) => a.from.localeCompare(b.from));
+}
+
+export async function getAllRateSchedules(
+  userId: string,
+  investments: Investment[]
+): Promise<Record<string, SavingsRateChange[]>> {
+    const interestAccounts = investments.filter(i => i.type === 'Interest Account');
+    const promises = interestAccounts.map(inv => getRateSchedule(userId, inv.id));
+    const results = await Promise.all(promises);
+    const map: Record<string, SavingsRateChange[]> = {};
+    interestAccounts.forEach((inv, index) => {
+        map[inv.id] = results[index];
+    });
+    return map;
 }
 
 export async function getAllEtfSummaries(uid: string): Promise<EtfSimSummary[]> {
@@ -170,6 +200,10 @@ export async function addTransaction(uid: string, invId: string, t: TransactionF
     } else if (t.type === 'Interest') {
       txTotalAmount = t.amount;
       interest     += t.amount;
+    } else if (t.type === 'Deposit') {
+        txTotalAmount = t.amount;
+    } else if (t.type === 'Withdrawal') {
+        txTotalAmount = -t.amount;
     }
 
     // Recompute status from available qty
@@ -211,9 +245,16 @@ const calculateDeltas = (
     interest: 0,
   };
 
-  const newTotalAmount = newTxData.type === 'Sell' 
-    ? newTxData.quantity * newTxData.pricePerUnit 
-    : newTxData.amount;
+  let newTotalAmount = 0;
+  if (newTxData.type === 'Sell') {
+      newTotalAmount = newTxData.quantity * newTxData.pricePerUnit;
+  } else if (newTxData.type === 'Deposit') {
+      newTotalAmount = newTxData.amount;
+  } else if (newTxData.type === 'Withdrawal') {
+      newTotalAmount = -newTxData.amount;
+  } else {
+      newTotalAmount = newTxData.amount;
+  }
   
   // Back out old values
   if (oldTx.type === 'Sell') {
@@ -339,3 +380,5 @@ export async function updateTaxSettings(uid: string, settings: TaxSettings) {
   const ref = settingsDoc(uid, 'tax');
   await setDoc(ref, settings, { merge: true });
 }
+
+    

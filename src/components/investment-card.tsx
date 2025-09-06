@@ -6,7 +6,7 @@ import type { Investment, TaxSettings } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History, PlusCircle, Info } from 'lucide-react';
+import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History, PlusCircle, Info, PiggyBank } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { dec, toNum, formatCurrency, formatQty, formatPercent, div, mul, sub, add } from '@/lib/money';
@@ -43,7 +43,7 @@ const typeIcons: Record<Investment['type'], React.ReactNode> = {
   Crypto: <Bitcoin className="h-6 w-6" />,
   'Real Estate': <Home className="h-6 w-6" />,
   ETF: <Briefcase className="h-6 w-6" />,
-  Savings: <Wallet className="h-6 w-6" />,
+  'Interest Account': <PiggyBank className="h-6 w-6" />,
 };
 
 export default function InvestmentCard({ 
@@ -333,3 +333,5 @@ export default function InvestmentCard({
     </Card>
   );
 }
+
+    

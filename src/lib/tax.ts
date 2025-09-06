@@ -66,7 +66,7 @@ export function calcCryptoTax(i: CryptoTaxInput): CryptoTaxResult {
   const taxableBase = i.shortTermGains > threshold ? i.shortTermGains : 0;
   const incomeTax = taxableBase * i.marginalRate;
   const soli = incomeTax * TAX.soliRate;
-  const church = incomeTax * i.churchRate;
+  const church = incomeTax * churchRate;
   return {
     threshold,
     thresholdUsed: Math.min(i.shortTermGains, threshold),
@@ -99,7 +99,7 @@ export function isCryptoSellTaxFree(
 // --- Functions below are for per-card estimation only ---
 
 export interface PerInvestmentTaxInputs {
-  type: 'Stock' | 'Bond' | 'Crypto' | 'Real Estate' | 'ETF' | 'Savings';
+  type: 'Stock' | 'Bond' | 'Crypto' | 'Real Estate' | 'ETF' | 'Interest Account';
   realizedPL: number;
   dividends: number;
   interest: number;
@@ -183,4 +183,5 @@ export function getCryptoTaxInfo(
     daysUntilEligible: eligible ? 0 : daysUntil,
   };
 }
+
     

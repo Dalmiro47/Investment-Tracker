@@ -466,3 +466,5 @@ export function aggregateByType(
 
     return { rows, totals: finalTotals, taxSummary };
 }
+
+    

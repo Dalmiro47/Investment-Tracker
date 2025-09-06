@@ -5,7 +5,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
-import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries } from '@/lib/firestore';
+import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries, getAllRateSchedules } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
@@ -35,6 +35,7 @@ import { TransactionHistoryDialog } from '@/components/transaction-history-dialo
 import { performancePct } from '@/lib/types';
 import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
 import InvestmentListView from '@/components/investment-list';
+import type { SavingsRateChange } from '@/lib/types-savings';
 
 
 export default function DashboardPage() {
@@ -44,6 +45,7 @@ export default function DashboardPage() {
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [etfSummaries, setEtfSummaries] = useState<EtfSimSummary[]>([]);
   const [transactionsMap, setTransactionsMap] = useState<Record<string, Transaction[]>>({});
+  const [rateSchedulesMap, setRateSchedulesMap] = useState<Record<string, SavingsRateChange[]>>({});
   const [sellYears, setSellYears] = useState<number[]>([]);
   const [loading, setLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -77,15 +79,17 @@ export default function DashboardPage() {
   const fetchAllData = async (userId: string) => {
     setLoading(true);
     try {
-      const [userInvestments, etfSums, years, settings] = await Promise.all([
+      const [userInvestments, etfSums, years, settings, rateSchedules] = await Promise.all([
         getInvestments(userId),
         getAllEtfSummaries(userId),
         getSellYears(userId),
         getTaxSettings(userId),
+        getAllRateSchedules(userId, investments)
       ]);
       
       setInvestments(userInvestments);
       setEtfSummaries(etfSums);
+      setRateSchedulesMap(rateSchedules);
 
       const yearSet = new Set<number>(years);
       for (const s of etfSums) {
@@ -163,7 +167,7 @@ export default function DashboardPage() {
       'Stock': 0,
       'Crypto': 0,
       'ETF': 0,
-      'Savings': 0,
+      'Interest Account': 0,
       'Bond': 0,
       'Real Estate': 0,
     };
@@ -396,7 +400,7 @@ export default function DashboardPage() {
                     <TabsTrigger value="Stock">Stocks ({typeCounts.Stock})</TabsTrigger>
                     <TabsTrigger value="Crypto">Crypto ({typeCounts.Crypto})</TabsTrigger>
                     <TabsTrigger value="ETF">ETFs ({typeCounts.ETF})</TabsTrigger>
-                    <TabsTrigger value="Savings">Savings ({typeCounts.Savings})</TabsTrigger>
+                    <TabsTrigger value="Interest Account">Interest Accounts ({typeCounts['Interest Account']})</TabsTrigger>
                     <TabsTrigger value="Bond">Bonds ({typeCounts.Bond})</TabsTrigger>
                     <TabsTrigger value="Real Estate">Real Estate ({typeCounts['Real Estate']})</TabsTrigger>
                   </TabsList>
@@ -521,3 +525,5 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    
