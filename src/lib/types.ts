@@ -1,11 +1,11 @@
 
 import { z } from 'zod';
 
-export type InvestmentType = 'Stock' | 'Bond' | 'Crypto' | 'Real Estate' | 'ETF' | 'Savings';
+export type InvestmentType = 'Stock' | 'Bond' | 'Crypto' | 'Real Estate' | 'ETF' | 'Interest Account';
 export type InvestmentStatus = 'Active' | 'Sold';
 export type SortKey = 'purchaseDate' | 'performance' | 'totalAmount';
 
-export type TransactionType = 'Sell' | 'Dividend' | 'Interest';
+export type TransactionType = 'Sell' | 'Dividend' | 'Interest' | 'Deposit' | 'Withdrawal';
 
 export type YearFilter =
   | { kind: 'all' }
@@ -87,11 +87,11 @@ export interface EtfSimSummary {
 // Schema for adding/editing a new investment (the initial purchase)
 export const investmentSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
-  type: z.enum(['Stock', 'Bond', 'Crypto', 'Real Estate', 'ETF', 'Savings']),
+  type: z.enum(['Stock', 'Bond', 'Crypto', 'Real Estate', 'ETF', 'Interest Account']),
   ticker: z.string().optional(),
   purchaseDate: z.date({ required_error: "Purchase date is required." }),
-  purchaseQuantity: z.coerce.number().positive({ message: "Quantity must be positive." }),
-  purchasePricePerUnit: z.coerce.number().nonnegative({ message: "Purchase price must be zero or more." }),
+  purchaseQuantity: z.coerce.number().nonnegative(),
+  purchasePricePerUnit: z.coerce.number().nonnegative(),
   stakingOrLending: z.boolean().optional(),
 }).superRefine((data, ctx) => {
     const tickerRequiredTypes: InvestmentType[] = ['Stock', 'ETF', 'Crypto'];
@@ -108,7 +108,7 @@ export type InvestmentFormValues = z.infer<typeof investmentSchema>;
 
 // Schema for adding a new transaction (Sell, Dividend, or Interest)
 export const transactionSchema = z.object({
-  type: z.enum(['Sell', 'Dividend', 'Interest']),
+  type: z.enum(['Sell', 'Dividend', 'Interest', 'Deposit', 'Withdrawal']),
   date: z.date({ required_error: "Date is required." }),
   quantity: z.coerce.number().nonnegative().default(0),
   pricePerUnit: z.coerce.number().nonnegative().default(0),
@@ -121,10 +121,10 @@ export const transactionSchema = z.object({
       path: ["quantity"],
     });
   }
-  if ((data.type === 'Dividend' || data.type === 'Interest') && data.amount <= 0) {
+  if ((data.type === 'Dividend' || data.type === 'Interest' || data.type === 'Deposit' || data.type === 'Withdrawal') && data.amount <= 0) {
      ctx.addIssue({
       code: z.ZodIssueCode.custom,
-      message: "Amount must be positive for Dividends or Interest.",
+      message: "Amount must be positive.",
       path: ["amount"],
     });
   }

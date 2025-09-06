@@ -1,11 +1,10 @@
 
-
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React from 'react';
 import { useRouter } from 'next/navigation';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
-import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries } from '@/lib/firestore';
+import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries, getAllRateSchedules, addTransaction } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
@@ -35,43 +34,58 @@ import { TransactionHistoryDialog } from '@/components/transaction-history-dialo
 import { performancePct } from '@/lib/types';
 import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
 import InvestmentListView from '@/components/investment-list';
+import type { SavingsRateChange } from '@/lib/types-savings';
+import type { PositionMetrics } from '@/lib/portfolio';
+import RateScheduleDialog from "@/components/rate-schedule-dialog";
 
+
+const todayISO = () => new Date().toISOString().slice(0,10);
+const getCurrentRate = (rates?: SavingsRateChange[]) => {
+  if (!rates || rates.length === 0) return null;
+  const t = todayISO();
+  const eligible = rates.filter(r => r.from <= t).sort((a,b)=>a.from.localeCompare(b.from));
+  return eligible.length ? eligible[eligible.length-1].annualRatePct : rates[0].annualRatePct;
+};
 
 export default function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  const [investments, setInvestments] = useState<Investment[]>([]);
-  const [etfSummaries, setEtfSummaries] = useState<EtfSimSummary[]>([]);
-  const [transactionsMap, setTransactionsMap] = useState<Record<string, Transaction[]>>({});
-  const [sellYears, setSellYears] = useState<number[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isTaxView, setIsTaxView] = useState(false);
-  const [typeFilter, setTypeFilter] = useState<InvestmentType | 'All'>('All');
-  const [statusFilter, setStatusFilter] = useState<InvestmentStatus | 'All'>('All');
-  const [sortKey, setSortKey] = useState<SortKey>('purchaseDate');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-  const [listMode, setListMode] = useState<'aggregated' | 'flat'>('aggregated');
+  const [investments, setInvestments] = React.useState<Investment[]>([]);
+  const [etfSummaries, setEtfSummaries] = React.useState<EtfSimSummary[]>([]);
+  const [transactionsMap, setTransactionsMap] = React.useState<Record<string, Transaction[]>>({});
+  const [rateSchedulesMap, setRateSchedulesMap] = React.useState<Record<string, SavingsRateChange[]>>({});
+  const [sellYears, setSellYears] = React.useState<number[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [isTaxView, setIsTaxView] = React.useState(false);
+  const [typeFilter, setTypeFilter] = React.useState<InvestmentType | 'All'>('All');
+  const [statusFilter, setStatusFilter] = React.useState<InvestmentStatus | 'All'>('All');
+  const [sortKey, setSortKey] = React.useState<SortKey>('purchaseDate');
+  const [viewMode, setViewMode] = React.useState<'grid' | 'list'>('grid');
+  const [listMode, setListMode] = React.useState<'aggregated' | 'flat'>('aggregated');
 
-  const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingInvestment, setEditingInvestment] = useState<Investment | undefined>(undefined);
+  const [isFormOpen, setIsFormOpen] = React.useState(false);
+  const [editingInvestment, setEditingInvestment] = React.useState<Investment | undefined>(undefined);
+  const [prefillType, setPrefillType] = React.useState<InvestmentType | undefined>(undefined);
   
-  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-  const [deletingInvestmentId, setDeletingInvestmentId] = useState<string | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = React.useState(false);
+  const [deletingInvestmentId, setDeletingInvestmentId] = React.useState<string | null>(null);
 
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [historyDialogView, setHistoryDialogView] = useState<'list' | 'form'>('list');
-  const [viewingHistoryInvestment, setViewingHistoryInvestment] = useState<Investment | undefined>(undefined);
+  const [isHistoryOpen, setIsHistoryOpen] = React.useState(false);
+  const [historyDialogView, setHistoryDialogView] = React.useState<'list' | 'form'>('list');
+  const [viewingHistoryInvestment, setViewingHistoryInvestment] = React.useState<Investment | undefined>(undefined);
 
-  const [isTaxSettingsOpen, setIsTaxSettingsOpen] = useState(false);
-  const [taxSettings, setTaxSettings] = useState<TaxSettings>({
+  const [isTaxSettingsOpen, setIsTaxSettingsOpen] = React.useState(false);
+  const [taxSettings, setTaxSettings] = React.useState<TaxSettings>({
     filingStatus: 'single',
     churchTaxRate: 0,
     cryptoMarginalRate: 0.42, // Default to a higher rate
   });
 
-  const [yearFilter, setYearFilter] = useState<YearFilter>({ kind: 'all' });
+  const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all' });
+  const [isRatesOpen, setIsRatesOpen] = React.useState(false);
+  const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
 
 
   const fetchAllData = async (userId: string) => {
@@ -84,8 +98,11 @@ export default function DashboardPage() {
         getTaxSettings(userId),
       ]);
       
+      const rateSchedules = await getAllRateSchedules(userId, userInvestments);
+      
       setInvestments(userInvestments);
       setEtfSummaries(etfSums);
+      setRateSchedulesMap(rateSchedules);
 
       const yearSet = new Set<number>(years);
       for (const s of etfSums) {
@@ -117,7 +134,7 @@ export default function DashboardPage() {
   };
 
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (user) {
       fetchAllData(user.uid);
     }
@@ -157,13 +174,13 @@ export default function DashboardPage() {
     setIsRefreshing(false);
 }
 
-  const typeCounts = useMemo(() => {
+  const typeCounts = React.useMemo(() => {
     const counts: Record<InvestmentType | 'All', number> = {
       'All': 0,
       'Stock': 0,
       'Crypto': 0,
       'ETF': 0,
-      'Savings': 0,
+      'Interest Account': 0,
       'Bond': 0,
       'Real Estate': 0,
     };
@@ -182,7 +199,7 @@ export default function DashboardPage() {
     return counts;
   }, [investments, etfSummaries]);
 
-  const filteredAndSortedInvestments = useMemo(() => {
+  const filteredAndSortedInvestments = React.useMemo(() => {
     let filtered = [...investments];
 
     if (typeFilter !== 'All') {
@@ -212,24 +229,28 @@ export default function DashboardPage() {
     });
   }, [investments, typeFilter, statusFilter, sortKey]);
 
-  const investmentMetrics = useMemo(() => {
+  const investmentMetrics = React.useMemo(() => {
     const metricsMap = new Map<string, ReturnType<typeof calculatePositionMetrics>>();
-    if (Object.keys(transactionsMap).length > 0) {
-      filteredAndSortedInvestments.forEach(inv => {
-        const metrics = calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], yearFilter);
+    filteredAndSortedInvestments.forEach(inv => {
+        const metrics = calculatePositionMetrics(
+            inv, 
+            transactionsMap[inv.id] ?? [], 
+            yearFilter, 
+            rateSchedulesMap[inv.id]
+        );
         metricsMap.set(inv.id, metrics);
-      });
-    }
+    });
     return metricsMap;
-  }, [filteredAndSortedInvestments, transactionsMap, yearFilter]);
+  }, [filteredAndSortedInvestments, transactionsMap, yearFilter, rateSchedulesMap]);
   
-  const summaryData = useMemo(() => {
-    return aggregateByType(investments, transactionsMap, etfSummaries, yearFilter, isTaxView ? taxSettings : null);
-  }, [investments, transactionsMap, etfSummaries, yearFilter, isTaxView, taxSettings]);
+  const summaryData = React.useMemo(() => {
+    return aggregateByType(investments, transactionsMap, etfSummaries, yearFilter, isTaxView ? taxSettings : null, rateSchedulesMap);
+  }, [investments, transactionsMap, etfSummaries, yearFilter, isTaxView, taxSettings, rateSchedulesMap]);
 
 
-  const handleAddClick = () => {
+  const handleAddClick = (prefill?: InvestmentType) => {
     setEditingInvestment(undefined);
+    setPrefillType(prefill);
     setIsFormOpen(true);
   };
 
@@ -266,15 +287,28 @@ export default function DashboardPage() {
   }
 
 
-  const handleFormSubmit = async (values: InvestmentFormValues) => {
+  const handleFormSubmit = async (
+    values: InvestmentFormValues,
+    startingBalance?: number,
+    initialRatePct?: number
+  ) => {
     if (!user) return;
     
     const isEditing = !!editingInvestment;
     try {
-        if (isEditing) {
+        if (isEditing && editingInvestment) {
           await updateInvestment(user.uid, editingInvestment.id, values);
         } else {
-          await addInvestment(user.uid, values);
+          const invId = await addInvestment(user.uid, values, initialRatePct);
+          if (values.type === 'Interest Account' && startingBalance && startingBalance > 0) {
+              await addTransaction(user.uid, invId, {
+                  type: 'Deposit',
+                  date: values.purchaseDate,
+                  amount: startingBalance,
+                  quantity: 0,
+                  pricePerUnit: 0,
+              });
+          }
         }
         await fetchAllData(user.uid);
         setIsFormOpen(false);
@@ -310,6 +344,11 @@ export default function DashboardPage() {
         toast({ title: "Error", description: "Could not save tax settings.", variant: "destructive" });
         console.error("Failed to save tax settings:", error);
     }
+  };
+
+  const handleManageRates = (inv: Investment) => {
+    setRatesInv(inv);
+    setIsRatesOpen(true);
   };
   
   if (!user) {
@@ -382,7 +421,7 @@ export default function DashboardPage() {
                   <Briefcase className="mr-2 h-4 w-4" />
                   ETF Plans
                 </Button>
-                 <Button onClick={handleAddClick}>
+                 <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add Investment
                 </Button>
@@ -396,7 +435,7 @@ export default function DashboardPage() {
                     <TabsTrigger value="Stock">Stocks ({typeCounts.Stock})</TabsTrigger>
                     <TabsTrigger value="Crypto">Crypto ({typeCounts.Crypto})</TabsTrigger>
                     <TabsTrigger value="ETF">ETFs ({typeCounts.ETF})</TabsTrigger>
-                    <TabsTrigger value="Savings">Savings ({typeCounts.Savings})</TabsTrigger>
+                    <TabsTrigger value="Interest Account">Interest Accounts ({typeCounts['Interest Account']})</TabsTrigger>
                     <TabsTrigger value="Bond">Bonds ({typeCounts.Bond})</TabsTrigger>
                     <TabsTrigger value="Real Estate">Real Estate ({typeCounts['Real Estate']})</TabsTrigger>
                   </TabsList>
@@ -436,6 +475,7 @@ export default function DashboardPage() {
               <InvestmentListView
                 investments={filteredAndSortedInvestments}
                 transactionsMap={transactionsMap}
+                rateSchedulesMap={rateSchedulesMap}
                 yearFilter={yearFilter}
                 showTypeColumn={typeFilter === 'All'}
                 mode={listMode}
@@ -458,6 +498,7 @@ export default function DashboardPage() {
                   <InvestmentCard 
                     key={investment.id} 
                     investment={investment} 
+                    metrics={metrics}
                     isTaxView={isTaxView}
                     onEdit={() => handleEditClick(investment)}
                     onDelete={() => handleDeleteClick(investment.id)}
@@ -467,6 +508,8 @@ export default function DashboardPage() {
                     realizedPLYear={metrics?.realizedPLYear ?? 0}
                     dividendsYear={metrics?.dividendsYear ?? 0}
                     interestYear={metrics?.interestYear ?? 0}
+                    currentRatePct={getCurrentRate(rateSchedulesMap[investment.id])}
+                    onManageRates={() => handleManageRates(investment)}
                   />
                 )
               })}
@@ -475,7 +518,7 @@ export default function DashboardPage() {
             <div className="text-center py-16">
               <h3 className="text-xl font-semibold text-foreground">No Investments Found</h3>
               <p className="text-muted-foreground mt-2">Add a new investment to get started.</p>
-               <Button onClick={handleAddClick} className="mt-4">
+               <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)} className="mt-4">
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add First Investment
                 </Button>
@@ -488,6 +531,7 @@ export default function DashboardPage() {
         onOpenChange={setIsFormOpen}
         onSubmit={handleFormSubmit}
         investment={editingInvestment}
+        initialType={prefillType}
       />
       <TaxSettingsDialog
         isOpen={isTaxSettingsOpen}
@@ -516,6 +560,15 @@ export default function DashboardPage() {
             investment={viewingHistoryInvestment}
             onTransactionAdded={onTransactionAdded}
             initialView={historyDialogView}
+        />
+      )}
+      {ratesInv && (
+        <RateScheduleDialog
+          isOpen={isRatesOpen}
+          onOpenChange={setIsRatesOpen}
+          investment={ratesInv}
+          rates={rateSchedulesMap[ratesInv.id]}
+          onChanged={async () => { if (user) await fetchAllData(user.uid); }}
         />
       )}
     </>

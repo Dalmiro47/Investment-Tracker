@@ -6,11 +6,13 @@ import type { Investment, TaxSettings } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
-import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History, PlusCircle, Info } from 'lucide-react';
+import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History, PlusCircle, Info, PiggyBank } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { dec, toNum, formatCurrency, formatQty, formatPercent, div, mul, sub, add } from '@/lib/money';
 import { getCryptoTaxInfo, estimateCardTax } from '@/lib/tax';
+import { performancePct as calculatePerformancePct } from '@/lib/types';
+import type { PositionMetrics } from '@/lib/portfolio';
 
 import {
   DropdownMenu,
@@ -26,6 +28,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/t
 
 interface InvestmentCardProps {
   investment: Investment;
+  metrics?: PositionMetrics;
   isTaxView: boolean;
   onEdit: () => void;
   onDelete: () => void;
@@ -35,6 +38,8 @@ interface InvestmentCardProps {
   realizedPLYear: number;
   dividendsYear: number;
   interestYear: number;
+  currentRatePct?: number | null;
+  onManageRates?: () => void;
 }
 
 const typeIcons: Record<Investment['type'], React.ReactNode> = {
@@ -43,11 +48,12 @@ const typeIcons: Record<Investment['type'], React.ReactNode> = {
   Crypto: <Bitcoin className="h-6 w-6" />,
   'Real Estate': <Home className="h-6 w-6" />,
   ETF: <Briefcase className="h-6 w-6" />,
-  Savings: <Wallet className="h-6 w-6" />,
+  'Interest Account': <PiggyBank className="h-6 w-6" />,
 };
 
 export default function InvestmentCard({ 
   investment, 
+  metrics,
   isTaxView, 
   onEdit, 
   onDelete, 
@@ -57,36 +63,45 @@ export default function InvestmentCard({
   realizedPLYear,
   dividendsYear,
   interestYear,
+  currentRatePct,
+  onManageRates,
 }: InvestmentCardProps) {
   const { name, type, status, ticker, purchaseDate, realizedPnL } = investment;
   
-  // --- High-Precision Calculations ---
+  const isIA = investment.type === 'Interest Account';
+
+  // --- High-Precision Calculations for non-IA ---
   const purchasePrice = dec(investment.purchasePricePerUnit);
   const currentPrice = dec(investment.currentValue);
   const purchaseQty = dec(investment.purchaseQuantity);
   const soldQty = dec(investment.totalSoldQty);
   
-  // Fix: Round availableQty to handle floating point inaccuracies
   const availableQty = sub(purchaseQty, soldQty).round(8);
-  const costBasis = mul(availableQty, purchasePrice);
-  
-  const marketValue = mul(availableQty, currentPrice);
+  const costBasisNonIA = mul(availableQty, purchasePrice);
+  const marketValueNonIA = mul(availableQty, currentPrice);
 
-  const unrealizedPL = availableQty.eq(0) ? dec(0) : sub(marketValue, costBasis);
-  const totalPL = add(unrealizedPL, dec(realizedPnL));
+  const unrealizedPLNonIA = sub(marketValueNonIA, costBasisNonIA);
+  const totalPLNonIA = add(unrealizedPLNonIA, dec(realizedPnL));
   
-  const performance = div(totalPL, mul(purchaseQty, purchasePrice));
+  const performanceNonIA = div(totalPLNonIA, mul(purchaseQty, purchasePrice));
 
   const avgSellPrice = div(dec(investment.realizedProceeds), soldQty);
   
+  // --- IA values come from metrics ----
+  const netDeposits  = metrics?.purchaseValue  ?? 0;
+  const balance      = metrics?.marketValue    ?? 0;
+  const accrued      = metrics?.unrealizedPL   ?? 0;
+  const perf         = metrics?.performancePct ?? 0;
+  
   // --- Display-ready values (rounded) ---
-  const displayCostBasis = toNum(costBasis);
-  const displayMarketValue = toNum(marketValue);
+  const displayCostBasis = toNum(costBasisNonIA);
+  const displayMarketValue = toNum(marketValueNonIA);
   const displayRealizedValue = toNum(dec(investment.realizedProceeds));
-  const displayUnrealizedPL = toNum(unrealizedPL);
-  const displayRealizedPL = toNum(dec(realizedPnL));
-  const displayTotalPL = toNum(totalPL);
+  const displayUnrealizedPL = toNum(unrealizedPLNonIA);
+  const displayRealizedPL = toNum(realizedPnL);
+  const displayTotalPL = toNum(totalPLNonIA);
   const displayAvgSellPrice = toNum(avgSellPrice);
+  const performance = isIA ? perf : toNum(performanceNonIA);
 
   const isCrypto = investment.type === 'Crypto';
   const cryptoTax = isCrypto ? getCryptoTaxInfo(investment) : null;
@@ -104,6 +119,17 @@ export default function InvestmentCard({
   
   const totalTaxable = realizedPLYear + dividendsYear + interestYear;
 
+  const Stat = ({ label, value, trend }: { label: string, value: string, trend?: 'up' | 'down' }) => (
+    <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md text-center">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className={cn("font-headline text-xl font-bold flex items-center gap-1", trend === 'up' ? 'text-green-600' : trend === 'down' ? 'text-destructive' : '')}>
+        {trend === 'up' && <TrendingUp className="h-5 w-5" />}
+        {trend === 'down' && <TrendingDown className="h-5 w-5" />}
+        {value}
+      </span>
+    </div>
+  );
+
 
   return (
     <Card className="flex flex-col transition-all hover:shadow-lg hover:-translate-y-1">
@@ -113,7 +139,10 @@ export default function InvestmentCard({
             <span className="p-2 bg-secondary rounded-md text-primary">{typeIcons[type]}</span>
             <div>
               <CardTitle className="font-headline text-xl">{name}</CardTitle>
-              <CardDescription className="font-medium text-primary">{type} {ticker ? `(${ticker})` : ''}</CardDescription>
+              <CardDescription className="font-medium text-primary">
+                {type} {ticker ? `(${ticker})` : ""}
+                {isIA && typeof currentRatePct === "number" ? ` • ${currentRatePct.toFixed(2)}%` : ""}
+              </CardDescription>
             </div>
           </div>
            <div className="flex items-center gap-1">
@@ -127,38 +156,59 @@ export default function InvestmentCard({
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>Field Explanations</DialogTitle>
-                        <DialogDescription>Here's how each value on the card is calculated.</DialogDescription>
+                        <DialogDescription>Here's how each value on the card is calculated for this investment type.</DialogDescription>
                     </DialogHeader>
-                    <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4">
-                        <div>
-                            <h4 className="font-semibold">Cost Basis</h4>
-                            <p className="text-muted-foreground">The original purchase price of the assets you currently still own. It ignores the cost of shares you've already sold. <br/><code className="text-xs">Formula: Available Quantity × Original Purchase Price per Unit</code></p>
+                    {isIA ? (
+                        <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4 py-4">
+                            <div>
+                                <h4 className="font-semibold">Net Deposits</h4>
+                                <p className="text-muted-foreground">The total amount of cash you have moved into this account, minus any withdrawals. It is your principal investment.<br/><code className="text-xs">Formula: Sum of all Deposits - Sum of all Withdrawals</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Balance</h4>
+                                <p className="text-muted-foreground">The current total value of your account, including your principal and any interest that has accrued over time.<br/><code className="text-xs">Formula: Net Deposits + Accrued Interest</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Accrued Interest</h4>
+                                <p className="text-muted-foreground">The total interest earned to date, calculated based on the account's rate schedule and daily balances. This is your "unrealized" gain.<br/><code className="text-xs">Formula: Calculated daily via savings engine</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Performance</h4>
+                                <p className="text-muted-foreground">The total return on your investment, shown as a percentage.<br/><code className="text-xs">Formula: (Accrued Interest / Net Deposits) × 100</code></p>
+                            </div>
                         </div>
-                         <div>
-                            <h4 className="font-semibold">Market Value</h4>
-                            <p className="text-muted-foreground">The current value of the shares/units you still hold. <br/><code className="text-xs">Formula: Available Quantity × Current Price</code></p>
+                    ) : (
+                        <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4 py-4">
+                            <div>
+                                <h4 className="font-semibold">Cost Basis</h4>
+                                <p className="text-muted-foreground">The original purchase price of the assets you currently still own. It ignores the cost of shares you've already sold. <br/><code className="text-xs">Formula: Available Quantity × Original Purchase Price per Unit</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Market Value</h4>
+                                <p className="text-muted-foreground">The current value of the shares/units you still hold. <br/><code className="text-xs">Formula: Available Quantity × Current Price</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Bought, Sold, Available</h4>
+                                <p className="text-muted-foreground"><span className="font-medium text-foreground">Bought:</span> The total quantity you initially purchased. <br/><span className="font-medium text-foreground">Sold:</span> The total quantity you have sold via transactions. <br/><span className="font-medium text-foreground">Available:</span> The quantity you currently still hold (`Bought - Sold`).</p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Buy Price, Avg. Sell Price, Current Price</h4>
+                                <p className="text-muted-foreground"><span className="font-medium text-foreground">Buy Price:</span> The price per unit you paid at the initial purchase. <br/><span className="font-medium text-foreground">Avg. Sell Price:</span> The weighted average price of all your sales (`Total Sale Proceeds / Total Quantity Sold`). <br/><span className="font-medium text-foreground">Current Price:</span> The latest market price for one unit.</p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Unrealized P/L</h4>
+                                <p className="text-muted-foreground">Your "paper" profit or loss on the assets you still hold. <br/><code className="text-xs">Formula: (Current Price - Buy Price) × Available Quantity</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Realized P/L</h4>
+                                <p className="text-muted-foreground">Your "locked-in" profit or loss from all completed sales. This value is filtered by the year you select in the summary. <br/><code className="text-xs">Formula: (Avg. Sell Price - Buy Price) × Sold Quantity</code></p>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold">Total P/L (Performance)</h4>
+                                <p className="text-muted-foreground">The overall profit or loss, combining realized and unrealized amounts. The percentage shows the total return on your original investment. <br/><code className="text-xs">Total P/L Formula: Unrealized P/L + Realized P/L</code> <br/> <code className="text-xs">Performance % Formula: Total P/L / Total Cost</code></p>
+                            </div>
                         </div>
-                        <div>
-                            <h4 className="font-semibold">Bought, Sold, Available</h4>
-                            <p className="text-muted-foreground"><span className="font-medium text-foreground">Bought:</span> The total quantity you initially purchased. <br/><span className="font-medium text-foreground">Sold:</span> The total quantity you have sold via transactions. <br/><span className="font-medium text-foreground">Available:</span> The quantity you currently still hold (`Bought - Sold`).</p>
-                        </div>
-                        <div>
-                            <h4 className="font-semibold">Buy Price, Avg. Sell Price, Current Price</h4>
-                            <p className="text-muted-foreground"><span className="font-medium text-foreground">Buy Price:</span> The price per unit you paid at the initial purchase. <br/><span className="font-medium text-foreground">Avg. Sell Price:</span> The weighted average price of all your sales (`Total Sale Proceeds / Total Quantity Sold`). <br/><span className="font-medium text-foreground">Current Price:</span> The latest market price for one unit.</p>
-                        </div>
-                        <div>
-                            <h4 className="font-semibold">Unrealized P/L</h4>
-                            <p className="text-muted-foreground">Your "paper" profit or loss on the assets you still hold. <br/><code className="text-xs">Formula: (Current Price - Buy Price) × Available Quantity</code></p>
-                        </div>
-                        <div>
-                            <h4 className="font-semibold">Realized P/L</h4>
-                            <p className="text-muted-foreground">Your "locked-in" profit or loss from all completed sales. This value is filtered by the year you select in the summary. <br/><code className="text-xs">Formula: (Avg. Sell Price - Buy Price) × Sold Quantity</code></p>
-                        </div>
-                         <div>
-                            <h4 className="font-semibold">Total P/L (Performance)</h4>
-                            <p className="text-muted-foreground">The overall profit or loss, combining realized and unrealized amounts. The percentage shows the total return on your original investment. <br/><code className="text-xs">Total P/L Formula: Unrealized P/L + Realized P/L</code> <br/> <code className="text-xs">Performance % Formula: Total P/L / Total Cost</code></p>
-                        </div>
-                    </div>
+                    )}
                 </DialogContent>
             </Dialog>
             <DropdownMenu>
@@ -176,6 +226,12 @@ export default function InvestmentCard({
                   <History className="mr-2 h-4 w-4" />
                   View History
                 </DropdownMenuItem>
+                {isIA && onManageRates && (
+                  <DropdownMenuItem onClick={onManageRates}>
+                    <History className="mr-2 h-4 w-4" />
+                    Manage Rates
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onEdit}>
                   <Edit className="mr-2 h-4 w-4" />
@@ -236,6 +292,13 @@ export default function InvestmentCard({
                 <span className="font-mono">{formatCurrency(estimatedTax.total)}</span>
               </div>
             )}
+          </div>
+        ) : isIA ? (
+           <div className="grid grid-cols-2 gap-3">
+            <Stat label="Net Deposits" value={formatCurrency(netDeposits)} />
+            <Stat label="Balance" value={formatCurrency(balance)} />
+            <Stat label="Accrued Interest" value={formatCurrency(accrued)} trend={accrued >= 0 ? 'up' : 'down'} />
+            <Stat label="Performance" value={formatPercent(perf)} />
           </div>
         ) : (
           <div className="space-y-4">
@@ -310,7 +373,7 @@ export default function InvestmentCard({
       <CardFooter className="flex-col items-start text-xs text-muted-foreground pt-4">
           {purchaseDate && (
             <div>
-                Purchased on {format(parseISO(purchaseDate), 'dd MMM yyyy')}
+                {isIA ? 'Started on ' : 'Purchased on '}{format(parseISO(purchaseDate), 'dd MMM yyyy')}
             </div>
           )}
           {isCrypto && cryptoTax?.taxFreeDate && (

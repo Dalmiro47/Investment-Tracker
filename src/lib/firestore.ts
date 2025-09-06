@@ -2,6 +2,7 @@
 import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query, where, getDocs, collectionGroup, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues, TaxSettings, EtfSimSummary } from './types';
+import type { SavingsRateChange } from './types-savings';
 
 const investmentsCol = (uid: string) => collection(db, 'users', uid, 'investments');
 const txCol = (uid: string, invId: string) => collection(db, 'users', uid, 'investments', invId, 'transactions');
@@ -23,10 +24,11 @@ const fromInvestmentDoc = (snap: any): Investment => {
 
 const fromTxDoc = (snap: any): Transaction => {
   const d = snap.data();
+  const dt = (d.date?.toDate ? d.date.toDate() : new Date(d.date)) as Date;
   return {
     id: snap.id,
     ...d,
-    date: (d.date as Timestamp).toDate().toISOString(),
+    date: dt.toISOString(),
   } as Transaction;
 };
 
@@ -35,11 +37,15 @@ export async function getInvestments(uid: string): Promise<Investment[]> {
   return q.docs.map(fromInvestmentDoc);
 }
 
-export async function addInvestment(uid: string, data: InvestmentFormValues) {
+export async function addInvestment(
+  uid: string,
+  data: InvestmentFormValues,
+  initialRatePct?: number
+): Promise<string> {
   const investmentData = {
     ...data,
     purchaseDate: toTS(data.purchaseDate),
-    currentValue: data.purchasePricePerUnit, // Start with the purchase price
+    currentValue: data.type === 'Interest Account' ? 0 : data.purchasePricePerUnit,
     totalSoldQty: 0,
     realizedProceeds: 0,
     realizedPnL: 0,
@@ -49,7 +55,16 @@ export async function addInvestment(uid: string, data: InvestmentFormValues) {
     createdAt: serverTimestamp(),
   };
 
-  await addDoc(investmentsCol(uid), investmentData);
+  const newDocRef = await addDoc(investmentsCol(uid), investmentData);
+
+  if (data.type === 'Interest Account') {
+      const rateScheduleRef = collection(db, 'users', uid, 'investments', newDocRef.id, 'rateSchedule');
+      await addDoc(rateScheduleRef, {
+        from: data.purchaseDate.toISOString().slice(0,10),
+        annualRatePct: (typeof initialRatePct === 'number' ? initialRatePct : 2.0),
+      });
+  }
+  return newDocRef.id;
 }
 
 export async function updateInvestment(uid: string, invId: string, patch: Partial<InvestmentFormValues>) {
@@ -62,9 +77,13 @@ export async function updateInvestment(uid: string, invId: string, patch: Partia
 export async function deleteInvestment(uid: string, invId: string) {
   const invRef = doc(db, 'users', uid, 'investments', invId);
   const txSnap = await getDocsFromServer(txCol(uid, invId));
+  const ratesSnap = await getDocsFromServer(collection(db, invRef.path, 'rateSchedule'));
+  
   const batch = writeBatch(db);
   txSnap.forEach(d => batch.delete(d.ref));
+  ratesSnap.forEach(d => batch.delete(d.ref));
   batch.delete(invRef);
+  
   await batch.commit();
 }
 
@@ -87,6 +106,25 @@ export async function getAllTransactionsForInvestments(
   });
   
   return transactionsMap;
+}
+
+export async function getRateSchedule(uid: string, invId: string): Promise<SavingsRateChange[]> {
+    const q = await getDocsFromServer(query(collection(db, 'users', uid, 'investments', invId, 'rateSchedule')));
+    return q.docs.map(d => d.data() as SavingsRateChange).sort((a, b) => a.from.localeCompare(b.from));
+}
+
+export async function getAllRateSchedules(
+  userId: string,
+  investments: Investment[]
+): Promise<Record<string, SavingsRateChange[]>> {
+    const interestAccounts = investments.filter(i => i.type === 'Interest Account');
+    const promises = interestAccounts.map(inv => getRateSchedule(userId, inv.id));
+    const results = await Promise.all(promises);
+    const map: Record<string, SavingsRateChange[]> = {};
+    interestAccounts.forEach((inv, index) => {
+        map[inv.id] = results[index];
+    });
+    return map;
 }
 
 export async function getAllEtfSummaries(uid: string): Promise<EtfSimSummary[]> {
@@ -139,6 +177,18 @@ export async function addTransaction(uid: string, invId: string, t: TransactionF
 
     const inv = fromInvestmentDoc(invSnap);
 
+    if (inv.type === 'Interest Account' && (t.type === 'Sell' || t.type === 'Dividend' || t.type === 'Interest')) {
+      throw new Error('Interest Accounts only support Deposit and Withdrawal.');
+    }
+    
+    // prevent oversell
+    if (t.type === 'Sell') {
+      const available = Math.max(0, (inv.purchaseQuantity ?? 0) - (inv.totalSoldQty ?? 0));
+      if (t.quantity > available + 1e-8) {
+        throw new Error(`Sell quantity exceeds available quantity (${available}).`);
+      }
+    }
+
     // Current aggregates (defaulting to 0)
     let totalSoldQty      = inv.totalSoldQty      ?? 0;
     let realizedProceeds  = inv.realizedProceeds  ?? 0;
@@ -170,11 +220,16 @@ export async function addTransaction(uid: string, invId: string, t: TransactionF
     } else if (t.type === 'Interest') {
       txTotalAmount = t.amount;
       interest     += t.amount;
+    } else if (t.type === 'Deposit') {
+        txTotalAmount = t.amount;
+    } else if (t.type === 'Withdrawal') {
+        txTotalAmount = -t.amount;
     }
 
     // Recompute status from available qty
     const availableQty = Math.max(0, (inv.purchaseQuantity ?? 0) - totalSoldQty);
-    const status: Investment['status'] = availableQty > 1e-6 ? 'Active' : 'Sold';
+    const status: Investment['status'] =
+      inv.type === 'Interest Account' ? 'Active' : (availableQty > 1e-6 ? 'Active' : 'Sold');
 
     // 1) Update parent aggregates atomically
     tx.update(invRef, {
@@ -211,9 +266,16 @@ const calculateDeltas = (
     interest: 0,
   };
 
-  const newTotalAmount = newTxData.type === 'Sell' 
-    ? newTxData.quantity * newTxData.pricePerUnit 
-    : newTxData.amount;
+  let newTotalAmount = 0;
+  if (newTxData.type === 'Sell') {
+      newTotalAmount = newTxData.quantity * newTxData.pricePerUnit;
+  } else if (newTxData.type === 'Deposit') {
+      newTotalAmount = newTxData.amount;
+  } else if (newTxData.type === 'Withdrawal') {
+      newTotalAmount = -newTxData.amount;
+  } else {
+      newTotalAmount = newTxData.amount;
+  }
   
   // Back out old values
   if (oldTx.type === 'Sell') {
@@ -251,6 +313,10 @@ export async function updateTransaction(uid: string, invId: string, txId: string
     if (!invSnap.exists()) throw new Error('Investment not found');
     const inv = fromInvestmentDoc(invSnap);
 
+    if (inv.type === 'Interest Account' && (newTxData.type === 'Sell' || newTxData.type === 'Dividend' || newTxData.type === 'Interest')) {
+      throw new Error('Interest Accounts only support Deposit and Withdrawal.');
+    }
+
     const oldTxSnap = await transaction.get(txRef);
     if (!oldTxSnap.exists()) throw new Error('Transaction to update not found');
     const oldTx = fromTxDoc(oldTxSnap);
@@ -259,8 +325,15 @@ export async function updateTransaction(uid: string, invId: string, txId: string
     const { deltas, newTotalAmount } = calculateDeltas(oldTx, newTxData, inv.purchasePricePerUnit);
 
     const totalSoldQty = (inv.totalSoldQty ?? 0) + deltas.soldQty;
+    
+    if (totalSoldQty > inv.purchaseQuantity + 1e-8) {
+      const available = Math.max(0, inv.purchaseQuantity - (inv.totalSoldQty ?? 0));
+      throw new Error(`Sell quantity exceeds available quantity (${available}).`);
+    }
+
     const availableQty = Math.max(0, inv.purchaseQuantity - totalSoldQty);
-    const status: Investment['status'] = availableQty > 1e-6 ? 'Active' : 'Sold';
+    const status: Investment['status'] = 
+      inv.type === 'Interest Account' ? 'Active' : (availableQty > 1e-6 ? 'Active' : 'Sold');
     
     // WRITES
     // 1) Update parent investment with deltas
@@ -304,7 +377,8 @@ export async function deleteTransaction(uid: string, invId: string, txId: string
 
         const totalSoldQty = (inv.totalSoldQty ?? 0) + deltas.soldQty;
         const availableQty = Math.max(0, inv.purchaseQuantity - totalSoldQty);
-        const status: Investment['status'] = availableQty > 1e-6 ? 'Active' : 'Sold';
+        const status: Investment['status'] =
+          inv.type === 'Interest Account' ? 'Active' : (availableQty > 1e-6 ? 'Active' : 'Sold');
 
         // WRITES
         // 1) Update parent investment by subtracting the old transaction's values
@@ -338,4 +412,13 @@ export async function getTaxSettings(uid: string): Promise<TaxSettings | null> {
 export async function updateTaxSettings(uid: string, settings: TaxSettings) {
   const ref = settingsDoc(uid, 'tax');
   await setDoc(ref, settings, { merge: true });
+}
+
+export async function addRateChange(
+  uid: string,
+  invId: string,
+  change: { from: string; annualRatePct: number }
+) {
+  const ref = collection(db, 'users', uid, 'investments', invId, 'rateSchedule');
+  await addDoc(ref, change);
 }
