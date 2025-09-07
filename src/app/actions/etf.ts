@@ -1,5 +1,7 @@
-
 'use server';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
 
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';

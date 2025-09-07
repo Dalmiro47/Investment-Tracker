@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -26,8 +25,8 @@ export function useAutoRefreshEtfHistory({ userId, recheckOnFocus = true, useUTC
   useEffect(() => {
     if (!userId) return;
 
-    // DEV: force a run via ?etfForce in the URL
-    const devForce = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('etfForce');
+    const devForce =
+      typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('etfForce');
 
     const attempt = async (reason: 'mount' | 'focus') => {
       const now = Date.now();
