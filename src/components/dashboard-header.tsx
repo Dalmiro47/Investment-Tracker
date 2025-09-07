@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { CircleDollarSign, LayoutGrid, LogOut, User, Settings } from 'lucide-react';
+import { CircleDollarSign, LayoutGrid, LogOut, User, Settings, Scale } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -16,6 +16,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip';
+import { cn } from '@/lib/utils';
 
 
 interface DashboardHeaderProps {
@@ -76,6 +77,7 @@ export default function DashboardHeader({
                     aria-describedby={disabled ? 'tax-report-disabled' : undefined}
                     size="sm"
                   >
+                    <Scale className="mr-2 h-4 w-4" />
                     {estimateLabel}
                   </Button>
                 </span>
