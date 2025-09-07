@@ -55,25 +55,53 @@ function parseUserInput(v: string, fmt: string): Date | null {
   return null;
 }
 
-/** Proper custom input that forwards ref + props from react-datepicker */
-const DateTextInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
-  ({ className, disabled, ...props }, ref) => {
-    return (
-      <div className={clsx('app-date-input', disabled && 'opacity-60')}>
-        <input
-          ref={ref}
-          {...props}
-          className={clsx('app-date-input-field', className)}
-          inputMode="numeric"
-          aria-label="Date"
-          disabled={disabled}
-        />
+/** Proper custom input that forwards ref + props from react-datepicker
+ *  and makes the calendar icon clickable to open the popover.
+ */
+const DateTextInput = React.forwardRef<
+  HTMLInputElement,
+  React.InputHTMLAttributes<HTMLInputElement>
+>(({ className, disabled, onClick, ...props }, ref) => {
+  const innerRef = React.useRef<HTMLInputElement>(null);
+
+  // expose the inner ref to react-datepicker
+  React.useImperativeHandle(ref, () => innerRef.current as HTMLInputElement);
+
+  const openPicker = (e: React.MouseEvent) => {
+    if (disabled) return;
+    // call the click handler that react-datepicker passes
+    onClick?.(e as any);
+    // make sure the input gets focus too
+    innerRef.current?.focus();
+  };
+
+  return (
+    <div className={clsx('app-date-input', disabled && 'opacity-60')}>
+      <input
+        ref={innerRef}
+        {...props}
+        onClick={onClick}             // keeps normal behavior when user clicks the field
+        className={clsx('app-date-input-field', className)}
+        inputMode="numeric"
+        aria-label="Date"
+        disabled={disabled}
+      />
+
+      {/* icon acts like a button to open the calendar */}
+      <button
+        type="button"
+        className="app-date-icon-btn"
+        onClick={openPicker}
+        aria-label="Open calendar"
+        disabled={disabled}
+      >
         <CalendarIcon className="app-date-icon" />
-      </div>
-    );
-  }
-);
+      </button>
+    </div>
+  );
+});
 DateTextInput.displayName = 'DateTextInput';
+
 
 export function AppDatePicker({
   value,
@@ -84,8 +112,6 @@ export function AppDatePicker({
   maxDate,
   className,
   inputFormat = INPUT_FORMAT_DEFAULT,
-  clearable = true,
-  showToday = true,
 }: AppDatePickerProps) {
 
   // commit text the user typed (on blur or Enter)
@@ -107,36 +133,6 @@ export function AppDatePicker({
       // invalid -> snap back to current value
       // letting react-datepicker re-render the previous value
     }
-  };
-
-  const CalendarContainer = (props: any) => {
-    return (
-      <div className="app-date-container">
-        {props.children}
-        {(showToday || clearable) && (
-          <div className="app-date-footer">
-            {showToday && (
-              <button
-                type="button"
-                className="app-date-footer-btn"
-                onClick={() => onChange(toLocalStartOfDay(new Date()))}
-              >
-                Today
-              </button>
-            )}
-            {clearable && (
-              <button
-                type="button"
-                className="app-date-footer-btn app-date-clear"
-                onClick={() => onChange(null)}
-              >
-                Clear
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-    );
   };
 
   return (
@@ -183,7 +179,6 @@ export function AppDatePicker({
         disabled={disabled}
         minDate={minDate}
         maxDate={maxDate}
-        calendarContainer={CalendarContainer}
         showPopperArrow={false}
         popperPlacement="bottom-start"
       />
