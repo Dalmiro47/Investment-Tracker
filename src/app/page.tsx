@@ -39,6 +39,7 @@ import RateScheduleDialog from "@/components/rate-schedule-dialog";
 import { parseISO } from 'date-fns';
 import EtfPlansButton from '@/components/etf/EtfPlansButton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Card, CardContent } from '@/components/ui/card';
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -545,25 +546,29 @@ export default function DashboardPage() {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : viewMode === 'list' ? (
-              <InvestmentListView
-                investments={filteredAndSortedInvestments}
-                transactionsMap={transactionsMap}
-                rateSchedulesMap={rateSchedulesMap}
-                yearFilter={yearFilter}
-                showTypeColumn={typeFilter === 'All'}
-                mode={listMode}
-                sortKey={sortKey}
-                statusFilter={statusFilter}
-                activeTypeFilter={typeFilter}
-                onViewHistory={(id) => {
-                  const inv = investments.find((i) => i.id === id);
-                  if (inv) handleHistoryClick(inv);
-                }}
-                onAddTransaction={(id) => {
-                  const inv = investments.find((i) => i.id === id);
-                  if (inv) handleAddTransactionClick(inv);
-                }}
-              />
+              <Card>
+                <CardContent>
+                  <InvestmentListView
+                    investments={filteredAndSortedInvestments}
+                    transactionsMap={transactionsMap}
+                    rateSchedulesMap={rateSchedulesMap}
+                    yearFilter={yearFilter}
+                    showTypeColumn={typeFilter === 'All'}
+                    mode={listMode}
+                    sortKey={sortKey}
+                    statusFilter={statusFilter}
+                    activeTypeFilter={typeFilter}
+                    onViewHistory={(id) => {
+                      const inv = investments.find((i) => i.id === id);
+                      if (inv) handleHistoryClick(inv);
+                    }}
+                    onAddTransaction={(id) => {
+                      const inv = investments.find((i) => i.id === id);
+                      if (inv) handleAddTransactionClick(inv);
+                    }}
+                  />
+                </CardContent>
+              </Card>
             ) : filteredAndSortedInvestments.length > 0 ? (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {filteredAndSortedInvestments.map(investment => {

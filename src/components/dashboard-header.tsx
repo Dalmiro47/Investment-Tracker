@@ -65,7 +65,7 @@ export default function DashboardHeader({
           <CircleDollarSign className="h-6 w-6 text-primary" />
           <span className="font-headline text-xl font-bold tracking-tight">DDS Investment Tracker</span>
         </Link>
-        <div className="flex flex-1 items-center justify-center space-x-4">
+        <div className="flex items-center justify-center space-x-4">
           
            <Button variant="outline" size="sm" onClick={onTaxSettingsClick}>
               <Settings className="mr-2 h-4 w-4" />
