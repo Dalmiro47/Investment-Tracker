@@ -176,34 +176,70 @@ export function AppDatePicker({
         popperPlacement="bottom-start"
 
         /* --- Custom compact header with arrows where you want them --- */
-        renderCustomHeader={({ date, changeMonth, changeYear, decreaseMonth, increaseMonth, months, years }) => {
+        renderCustomHeader={({
+          date,
+          changeMonth,
+          changeYear,
+          decreaseMonth,
+          increaseMonth,
+          prevMonthButtonDisabled,
+          nextMonthButtonDisabled,
+        }) => {
+          // Month names in en-GB, independent of date-fns locale types
+          const months = Array.from({ length: 12 }, (_, i) =>
+            new Date(2020, i, 1).toLocaleString('en-GB', { month: 'long' })
+          );
+        
+          // Build a year range. Prefer min/max; otherwise 1900..(current+50)
+          const curYear = new Date().getFullYear();
+          const start = (minDate ? minDate.getFullYear() : 1900);
+          const end = (maxDate ? maxDate.getFullYear() : curYear + 50);
+          const years = Array.from({ length: end - start + 1 }, (_, i) => start + i);
+        
+          // Ensure the current year is in the list (in case min/max are tight)
+          const year = date.getFullYear();
+          if (!years.includes(year)) years.push(year);
+          years.sort((a, b) => a - b);
+        
           return (
             <div className="rdp-header">
-              <button type="button" className="rdp-nav rdp-nav-prev" onClick={decreaseMonth} aria-label="Previous month">
+              <button
+                type="button"
+                className="rdp-nav rdp-nav-prev"
+                onClick={decreaseMonth}
+                aria-label="Previous month"
+                disabled={prevMonthButtonDisabled}
+              >
                 <ChevronLeft size={16} />
               </button>
-
+        
               <select
                 className="rdp-sel"
                 value={date.getMonth()}
                 onChange={(e) => changeMonth(Number(e.target.value))}
               >
-                {months.map((monthName, monthIndex) => (
-                  <option key={monthName} value={monthIndex}>{monthName}</option>
+                {months.map((name, i) => (
+                  <option key={name} value={i}>{name}</option>
                 ))}
               </select>
-
+        
               <select
                 className="rdp-sel"
                 value={date.getFullYear()}
                 onChange={(e) => changeYear(Number(e.target.value))}
               >
-                {years.map((year) => (
-                  <option key={year} value={year}>{year}</option>
+                {years.map((y) => (
+                  <option key={y} value={y}>{y}</option>
                 ))}
               </select>
-
-              <button type="button" className="rdp-nav rdp-nav-next" onClick={increaseMonth} aria-label="Next month">
+        
+              <button
+                type="button"
+                className="rdp-nav rdp-nav-next"
+                onClick={increaseMonth}
+                aria-label="Next month"
+                disabled={nextMonthButtonDisabled}
+              >
                 <ChevronRight size={16} />
               </button>
             </div>
