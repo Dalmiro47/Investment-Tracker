@@ -13,7 +13,7 @@ export const TAX = {
 export interface CapitalTaxInput {
   year: number;
   filing: 'single'|'married';
-  churchRate: 0 | 0.08 | 0.09;       // church tax rate on the tax
+  churchRate?: number;       // church tax rate on the tax
   capitalIncome: number;             // sum of §20 income (dividends + §20 gains) for the selected year
 }
 
@@ -27,15 +27,26 @@ export interface CapitalTaxResult {
   total: number;     // baseTax + soli + church
 }
 
-export function calcCapitalTax(i: CapitalTaxInput): CapitalTaxResult {
-  const allowance = TAX.sparerPauschbetrag(i.filing);
-  const taxableBase = Math.max(i.capitalIncome - allowance, 0);
+export function calcCapitalTax({
+  year,
+  filing,
+  capitalIncome,
+  churchRate = 0,
+}: {
+  year: number;
+  filing: 'single' | 'married';
+  capitalIncome: number;
+  churchRate?: number;
+}): CapitalTaxResult {
+  const cr = Number.isFinite(churchRate) ? churchRate : 0;
+  const allowance = TAX.sparerPauschbetrag(filing);
+  const taxableBase = Math.max(capitalIncome - allowance, 0);
   const baseTax = taxableBase * TAX.abgeltungsteuer;
   const soli = baseTax * TAX.soliRate;
-  const church = baseTax * i.churchRate;
+  const church = baseTax * cr;
   return {
     allowance,
-    allowanceUsed: Math.min(i.capitalIncome, allowance),
+    allowanceUsed: Math.min(capitalIncome, allowance),
     taxableBase,
     baseTax,
     soli,
@@ -47,7 +58,7 @@ export function calcCapitalTax(i: CapitalTaxInput): CapitalTaxResult {
 export interface CryptoTaxInput {
   year: number;
   marginalRate: number;             // 0.14..0.45 from settings
-  churchRate: 0 | 0.08 | 0.09;
+  churchRate?: number;
   shortTermGains: number;           // sum of §23 gains with holding < 1 year
 }
 
@@ -61,15 +72,26 @@ export interface CryptoTaxResult {
   total: number;                    // incomeTax + soli + church
 }
 
-export function calcCryptoTax(i: CryptoTaxInput): CryptoTaxResult {
-  const threshold = TAX.cryptoFreigrenze(i.year);
-  const taxableBase = i.shortTermGains > threshold ? i.shortTermGains : 0;
-  const incomeTax = taxableBase * i.marginalRate;
+export function calcCryptoTax({
+  year,
+  marginalRate,
+  shortTermGains,
+  churchRate = 0,
+}: {
+  year: number;
+  marginalRate: number;
+  shortTermGains: number;
+  churchRate?: number;
+}): CryptoTaxResult {
+  const cr = Number.isFinite(churchRate) ? churchRate : 0;
+  const threshold = TAX.cryptoFreigrenze(year);
+  const taxableBase = shortTermGains > threshold ? shortTermGains : 0;
+  const incomeTax = taxableBase * marginalRate;
   const soli = incomeTax * TAX.soliRate;
-  const church = incomeTax * churchRate;
+  const church = incomeTax * cr;
   return {
     threshold,
-    thresholdUsed: Math.min(i.shortTermGains, threshold),
+    thresholdUsed: Math.min(shortTermGains, threshold),
     taxableBase,
     incomeTax,
     soli,
