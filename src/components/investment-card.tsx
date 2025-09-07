@@ -24,6 +24,7 @@ import {
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { EtfSimLink } from './etf/EtfSimLink';
 
 
 interface InvestmentCardProps {
@@ -69,6 +70,7 @@ export default function InvestmentCard({
   const { name, type, status, ticker, purchaseDate, realizedPnL } = investment;
   
   const isIA = investment.type === 'Interest Account';
+  const isETF = investment.type === 'ETF';
 
   // --- High-Precision Calculations for non-IA ---
   const purchasePrice = dec(investment.purchasePricePerUnit);
@@ -143,6 +145,7 @@ export default function InvestmentCard({
                 {type} {ticker ? `(${ticker})` : ""}
                 {isIA && typeof currentRatePct === "number" ? ` • ${currentRatePct.toFixed(2)}%` : ""}
               </CardDescription>
+              {isETF && metrics?.planId && <EtfSimLink planId={metrics.planId} showSummary={false} className="mt-1" />}
             </div>
           </div>
            <div className="flex items-center gap-1">

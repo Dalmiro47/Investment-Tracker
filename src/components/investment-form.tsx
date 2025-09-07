@@ -215,21 +215,21 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
              <>
                {!isEditing && (
                   <>
-                    <div className="md:col-span-1 space-y-2">
+                    <div className="md:col-span-1">
                         <FormLabel>Starting Balance (optional)</FormLabel>
                         <NumericInput
                           value={startingBalance}
-                          onCommit={(n) => setStartingBalance(n ?? 0)}
+                          onCommit={(n) => setStartingBalance(n ?? null)}
                           placeholder="e.g. 3,000.00"
                           allowDecimal
                         />
                         <FormDescription>Recorded as a Deposit on the opening date.</FormDescription>
                     </div>
-                    <div className="md:col-span-1 space-y-2">
+                    <div className="md:col-span-1">
                         <FormLabel>Initial Interest Rate (%)</FormLabel>
                          <NumericInput
                           value={initialRatePct}
-                          onCommit={(n) => setInitialRatePct(n ?? 0)}
+                          onCommit={(n) => setInitialRatePct(n ?? null)}
                           placeholder="e.g. 3.5"
                           allowDecimal
                         />

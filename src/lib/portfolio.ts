@@ -33,6 +33,7 @@ export interface PositionMetrics {
   performancePct: number; // totalPLDisplay / purchaseValue
   
   type: Investment['type'];
+  planId?: string;
 }
 
 export type AggregatedSymbolRow = {
@@ -74,6 +75,7 @@ export function calculatePositionMetrics(
     capitalGainsYear: 0, dividendsYear: 0, interestYear: 0,
     realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0,
     type: inv.type,
+    planId: inv.planId,
   };
 
   // ✅ Interest Account: compute using rate schedule + transactions
@@ -221,6 +223,7 @@ export function calculatePositionMetrics(
     totalPLDisplay: toNum(totalPLDisplay),
     performancePct: toNum(performancePct, 4),
     type: inv.type,
+    planId: inv.planId,
   };
 }
 
