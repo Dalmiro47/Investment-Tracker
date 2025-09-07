@@ -154,16 +154,18 @@ export function AppDatePicker({
             Math.min(out.length, digits.length + 2);
           requestAnimationFrame(() => input.setSelectionRange(caret, caret));
         }}
-        onBlur={(e) => commitFromInputEl(e.target as HTMLInputElement)}
+        onBlur={(e) => {
+          const next = (e.relatedTarget as HTMLElement | null);
+          // If the new focused element is inside the calendar, don't commit yet
+          if (next && next.closest('.react-datepicker')) return;
+          commitFromInputEl(e.target as HTMLInputElement);
+        }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
             commitFromInputEl(e.target as HTMLInputElement);
           }
         }}
-        withPortal
-        portalId="app-datepicker-portal"
-        shouldCloseOnSelect
         customInput={<DateTextInput />}
         dateFormat={inputFormat}
         locale={enGB}
@@ -177,8 +179,6 @@ export function AppDatePicker({
         maxDate={maxDate}
         showPopperArrow={false}
         popperPlacement="bottom-start"
-
-        /* --- Custom compact header with arrows where you want them --- */
         renderCustomHeader={({
           date,
           changeMonth,
