@@ -3,7 +3,7 @@
 
 import * as React from 'react';
 import { createPortal } from 'react-dom';
-import { parse, format, isValid } from 'date-fns';
+import { parse, isValid } from 'date-fns';
 import DatePicker from 'react-datepicker';
 import enGB from 'date-fns/locale/en-GB';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -22,6 +22,7 @@ export type AppDatePickerProps = {
   inputFormat?: string; // default: dd/MM/yyyy
 };
 
+// ... (types, helpers, DateTextInput stay exactly as you have them)
 const INPUT_FORMAT_DEFAULT = 'dd/MM/yyyy';
 const TWO_DIGIT_YEAR_PIVOT = 50; // 00..49 => 2000..2049, 50..99 => 1950..1999
 
@@ -72,6 +73,13 @@ function parseUserInput(v: string, fmt: string): Date | null {
   return null;
 }
 
+
+const PopperPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  if (typeof window === 'undefined') return <>{children}</>;
+  const host = document.getElementById('app-datepicker-portal');
+  return host ? createPortal(children, host) : <>{children}</>;
+};
+
 /** forward ref + clickable icon */
 const DateTextInput = React.forwardRef<
   HTMLInputElement,
@@ -111,11 +119,6 @@ const DateTextInput = React.forwardRef<
 });
 DateTextInput.displayName = 'DateTextInput';
 
-const PopperPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  if (typeof window === 'undefined') return <>{children}</>;
-  const host = document.getElementById('app-datepicker-portal');
-  return host ? createPortal(children, host) : <>{children}</>;
-};
 
 export function AppDatePicker({
   value,
@@ -125,8 +128,10 @@ export function AppDatePicker({
   minDate,
   maxDate,
   className,
-  inputFormat = INPUT_FORMAT_DEFAULT,
+  inputFormat = 'dd/MM/yyyy',
 }: AppDatePickerProps) {
+  // ⬇️ NEW: track whether calendar is open
+  const [isOpen, setIsOpen] = React.useState(false);
 
   const commitFromInputEl = (el: HTMLInputElement | null) => {
     if (!el) return;
@@ -135,22 +140,24 @@ export function AppDatePicker({
 
     if (!raw.trim()) return onChange(null);
     if (parsed) {
-      if (minDate && parsed < toLocalStartOfDay(minDate)) return onChange(toLocalStartOfDay(minDate));
-      if (maxDate && parsed > toLocalStartOfDay(maxDate)) return onChange(toLocalStartOfDay(maxDate));
+      if (minDate && parsed < new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()))
+        return onChange(new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()));
+      if (maxDate && parsed > new Date(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate()))
+        return onChange(new Date(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate()));
       return onChange(parsed);
     }
-    // invalid -> ignore; DatePicker will keep current value
   };
 
   return (
     <div className={clsx('app-date-input-wrap', className)}>
       <DatePicker
         selected={value ?? null}
-        onChange={(d) => onChange(d ? toLocalStartOfDay(d as Date) : null)}
-        /* live mask + keep caret */
+        onChange={(d) => onChange(d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()) : null)}
+
+        // mask while typing (unchanged)
         onChangeRaw={(e) => {
           const input = e.target as HTMLInputElement;
-          let digits = input.value.replace(/\D/g, '').slice(0, 8); // ddmmyyyy
+          let digits = input.value.replace(/\D/g, '').slice(0, 8);
           let out = '';
           if (digits.length <= 2) out = digits;
           else if (digits.length <= 4) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
@@ -162,9 +169,11 @@ export function AppDatePicker({
             Math.min(out.length, digits.length + 2);
           requestAnimationFrame(() => input.setSelectionRange(caret, caret));
         }}
+
+        // ⬇️ IMPORTANT: don't commit when the calendar is open
         onBlur={(e) => {
+          if (isOpen) return; // calendar is open → let the click go through
           const next = (e.relatedTarget as HTMLElement | null);
-          // If the new focused element is inside the calendar, don't commit yet
           if (next && next.closest('.react-datepicker')) return;
           commitFromInputEl(e.target as HTMLInputElement);
         }}
@@ -174,6 +183,14 @@ export function AppDatePicker({
             commitFromInputEl(e.target as HTMLInputElement);
           }
         }}
+
+        // ⬇️ Popper rendered into our high-z portal (anchored UI)
+        popperContainer={PopperPortal}
+
+        // close after selecting a day so onBlur can commit when appropriate
+        shouldCloseOnSelect
+
+        // keep everything else as you had it
         customInput={<DateTextInput />}
         dateFormat={inputFormat}
         locale={enGB}
@@ -185,73 +202,37 @@ export function AppDatePicker({
         disabled={disabled}
         minDate={minDate}
         maxDate={maxDate}
-        popperContainer={PopperPortal}
         showPopperArrow={false}
         popperPlacement="bottom-start"
-        renderCustomHeader={({
-          date,
-          changeMonth,
-          changeYear,
-          decreaseMonth,
-          increaseMonth,
-          prevMonthButtonDisabled,
-          nextMonthButtonDisabled,
-        }) => {
-          // Month names in en-GB, independent of date-fns locale types
+
+        // track open/close state
+        onCalendarOpen={() => setIsOpen(true)}
+        onCalendarClose={() => setIsOpen(false)}
+
+        renderCustomHeader={({ date, changeMonth, changeYear, decreaseMonth, increaseMonth, prevMonthButtonDisabled, nextMonthButtonDisabled }) => {
           const months = Array.from({ length: 12 }, (_, i) =>
             new Date(2020, i, 1).toLocaleString('en-GB', { month: 'long' })
           );
-        
-          // Build a year range. Prefer min/max; otherwise 1900..(current+50)
           const curYear = new Date().getFullYear();
           const start = (minDate ? minDate.getFullYear() : 1900);
           const end = (maxDate ? maxDate.getFullYear() : curYear + 50);
           const years = Array.from({ length: end - start + 1 }, (_, i) => start + i);
-        
-          // Ensure the current year is in the list (in case min/max are tight)
           const year = date.getFullYear();
           if (!years.includes(year)) years.push(year);
           years.sort((a, b) => a - b);
-        
+
           return (
             <div className="rdp-header">
-              <button
-                type="button"
-                className="rdp-nav rdp-nav-prev"
-                onClick={decreaseMonth}
-                aria-label="Previous month"
-                disabled={prevMonthButtonDisabled}
-              >
+              <button type="button" className="rdp-nav rdp-nav-prev" onClick={decreaseMonth} aria-label="Previous month" disabled={prevMonthButtonDisabled}>
                 <ChevronLeft size={16} />
               </button>
-        
-              <select
-                className="rdp-sel"
-                value={date.getMonth()}
-                onChange={(e) => changeMonth(Number(e.target.value))}
-              >
-                {months.map((name, i) => (
-                  <option key={name} value={i}>{name}</option>
-                ))}
+              <select className="rdp-sel" value={date.getMonth()} onChange={(e) => changeMonth(Number(e.target.value))}>
+                {months.map((name, i) => <option key={name} value={i}>{name}</option>)}
               </select>
-        
-              <select
-                className="rdp-sel"
-                value={date.getFullYear()}
-                onChange={(e) => changeYear(Number(e.target.value))}
-              >
-                {years.map((y) => (
-                  <option key={y} value={y}>{y}</option>
-                ))}
+              <select className="rdp-sel" value={date.getFullYear()} onChange={(e) => changeYear(Number(e.target.value))}>
+                {years.map((y) => <option key={y} value={y}>{y}</option>)}
               </select>
-        
-              <button
-                type="button"
-                className="rdp-nav rdp-nav-next"
-                onClick={increaseMonth}
-                aria-label="Next month"
-                disabled={nextMonthButtonDisabled}
-              >
+              <button type="button" className="rdp-nav rdp-nav-next" onClick={increaseMonth} aria-label="Next month" disabled={nextMonthButtonDisabled}>
                 <ChevronRight size={16} />
               </button>
             </div>
