@@ -211,8 +211,8 @@ export default function InvestmentListView({
   if (IA_MODE) {
     const showPercentPortfolioCol = mode === 'aggregated';
     return (
-      <div className="overflow-x-auto rounded-lg border bg-card/50">
-        <table className="min-w-full text-sm">
+      <div className="mt-2 overflow-x-auto rounded-md overflow-hidden">
+        <table className="w-auto text-sm">
           <thead className="bg-muted/40 text-muted-foreground">
             <tr className="[&>th]:px-4 [&>th]:py-3 text-left">
               <th>Account</th>
@@ -225,9 +225,9 @@ export default function InvestmentListView({
               {mode === 'flat' && <th className="text-right">Actions</th>}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border [&>tr>td]:px-2 [&>tr>td]:py-3">
             {rows.map((r) => (
-              <tr key={r.key} className="border-t last:border-b [&>td]:px-4 [&>td]:py-3">
+              <tr key={r.key}>
                 <td className="font-medium">{r.name}</td>
                 <td className="text-right">{fmtRate(r.currentRatePct)}</td>
                 <td className="text-right">{fmtEur.format(r.costBasis)}</td>
@@ -271,8 +271,8 @@ export default function InvestmentListView({
 
 
   return (
-    <div className="overflow-x-auto rounded-lg border bg-card/50">
-      <table className="min-w-full text-sm">
+    <div className="mt-2 overflow-x-auto rounded-md overflow-hidden">
+      <table className="w-auto text-sm">
         <thead className="bg-muted/40 text-muted-foreground">
           <tr className="[&>th]:px-4 [&>th]:py-3 [&>th]:whitespace-nowrap text-left">
             {showTypeColumn && <th>Type</th>}
@@ -306,12 +306,12 @@ export default function InvestmentListView({
             {isFlat && <th className="text-right">Actions</th>}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-border [&>tr>td]:px-2 [&>tr>td]:py-3">
           {rows.map((r) => {
             const isSoldRow = r.status === 'Sold';
             const isIARow = r.type === 'Interest Account';
             return (
-              <tr key={r.key} className="border-t last:border-b [&>td]:px-4 [&>td]:py-3">
+              <tr key={r.key}>
                 {showTypeColumn && <td className="font-medium">{r.type}</td>}
                 <td className="font-medium">
                   <div className="flex items-center gap-2">
