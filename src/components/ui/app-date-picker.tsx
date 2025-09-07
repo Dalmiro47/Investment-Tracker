@@ -1,15 +1,23 @@
-
 'use client';
 
 import * as React from 'react';
-import { createPortal } from 'react-dom';
-import { parse, isValid } from 'date-fns';
-import DatePicker from 'react-datepicker';
-import enGB from 'date-fns/locale/en-GB';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import clsx from 'clsx';
-
-import './app-date-picker.css';
+import {
+  addMonths,
+  subMonths,
+  startOfMonth,
+  endOfMonth,
+  startOfWeek,
+  endOfWeek,
+  eachDayOfInterval,
+  isSameMonth,
+  isSameDay,
+  format,
+  parse,
+  isValid,
+} from 'date-fns';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 export type AppDatePickerProps = {
   value: Date | null | undefined;
@@ -22,103 +30,50 @@ export type AppDatePickerProps = {
   inputFormat?: string; // default: dd/MM/yyyy
 };
 
-const INPUT_FORMAT_DEFAULT = 'dd/MM/yyyy';
-const TWO_DIGIT_YEAR_PIVOT = 50; // 00..49 => 2000..2049, 50..99 => 1950..1999
+const INPUT_FORMAT = 'dd/MM/yyyy';
+const PIVOT_2DIGIT = 50; // 00..49 => 2000..2049, 50..99 => 1950..1999
 
-function toLocalStartOfDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
+const startOfDayLocal = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
+function clamp(date: Date, min?: Date, max?: Date) {
+  const d = +startOfDayLocal(date);
+  if (min && d < +startOfDayLocal(min)) return startOfDayLocal(min);
+  if (max && d > +startOfDayLocal(max)) return startOfDayLocal(max);
+  return startOfDayLocal(date);
 }
 
-function expandTwoDigitYear(yy: string): string {
-  const n = Number(yy);
-  return n <= TWO_DIGIT_YEAR_PIVOT ? `20${yy.padStart(2, '0')}` : `19${yy.padStart(2, '0')}`;
+function expand2DigitYear(two: string) {
+  const n = Number(two);
+  return n <= PIVOT_2DIGIT ? `20${two.padStart(2, '0')}` : `19${two.padStart(2, '0')}`;
 }
 
-// Try multiple formats when user types (supports dd/MM/yy and ddMMyy)
-function parseUserInput(v: string, fmt: string): Date | null {
-  const raw = v.trim();
-  if (!raw) return null;
+// dd/MM/yyyy + permissive extras (ddMMyyyy, dd/MM/yy, ddMMyy)
+function parseUserInput(raw: string, fmt: string): Date | null {
+  const v = raw.trim();
+  if (!v) return null;
 
-  // If ddMMyy (6) -> expand to ddMMyyyy; If dd/MM/yy -> expand to dd/MM/yyyy
-  if (/^\d{6}$/.test(raw)) {
-    const d = raw.slice(0, 2);
-    const m = raw.slice(2, 4);
-    const y4 = expandTwoDigitYear(raw.slice(4));
-    const parsed = parse(`${d}${m}${y4}`, 'ddMMyyyy', new Date());
-    if (isValid(parsed)) return toLocalStartOfDay(parsed);
+  if (/^\d{6}$/.test(v)) {
+    const d = v.slice(0, 2);
+    const m = v.slice(2, 4);
+    const y = expand2DigitYear(v.slice(4));
+    const parsed = parse(`${d}${m}${y}`, 'ddMMyyyy', new Date());
+    return isValid(parsed) ? startOfDayLocal(parsed) : null;
   }
-  if (/^\d{2}\/\d{2}\/\d{2}$/.test(raw)) {
-    const [d, m, y2] = raw.split('/');
-    const y4 = expandTwoDigitYear(y2);
-    const parsed = parse(`${d}/${m}/${y4}`, 'dd/MM/yyyy', new Date());
-    if (isValid(parsed)) return toLocalStartOfDay(parsed);
+  if (/^\d{2}\/\d{2}\/\d{2}$/.test(v)) {
+    const [d, m, y2] = v.split('/');
+    const y = expand2DigitYear(y2);
+    const parsed = parse(`${d}/${m}/${y}`, 'dd/MM/yyyy', new Date());
+    return isValid(parsed) ? startOfDayLocal(parsed) : null;
   }
 
-  const tryFormats = [
-    fmt,                // dd/MM/yyyy
-    'dd/MM/yy',         // will accept, but expand above first anyway
-    'ddMMyyyy',
-    'yyyy-MM-dd',
-    'dd.MM.yyyy',
-    'MM/dd/yyyy',
-    'd/M/yyyy',
-    'dd/M/yyyy',
-  ];
-
-  for (const f of tryFormats) {
-    const parsed = parse(raw, f, new Date());
-    if (isValid(parsed)) return toLocalStartOfDay(parsed);
+  for (const f of [fmt, 'ddMMyyyy', 'd/M/yyyy', 'dd/M/yyyy', 'MM/dd/yyyy', 'yyyy-MM-dd', 'dd.MM.yyyy']) {
+    const parsed = parse(v, f, new Date());
+    if (isValid(parsed)) return startOfDayLocal(parsed);
   }
   return null;
 }
 
-const PopperPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  if (typeof window === 'undefined') return <>{children}</>;
-  const host = document.getElementById('app-datepicker-portal');
-  return host ? createPortal(children, host) : <>{children}</>;
-};
-
-/** forward ref + clickable icon */
-const DateTextInput = React.forwardRef<
-  HTMLInputElement,
-  React.InputHTMLAttributes<HTMLInputElement>
->(({ className, disabled, onClick, ...props }, ref) => {
-  const innerRef = React.useRef<HTMLInputElement>(null);
-  React.useImperativeHandle(ref, () => innerRef.current as HTMLInputElement);
-
-  const openPicker = (e: React.MouseEvent) => {
-    if (disabled) return;
-    onClick?.(e as any);
-    innerRef.current?.focus();
-  };
-
-  return (
-    <div className={clsx('app-date-input', disabled && 'opacity-60')}>
-      <input
-        ref={innerRef}
-        {...props}
-        onClick={onClick}
-        className={clsx('app-date-input-field', className)}
-        inputMode="numeric"
-        aria-label="Date"
-        disabled={disabled}
-      />
-      <button
-        type="button"
-        className="app-date-icon-btn"
-        onClick={openPicker}
-        aria-label="Open calendar"
-        disabled={disabled}
-      >
-        <CalendarIcon className="app-date-icon" />
-      </button>
-    </div>
-  );
-});
-DateTextInput.displayName = 'DateTextInput';
-
-
-export function AppDatePicker({
+export default function AppDatePicker({
   value,
   onChange,
   placeholder = 'dd/mm/yyyy',
@@ -126,123 +81,189 @@ export function AppDatePicker({
   minDate,
   maxDate,
   className,
-  inputFormat = INPUT_FORMAT_DEFAULT,
+  inputFormat = INPUT_FORMAT,
 }: AppDatePickerProps) {
-  const [isOpen, setIsOpen] = React.useState(false);
-  const inputElRef = React.useRef<HTMLInputElement>(null);
-  const didSelectRef = React.useRef(false); // track if a day was picked this open cycle
+  const [open, setOpen] = React.useState(false);
+  const [view, setView] = React.useState<Date>(value ?? new Date());
+  const [text, setText] = React.useState<string>(value ? format(value, inputFormat) : '');
 
-  const commitFromInputEl = (el: HTMLInputElement | null) => {
-    if (!el) return;
-    const raw = el.value;
-    const parsed = parseUserInput(raw, inputFormat);
+  // keep input text and the calendar month in sync with external value
+  React.useEffect(() => {
+    setText(value ? format(value, inputFormat) : '');
+    if (value) setView(value);
+  }, [value, inputFormat]);
 
-    if (!raw.trim()) return onChange(null);
-    if (parsed) {
-      if (minDate && parsed < new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()))
-        return onChange(new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate()));
-      if (maxDate && parsed > new Date(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate()))
-        return onChange(new Date(maxDate.getFullYear(), maxDate.getMonth(), maxDate.getDate()));
-      return onChange(parsed);
-    }
+  // auto-insert slashes while typing
+  const onChangeRaw = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let digits = e.target.value.replace(/\D/g, '').slice(0, 8);
+    let out = '';
+    if (digits.length <= 2) out = digits;
+    else if (digits.length <= 4) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    else out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+    setText(out);
   };
 
+  const commitText = () => {
+    const parsed = parseUserInput(text, inputFormat);
+    if (parsed) onChange(clamp(parsed, minDate, maxDate));
+    else if (!text.trim()) onChange(null);
+    else setText(value ? format(value, inputFormat) : ''); // snap back to valid
+  };
+
+  const days = React.useMemo(() => {
+    const start = startOfWeek(startOfMonth(view), { weekStartsOn: 1 }); // Monday
+    const end = endOfWeek(endOfMonth(view), { weekStartsOn: 1 });
+    return eachDayOfInterval({ start, end });
+  }, [view]);
+
+  const dayIsDisabled = (d: Date) => {
+    if (minDate && +d < +startOfDayLocal(minDate)) return true;
+    if (maxDate && +d > +startOfDayLocal(maxDate)) return true;
+    return false;
+  };
+
+  const selectDay = (d: Date) => {
+    if (disabled || dayIsDisabled(d)) return;
+    const picked = startOfDayLocal(d);
+    onChange(picked);
+    setOpen(false);
+  };
+
+  const months = Array.from({ length: 12 }, (_, i) =>
+    new Date(2020, i, 1).toLocaleString('en-GB', { month: 'long' }),
+  );
+
+  // years list (tight to min/max if provided)
+  const thisYear = new Date().getFullYear();
+  const yStart = minDate ? minDate.getFullYear() : 1900;
+  const yEnd = maxDate ? maxDate.getFullYear() : thisYear + 50;
+  const years = Array.from({ length: yEnd - yStart + 1 }, (_, i) => yStart + i);
+
   return (
-    <div className={clsx('app-date-input-wrap', className)}>
-      <DatePicker
-        selected={value ?? null}
-        
-        onSelect={(d) => {
-            if (!d) return onChange(null);
-            didSelectRef.current = true;
-            onChange(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
-        }}
-        
-        onChangeRaw={(e) => {
-          const input = e.target as HTMLInputElement;
-          let digits = input.value.replace(/\D/g, '').slice(0, 8);
-          let out = '';
-          if (digits.length <= 2) out = digits;
-          else if (digits.length <= 4) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
-          else out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-          input.value = out;
-          const caret =
-            digits.length <= 2 ? digits.length :
-            digits.length <= 4 ? digits.length + 1 :
-            Math.min(out.length, digits.length + 2);
-          requestAnimationFrame(() => input.setSelectionRange(caret, caret));
-        }}
-        
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') {
-            e.preventDefault();
-            commitFromInputEl(inputElRef.current);
-          }
-        }}
+    <div className={clsx('w-full', className)}>
+      <Popover open={open} onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) commitText(); // closing → commit typed text (if any)
+      }}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            disabled={disabled}
+            className={clsx(
+              'w-full grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2',
+              'bg-background border-border text-foreground',
+              disabled && 'opacity-60 cursor-not-allowed'
+            )}
+            onClick={() => setOpen((s) => !s)}
+          >
+            <input
+              aria-label="Date"
+              placeholder={placeholder}
+              value={text}
+              disabled={disabled}
+              onChange={onChangeRaw}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitText();
+                  setOpen(false);
+                }
+              }}
+              className="bg-transparent outline-none border-0 p-0 m-0 w-full text-sm"
+              inputMode="numeric"
+            />
+            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+          </button>
+        </PopoverTrigger>
 
-        onCalendarOpen={() => setIsOpen(true)}
-        onCalendarClose={() => {
-            setIsOpen(false);
-            if (didSelectRef.current) {
-                didSelectRef.current = false;
-            } else {
-                commitFromInputEl(inputElRef.current);
-            }
-        }}
+        <PopoverContent
+          align="start"
+          className={clsx(
+            'p-0 w-[280px] rounded-md border bg-popover text-popover-foreground shadow-md',
+            'border-border'
+          )}
+        >
+          {/* Header */}
+          <div className="flex items-center gap-2 p-2 border-b border-border bg-popover">
+            <button
+              type="button"
+              className="grid place-items-center h-7 w-7 rounded-md border border-border text-muted-foreground hover:bg-secondary"
+              onClick={() => setView(subMonths(view, 1))}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
 
-        onClickOutside={() => {
-            if (!didSelectRef.current) commitFromInputEl(inputElRef.current);
-        }}
-        
-        shouldCloseOnSelect
-        popperContainer={PopperPortal}
+            <select
+              className="flex-1 h-7 rounded-md border border-border bg-card px-2 text-sm"
+              value={view.getMonth()}
+              onChange={(e) => setView(new Date(view.getFullYear(), Number(e.target.value), 1))}
+            >
+              {months.map((m, i) => (
+                <option key={m} value={i}>
+                  {m}
+                </option>
+              ))}
+            </select>
 
-        customInput={<DateTextInput ref={inputElRef} />}
-        dateFormat={inputFormat}
-        locale={enGB}
-        placeholderText={placeholder}
-        showMonthDropdown
-        showYearDropdown
-        dropdownMode="select"
-        calendarStartDay={1}
-        disabled={disabled}
-        minDate={minDate}
-        maxDate={maxDate}
-        showPopperArrow={false}
-        popperPlacement="bottom-start"
+            <select
+              className="flex-1 h-7 rounded-md border border-border bg-card px-2 text-sm"
+              value={view.getFullYear()}
+              onChange={(e) => setView(new Date(Number(e.target.value), view.getMonth(), 1))}
+            >
+              {years.map((y) => (
+                <option key={y} value={y}>
+                  {y}
+                </option>
+              ))}
+            </select>
 
-        renderCustomHeader={({ date, changeMonth, changeYear, decreaseMonth, increaseMonth, prevMonthButtonDisabled, nextMonthButtonDisabled }) => {
-          const months = Array.from({ length: 12 }, (_, i) =>
-            new Date(2020, i, 1).toLocaleString('en-GB', { month: 'long' })
-          );
-          const curYear = new Date().getFullYear();
-          const start = (minDate ? minDate.getFullYear() : 1900);
-          const end = (maxDate ? maxDate.getFullYear() : curYear + 50);
-          const years = Array.from({ length: end - start + 1 }, (_, i) => start + i);
-          const year = date.getFullYear();
-          if (!years.includes(year)) years.push(year);
-          years.sort((a, b) => a - b);
+            <button
+              type="button"
+              className="grid place-items-center h-7 w-7 rounded-md border border-border text-muted-foreground hover:bg-secondary"
+              onClick={() => setView(addMonths(view, 1))}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
 
-          return (
-            <div className="rdp-header">
-              <button type="button" className="rdp-nav rdp-nav-prev" onClick={decreaseMonth} aria-label="Previous month" disabled={prevMonthButtonDisabled}>
-                <ChevronLeft size={16} />
-              </button>
-              <select className="rdp-sel" value={date.getMonth()} onChange={(e) => changeMonth(Number(e.target.value))}>
-                {months.map((name, i) => <option key={name} value={i}>{name}</option>)}
-              </select>
-              <select className="rdp-sel" value={date.getFullYear()} onChange={(e) => changeYear(Number(e.target.value))}>
-                {years.map((y) => <option key={y} value={y}>{y}</option>)}
-              </select>
-              <button type="button" className="rdp-nav rdp-nav-next" onClick={increaseMonth} aria-label="Next month" disabled={nextMonthButtonDisabled}>
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          );
-        }}
-      />
+          {/* Week headers */}
+          <div className="grid grid-cols-7 text-xs text-muted-foreground px-2 py-1">
+            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d) => (
+              <div key={d} className="text-center py-1">
+                {d}
+              </div>
+            ))}
+          </div>
+
+          {/* Day grid */}
+          <div className="grid grid-cols-7 gap-y-1 p-2">
+            {days.map((d) => {
+              const outside = !isSameMonth(d, view);
+              const selected = !!value && isSameDay(d, value);
+              const disabledDay = dayIsDisabled(d);
+
+              return (
+                <button
+                  key={+d}
+                  type="button"
+                  disabled={disabledDay}
+                  onClick={() => selectDay(d)}
+                  className={clsx(
+                    'h-8 w-8 mx-auto rounded-md text-sm grid place-items-center',
+                    'transition-colors',
+                    selected && 'bg-primary text-primary-foreground',
+                    !selected && !outside && 'hover:bg-secondary',
+                    outside && 'text-muted-foreground opacity-60',
+                    disabledDay && 'opacity-50 cursor-not-allowed'
+                  )}
+                >
+                  {d.getDate()}
+                </button>
+              );
+            })}
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
-
-export default AppDatePicker;
