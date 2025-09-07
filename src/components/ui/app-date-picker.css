@@ -35,9 +35,11 @@
 .app-date-icon { width: 1rem; height: 1rem; }
 
 /* keep picker above dialogs and fully clickable */
-.react-datepicker-popper { z-index: 9999 !important; }
-.react-datepicker { pointer-events: auto; }        /* ensure clicks register */
+.react-datepicker-popper { z-index: 2147483647 !important; pointer-events: auto; }
+#app-datepicker-portal { position: relative; z-index: 2147483647; }
+#app-datepicker-portal .react-datepicker { pointer-events: auto; }
 .react-datepicker__day { cursor: pointer; }        /* visual affordance */
+
 
 /* panel */
 .react-datepicker {
@@ -56,6 +58,7 @@
 .react-datepicker__week {
   background: hsl(var(--popover));
 }
+
 
 /* Day names row */
 .react-datepicker__day-names {
