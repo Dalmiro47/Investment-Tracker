@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -9,7 +8,6 @@ import { Calendar as CalendarIcon } from 'lucide-react';
 import clsx from 'clsx';
 
 import './app-date-picker.css';
-import 'react-datepicker/dist/react-datepicker.css';
 
 registerLocale('en-GB', enGB);
 
