@@ -37,6 +37,7 @@ import type { SavingsRateChange } from '@/lib/types-savings';
 import RateScheduleDialog from "@/components/rate-schedule-dialog";
 import { parseISO, endOfYear } from 'date-fns';
 import EtfPlansButton from '@/components/etf/EtfPlansButton';
+import { useRouter } from 'next/navigation';
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -50,6 +51,7 @@ const getCurrentRate = (rates?: SavingsRateChange[]) => {
 export default function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
   const [investments, setInvestments] = React.useState<Investment[]>([]);
   const [etfSummaries, setEtfSummaries] = React.useState<EtfSimSummary[]>([]);
   const [transactionsMap, setTransactionsMap] = React.useState<Record<string, Transaction[]>>({});
@@ -217,29 +219,24 @@ export default function DashboardPage() {
 
   const typeCounts = React.useMemo(() => {
     const counts: Record<InvestmentType | 'All', number> = {
-      'All': 0,
-      'Stock': 0,
-      'Crypto': 0,
-      'ETF': 0,
+      All: 0,
+      Stock: 0,
+      Crypto: 0,
+      ETF: 0,
       'Interest Account': 0,
-      'Bond': 0,
+      Bond: 0,
       'Real Estate': 0,
     };
-    
-    let totalManual = 0;
-    investmentsYearScoped.forEach(inv => {
+
+    investmentsYearScoped.forEach((inv) => {
       if (counts[inv.type] !== undefined) {
-        counts[inv.type]++;
-        totalManual++;
+        counts[inv.type] += 1;
+        counts.All += 1;
       }
     });
 
-    const includePlans = (viewMode === 'list' && listMode === 'aggregated');
-    counts['ETF'] += includePlans ? etfSummaries.length : 0;
-    counts['All'] = totalManual + (includePlans ? etfSummaries.length : 0);
-
     return counts;
-  }, [investmentsYearScoped, etfSummaries, viewMode, listMode]);
+  }, [investmentsYearScoped]);
 
   const filteredAndSortedInvestments = React.useMemo(() => {
     let filtered = [...investmentsYearScoped]; // <-- year scoped first

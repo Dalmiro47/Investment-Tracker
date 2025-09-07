@@ -16,6 +16,7 @@ import { format, parseISO } from 'date-fns';
 import { History, PlusCircle } from 'lucide-react';
 import type { SavingsRateChange } from '@/lib/types-savings';
 import { EtfSimLink } from '@/components/etf/EtfSimLink';
+import EtfPlansButton from '@/components/etf/EtfPlansButton';
 
 const fmtEur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
 const fmtQty = (v: number, d = 6) => v.toFixed(d);
@@ -194,7 +195,16 @@ export default function InvestmentListView({
   const rows: any[] = mode === 'flat' ? rowsFlat : rowsAgg;
 
   if (rows.length === 0) {
-    return <div className="text-center text-muted-foreground py-12">No matching assets for this view.</div>;
+    return (
+      <div className="text-center text-muted-foreground py-12">
+        <div>No matching assets for this view.</div>
+        {activeTypeFilter === 'ETF' && (
+          <div className="mt-3">
+            <EtfPlansButton variant="outline" />
+          </div>
+        )}
+      </div>
+    );
   }
 
   // --- IA-specific rendering when filter is Interest Accounts ---
