@@ -7,7 +7,7 @@ import { refreshEtfHistoryForMonth } from '@/app/actions/etf';
 type UseAutoRefreshEtfOpts = {
   userId?: string | null;
   recheckOnFocus?: boolean;
-  useUTC?: boolean; // month boundary in UTC (recommended)
+  useUTC?: boolean; // use UTC month boundary (recommended)
 };
 
 const dbg = (...a: any[]) => { if (process.env.NODE_ENV !== 'production') console.log('[etf-auto]', ...a); };
@@ -25,6 +25,7 @@ export function useAutoRefreshEtfHistory({ userId, recheckOnFocus = true, useUTC
   useEffect(() => {
     if (!userId) return;
 
+    // DEV: force a run via ?etfForce in the URL
     const devForce =
       typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('etfForce');
 
