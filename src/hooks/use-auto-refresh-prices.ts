@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -18,6 +19,8 @@ const dbg = (...a: any[]) => {
   if (process.env.NODE_ENV !== 'production') console.log('[auto-refresh]', ...a);
 };
 
+const FOCUS_DEBOUNCE_MS = 15_000;
+
 export function useAutoRefreshPrices({
   userId,
   investments,
@@ -28,17 +31,23 @@ export function useAutoRefreshPrices({
 }: UseAutoRefreshPricesOpts) {
   const { toast } = useToast();
   const ranRef = useRef(false);
+  const lastAttemptRef = useRef(0);
 
   useEffect(() => {
     if (!userId) { dbg('skip: no user'); return; }
     if (!investments || investments.length === 0) { dbg('skip: no investments yet'); return; }
-    if (ranRef.current) { dbg('skip: already attempted this mount'); return; }
-
+    
     const LAST_KEY = `prices:lastRefreshAt:${userId}`;
     const RUN_KEY  = `prices:refresh:inflight:${userId}`;
 
     const attempt = async (reason: 'mount' | 'focus') => {
       const now = Date.now();
+      if (reason === 'focus' && now - lastAttemptRef.current < FOCUS_DEBOUNCE_MS) {
+        dbg('skip: focus debounce');
+        return;
+      }
+      lastAttemptRef.current = now;
+
       const last = Number(localStorage.getItem(LAST_KEY) || 0);
       const shouldLocalRefresh = now - last > localIntervalMs;
 
@@ -66,8 +75,6 @@ export function useAutoRefreshPrices({
                 : 'Please try again later.',
             });
           }
-          // Optional: mark local timestamp so we don’t try again immediately on every route visit
-          // localStorage.setItem(LAST_KEY, String(Date.now()));
           return;
         }
 
@@ -102,17 +109,31 @@ export function useAutoRefreshPrices({
     };
 
     // initial attempt on mount
-    attempt('mount');
+    if (!ranRef.current) {
+        attempt('mount');
+    }
 
-    // optional: re-check when user returns to the tab (good DX)
     if (!recheckOnFocus) return;
 
     const onVis = () => {
-      if (document.visibilityState === 'visible' && !ranRef.current) {
+      if (document.visibilityState === 'visible') {
         attempt('focus');
       }
     };
+
+    const onStorage = (e: StorageEvent) => {
+        if (e.key === RUN_KEY && e.newValue) {
+            dbg('saw inflight lock from another tab');
+            ranRef.current = true; // ensure this tab won’t try again this mount
+        }
+    };
+
+    window.addEventListener('storage', onStorage);
     document.addEventListener('visibilitychange', onVis);
-    return () => document.removeEventListener('visibilitychange', onVis);
+    
+    return () => {
+        document.removeEventListener('visibilitychange', onVis);
+        window.removeEventListener('storage', onStorage);
+    }
   }, [userId, investments, localIntervalMs, toastSilent, onComplete, recheckOnFocus, toast]);
 }
