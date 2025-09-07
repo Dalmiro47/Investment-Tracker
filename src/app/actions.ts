@@ -4,6 +4,8 @@
 import type { Investment } from '@/lib/types';
 import axios from 'axios';
 import { dec, sub, EPS } from '@/lib/money';
+import { adminDb } from '@/lib/firebase-admin';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 
 interface UpdateResult {
@@ -11,7 +13,11 @@ interface UpdateResult {
   message: string;
   updatedInvestments: Investment[];
   failedInvestmentNames?: string[];
+  skippedReason?: 'rate_limited';
+  nextAllowedAt?: string;
 }
+
+const SERVER_DEBOUNCE_MS = 10 * 60 * 1000; // 10 minutes
 
 /* ---------------- Helpers ---------------- */
 
@@ -146,65 +152,49 @@ async function fetchCryptoPrices(ids: string[]): Promise<Record<string, number>>
 }
 
 /* ---------------- Refresh pipeline ---------------- */
-
-export async function refreshInvestmentPrices(
-  currentInvestments: Investment[]
-): Promise<UpdateResult> {
-  try {
+async function doPriceRefresh(currentInvestments: Investment[]): Promise<Omit<UpdateResult, 'success' | 'message'>> {
     const updates: Investment[] = [];
     const failed: string[] = [];
 
-    // 1) Prepare crypto ids
     const cryptoItems = currentInvestments.filter(
       (inv) => inv.status !== 'Sold' && inv.type === 'Crypto' && !!inv.ticker
     );
-
     const idByInvestmentId = new Map<string, string>();
-    const unresolvedCrypto = new Set<string>(); // mark unresolved once
-
+    const unresolvedCrypto = new Set<string>();
     await Promise.all(
       cryptoItems.map(async (inv) => {
         const id = await resolveCryptoId(inv.ticker!);
-        if (id) {
-          idByInvestmentId.set(inv.id, id);
-        } else {
-          unresolvedCrypto.add(inv.id); // <-- mark only; don't push to failed yet
-        }
+        if (id) idByInvestmentId.set(inv.id, id);
+        else unresolvedCrypto.add(inv.id);
       })
     );
 
-    // 2) Fetch crypto prices in one (batched) call
     const cryptoIds = Array.from(new Set(Array.from(idByInvestmentId.values())));
     const cryptoPrices = await fetchCryptoPrices(cryptoIds);
 
-    // 3) Apply crypto updates
     for (const inv of cryptoItems) {
       if (unresolvedCrypto.has(inv.id)) {
-        failed.push(inv.name); // count once here
+        failed.push(inv.name);
         continue;
       }
       const id = idByInvestmentId.get(inv.id)!;
       const price = cryptoPrices[id.toLowerCase()];
-
       if (price == null) {
         failed.push(inv.name);
         continue;
       }
-      
       const curr = inv.currentValue ?? null;
       if (curr === null || sub(dec(price), dec(curr)).abs().gt(EPS)) {
         updates.push({ ...inv, currentValue: price });
       }
     }
 
-    // 4) Stocks/ETFs with limited concurrency (avoid throttling)
     const stockEtfItems = currentInvestments.filter(
       (inv) =>
         inv.status !== 'Sold' &&
         (inv.type === 'Stock' || inv.type === 'ETF') &&
         !!inv.ticker
     );
-
     await mapWithConcurrency(stockEtfItems, 5, async (inv) => {
       const price = await getStockPrice(inv.ticker!);
       if (price == null) {
@@ -217,22 +207,63 @@ export async function refreshInvestmentPrices(
       }
     });
 
-    // 5) Message
-    const updatedCount = updates.length;
-    const failedCount = failed.length;
+    return { updatedInvestments: updates, failedInvestmentNames: failed };
+}
+
+
+export async function refreshInvestmentPrices(
+  currentInvestments: Investment[],
+  options?: { forced?: boolean; userId?: string }
+): Promise<UpdateResult> {
+  const { forced = false, userId } = options ?? {};
+  if (!userId) {
+    return { success: false, updatedInvestments: [], message: 'User not found.' };
+  }
+
+  const metaRef = adminDb.doc(`users/${userId}/meta/pricing`);
+
+  if (!forced) {
+    const snap = await metaRef.get();
+    if (snap.exists) {
+      const lastRefreshAt = (snap.get('lastRefreshAt') as Timestamp)?.toMillis() ?? 0;
+      const now = Date.now();
+      if (now - lastRefreshAt < SERVER_DEBOUNCE_MS) {
+        return {
+          success: false,
+          updatedInvestments: [],
+          message: 'rate_limited',
+          skippedReason: 'rate_limited',
+          nextAllowedAt: new Date(lastRefreshAt + SERVER_DEBOUNCE_MS).toISOString(),
+        };
+      }
+    }
+  }
+
+  try {
+    await metaRef.set({ lastRefreshAt: FieldValue.serverTimestamp() }, { merge: true });
+
+    const { updatedInvestments, failedInvestmentNames } = await doPriceRefresh(currentInvestments);
+
+    const updatedCount = updatedInvestments.length;
+    const failedCount = failedInvestmentNames?.length ?? 0;
 
     let message = `Successfully updated ${updatedCount} investments.`;
     if (failedCount > 0) {
-      message += ` Failed to update: ${compressNames(failed)}.`;
+      message += ` Failed to update: ${compressNames(failedInvestmentNames!)}.`;
     } else if (updatedCount === 0) {
       message = 'All investment prices are already up-to-date.';
     }
 
+    await metaRef.set(
+        { lastRefreshCompletedAt: FieldValue.serverTimestamp(), updatedCount, failedCount },
+        { merge: true }
+    );
+
     return {
       success: true,
-      updatedInvestments: updates,
+      updatedInvestments: updatedInvestments,
       message,
-      failedInvestmentNames: failed,
+      failedInvestmentNames: failedInvestmentNames,
     };
   } catch (err) {
     console.error('Error refreshing investment prices:', err);
