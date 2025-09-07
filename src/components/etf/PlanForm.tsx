@@ -140,7 +140,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
     defaultValues: {
       title: "",
       startDate: new Date(),
-      monthContribution: 100,
+      monthContribution: undefined as any,
       feePct: undefined,
       rebalanceOnContribution: false,
       contributionSteps: [],
@@ -174,14 +174,14 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
       form.reset({
         ...plan,
         startDate: parseISO(plan.startDate),
-        feePct: plan.feePct ?? 0,
+        feePct: plan.feePct ?? undefined,
         components: plan.components.map(c => ({...c, targetWeight: c.targetWeight ?? null}))
       });
     } else {
         form.reset({
             title: "",
             startDate: new Date(),
-            monthContribution: 100,
+            monthContribution: undefined as any,
             feePct: undefined,
             rebalanceOnContribution: false,
             contributionSteps: [],
@@ -234,7 +234,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                     <NumericInput
                         value={field.value}
                         onCommit={(n) => field.onChange(n ?? undefined)}
-                        placeholder="e.g., 100.00"
+                        placeholder="e.g., 100"
                     />
                 </FormControl>
                  <FormDescription>The starting amount. You can add step-ups below.</FormDescription>

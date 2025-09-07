@@ -52,8 +52,8 @@ const defaultFormValues: InvestmentFormValues = {
   name: "",
   type: "Stock",
   purchaseDate: new Date(),
-  purchaseQuantity: 0,
-  purchasePricePerUnit: 0,
+  purchaseQuantity: undefined as any,
+  purchasePricePerUnit: undefined as any,
   ticker: "",
   stakingOrLending: false,
 };
