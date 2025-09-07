@@ -78,7 +78,6 @@ export default function RateScheduleDialog({
               <AppDatePicker
                 value={from}
                 onChange={setFrom}
-                clearable={false}
               />
             </div>
             <div>

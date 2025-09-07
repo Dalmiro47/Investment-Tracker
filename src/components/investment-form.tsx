@@ -195,8 +195,6 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                     value={field.value ?? null}
                     onChange={(d) => field.onChange(d)}
                     placeholder="dd/mm/yyyy"
-                    clearable
-                    showToday
                     maxDate={new Date()}
                   />
                 )}

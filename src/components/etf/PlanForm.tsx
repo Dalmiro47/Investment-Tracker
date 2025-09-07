@@ -173,6 +173,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
       form.reset({
         ...plan,
         startDate: parseISO(plan.startDate),
+        feePct: plan.feePct ?? 0,
         components: plan.components.map(c => ({...c, targetWeight: c.targetWeight ?? null}))
       });
     } else {
@@ -216,8 +217,6 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                     value={field.value ?? null}
                     onChange={field.onChange}
                     placeholder="dd/mm/yyyy"
-                    clearable
-                    showToday
                     maxDate={new Date()}
                   />
                 )}

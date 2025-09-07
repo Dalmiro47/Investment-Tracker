@@ -168,8 +168,6 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                                 value={field.value ?? null}
                                 onChange={field.onChange}
                                 placeholder="dd/mm/yyyy"
-                                clearable
-                                showToday
                                 maxDate={new Date()}
                                 />
                             )}
