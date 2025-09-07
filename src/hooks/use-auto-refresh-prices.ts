@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useEffect, useRef } from 'react';
@@ -12,14 +11,12 @@ type UseAutoRefreshPricesOpts = {
   localIntervalMs?: number; // default 4h
   toastSilent?: boolean;
   onComplete?: () => void;
-  recheckOnFocus?: boolean; // optional: re-evaluate when tab becomes visible
+  recheckOnFocus?: boolean;
 };
 
 const dbg = (...a: any[]) => {
   if (process.env.NODE_ENV !== 'production') console.log('[auto-refresh]', ...a);
 };
-
-const FOCUS_DEBOUNCE_MS = 15_000;
 
 export function useAutoRefreshPrices({
   userId,
@@ -30,15 +27,32 @@ export function useAutoRefreshPrices({
   recheckOnFocus = true,
 }: UseAutoRefreshPricesOpts) {
   const { toast } = useToast();
-  const ranRef = useRef(false);
   const lastAttemptRef = useRef(0);
+  const ranRef = useRef(false);
+
+  const FOCUS_DEBOUNCE_MS = 15_000;
 
   useEffect(() => {
-    if (!userId) { dbg('skip: no user'); return; }
-    if (!investments || investments.length === 0) { dbg('skip: no investments yet'); return; }
-    
+    if (!userId) {
+      dbg('skip: no user');
+      return;
+    }
+    if (!investments || investments.length === 0) {
+      dbg('skip: no investments yet');
+      return;
+    }
+
     const LAST_KEY = `prices:lastRefreshAt:${userId}`;
-    const RUN_KEY  = `prices:refresh:inflight:${userId}`;
+    const RUN_KEY = `prices:refresh:inflight:${userId}`;
+
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === RUN_KEY && e.newValue) {
+        dbg('saw inflight lock from another tab');
+        ranRef.current = true; // ensure this tab won’t try again this mount
+      }
+    };
+    window.addEventListener('storage', onStorage);
+
 
     const attempt = async (reason: 'mount' | 'focus') => {
       const now = Date.now();
@@ -51,10 +65,16 @@ export function useAutoRefreshPrices({
       const last = Number(localStorage.getItem(LAST_KEY) || 0);
       const shouldLocalRefresh = now - last > localIntervalMs;
 
-      if (!shouldLocalRefresh) { dbg(`skip: local throttle (${reason})`, { last, localIntervalMs }); return; }
-      if (localStorage.getItem(RUN_KEY)) { dbg('skip: inflight lock present'); return; }
+      if (!shouldLocalRefresh) {
+        dbg(`skip: local throttle (${reason})`, { last, localIntervalMs });
+        return;
+      }
+      if (localStorage.getItem(RUN_KEY)) {
+        dbg('skip: inflight lock present');
+        return;
+      }
 
-      ranRef.current = true; // mark only when we actually start an attempt
+      ranRef.current = true;
 
       try {
         localStorage.setItem(RUN_KEY, String(now));
@@ -108,29 +128,18 @@ export function useAutoRefreshPrices({
       }
     };
 
-    // initial attempt on mount
     if (!ranRef.current) {
         attempt('mount');
     }
 
-    if (!recheckOnFocus) return;
+    if (!recheckOnFocus) return () => window.removeEventListener('storage', onStorage);
 
     const onVis = () => {
       if (document.visibilityState === 'visible') {
         attempt('focus');
       }
     };
-
-    const onStorage = (e: StorageEvent) => {
-        if (e.key === RUN_KEY && e.newValue) {
-            dbg('saw inflight lock from another tab');
-            ranRef.current = true; // ensure this tab won’t try again this mount
-        }
-    };
-
-    window.addEventListener('storage', onStorage);
     document.addEventListener('visibilitychange', onVis);
-    
     return () => {
         document.removeEventListener('visibilitychange', onVis);
         window.removeEventListener('storage', onStorage);

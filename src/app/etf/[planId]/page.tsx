@@ -12,6 +12,7 @@ import type { PlanRow } from '@/lib/etf/engine';
 import { format, parseISO, getYear, startOfMonth } from 'date-fns';
 import { formatCurrency, formatPercent } from '@/lib/money';
 import { getStartMonth } from '@/lib/date-helpers';
+import { useAutoRefreshEtfHistory } from '@/hooks/use-auto-refresh-etf';
 
 import DashboardHeader from '@/components/dashboard-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -112,6 +113,8 @@ export default function PlanDetailPage() {
     const [yearFilter, setYearFilter] = useState<string>('all');
     const [missingPrices, setMissingPrices] = useState<MissingPrice[]>([]);
     const [isMissingPricesDialogOpen, setIsMissingPricesDialogOpen] = useState(false);
+
+    useAutoRefreshEtfHistory({ userId: user?.uid });
 
     useEffect(() => {
         if (user && planId) {
