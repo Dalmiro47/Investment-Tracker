@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -22,7 +21,6 @@ export type AppDatePickerProps = {
   inputFormat?: string; // default: dd/MM/yyyy
 };
 
-// ... (types, helpers, DateTextInput stay exactly as you have them)
 const INPUT_FORMAT_DEFAULT = 'dd/MM/yyyy';
 const TWO_DIGIT_YEAR_PIVOT = 50; // 00..49 => 2000..2049, 50..99 => 1950..1999
 
@@ -72,7 +70,6 @@ function parseUserInput(v: string, fmt: string): Date | null {
   }
   return null;
 }
-
 
 const PopperPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   if (typeof window === 'undefined') return <>{children}</>;
@@ -128,10 +125,10 @@ export function AppDatePicker({
   minDate,
   maxDate,
   className,
-  inputFormat = 'dd/MM/yyyy',
+  inputFormat = INPUT_FORMAT_DEFAULT,
 }: AppDatePickerProps) {
-  // ⬇️ NEW: track whether calendar is open
   const [isOpen, setIsOpen] = React.useState(false);
+  const inputElRef = React.useRef<HTMLInputElement>(null);
 
   const commitFromInputEl = (el: HTMLInputElement | null) => {
     if (!el) return;
@@ -170,12 +167,12 @@ export function AppDatePicker({
           requestAnimationFrame(() => input.setSelectionRange(caret, caret));
         }}
 
-        // ⬇️ IMPORTANT: don't commit when the calendar is open
         onBlur={(e) => {
-          if (isOpen) return; // calendar is open → let the click go through
+          if (isOpen) return; // calendar open → let the day click finish
           const next = (e.relatedTarget as HTMLElement | null);
-          if (next && next.closest('.react-datepicker')) return;
-          commitFromInputEl(e.target as HTMLInputElement);
+          // if focus stays within the calendar/popup, don't commit yet
+          if (next && (next.closest('.react-datepicker') || next.closest('#app-datepicker-portal'))) return;
+          commitFromInputEl(e.currentTarget as HTMLInputElement);
         }}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
@@ -183,15 +180,17 @@ export function AppDatePicker({
             commitFromInputEl(e.target as HTMLInputElement);
           }
         }}
-
-        // ⬇️ Popper rendered into our high-z portal (anchored UI)
-        popperContainer={PopperPortal}
-
-        // close after selecting a day so onBlur can commit when appropriate
+        onCalendarOpen={() => setIsOpen(true)}
+        onCalendarClose={() => {
+          setIsOpen(false);
+          // commit whatever is shown in the input after picker finishes updating it
+          commitFromInputEl(inputElRef.current);
+        }}
         shouldCloseOnSelect
 
-        // keep everything else as you had it
-        customInput={<DateTextInput />}
+        popperContainer={PopperPortal}
+        customInput={<DateTextInput ref={inputElRef} />}
+        
         dateFormat={inputFormat}
         locale={enGB}
         placeholderText={placeholder}
@@ -204,10 +203,6 @@ export function AppDatePicker({
         maxDate={maxDate}
         showPopperArrow={false}
         popperPlacement="bottom-start"
-
-        // track open/close state
-        onCalendarOpen={() => setIsOpen(true)}
-        onCalendarClose={() => setIsOpen(false)}
 
         renderCustomHeader={({ date, changeMonth, changeYear, decreaseMonth, increaseMonth, prevMonthButtonDisabled, nextMonthButtonDisabled }) => {
           const months = Array.from({ length: 12 }, (_, i) =>
