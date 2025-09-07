@@ -16,6 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { PlusCircle, SlidersHorizontal, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
+import { useAutoRefreshPrices } from '@/hooks/use-auto-refresh-prices';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -89,7 +90,7 @@ export default function DashboardPage() {
   const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
 
 
-  const fetchAllData = async (userId: string) => {
+  const fetchAllData = React.useCallback(async (userId: string) => {
     setLoading(true);
     try {
       const [userInvestments, etfSums, years, settings] = await Promise.all([
@@ -132,14 +133,23 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [toast]);
 
 
   React.useEffect(() => {
     if (user) {
       fetchAllData(user.uid);
     }
-  }, [user]);
+  }, [user, fetchAllData]);
+
+  useAutoRefreshPrices({
+    userId: user?.uid,
+    investments: investments,
+    onComplete: () => {
+      if(user?.uid) fetchAllData(user.uid);
+    }
+  });
+
 
   const handleRefreshPrices = async () => {
     if (!user || isRefreshing) return;
@@ -147,28 +157,16 @@ export default function DashboardPage() {
     setIsRefreshing(true);
     toast({ title: 'Refreshing Prices...', description: 'Please wait while we fetch the latest data.' });
 
-    const result = await refreshInvestmentPrices(investments);
+    const result = await refreshInvestmentPrices(investments, { userId: user.uid, forced: true });
 
-    if (result.success && result.updatedInvestments.length > 0) {
-        const batch = writeBatch(db);
-        result.updatedInvestments.forEach((updatedInv) => {
-            const investmentRef = doc(db, 'users', user.uid, 'investments', updatedInv.id);
-            batch.update(investmentRef, { currentValue: updatedInv.currentValue });
-        });
-        await batch.commit();
-        await new Promise(resolve => setTimeout(resolve, 300));
-        await fetchAllData(user.uid);
-    }
-
-    let toastVariant: "default" | "destructive" = "default";
-    if ((result.failedInvestmentNames?.length ?? 0) > 0 && result.updatedInvestments.length === 0) {
-        toastVariant = "destructive";
+    if (result.success) {
+      await fetchAllData(user.uid);
     }
 
     toast({
-        title: toastVariant === "destructive" ? "Update Failed" : "Update Complete",
+        title: result.success ? "Update Complete" : "Update Failed",
         description: result.message,
-        variant: toastVariant,
+        variant: result.success ? "default" : "destructive",
         duration: (result.failedInvestmentNames?.length ?? 0) > 0 ? 10000 : 5000,
     });
 
@@ -177,44 +175,20 @@ export default function DashboardPage() {
 
   // Investments scoped to the selected year for the LIST + tab counts
   const investmentsYearScoped = React.useMemo(() => {
-    // start with all, then apply year rules for the list UX
-    let subset = [...investments];
-
-    if (yearFilter.kind === 'year') {
-      const y = yearFilter.year;
-
-      // sells in year
-      const soldThisYear = new Set<string>();
-      Object.entries(transactionsMap).forEach(([invId, txs]) => {
-        if (txs.some(tx => tx.type === 'Sell' && new Date(tx.date).getFullYear() === y)) {
-          soldThisYear.add(invId);
-        }
-      });
-
-      const purchasedInYear = (inv: Investment) => {
-        const d = parseISO(inv.purchaseDate);
-        return d.getFullYear() === y;
-      };
-      const isActive = (inv: Investment) =>
-        (inv.purchaseQuantity ?? 0) > (inv.totalSoldQty ?? 0) || inv.type === 'Interest Account';
-
-      switch (yearFilter.mode) {
-        case 'realized':
-          subset = subset.filter(inv => soldThisYear.has(inv.id));
-          break;
-        case 'holdings':
-          subset = subset.filter(inv => isActive(inv) && purchasedInYear(inv));
-          break;
-        case 'combined':
-        default:
-          subset = subset.filter(inv =>
-            soldThisYear.has(inv.id) || (isActive(inv) && purchasedInYear(inv))
-          );
-          break;
-      }
+    if (yearFilter.kind === 'all') {
+      return investments;
     }
+  
+    const y = yearFilter.year;
+    return investments.filter(inv => {
+      const purchasedInOrBefore = new Date(inv.purchaseDate).getFullYear() <= y;
+      if (!purchasedInOrBefore) return false;
 
-    return subset;
+      const soldTxs = (transactionsMap[inv.id] ?? []).filter(tx => tx.type === 'Sell');
+      const firstSellInOrAfter = soldTxs.length > 0 && new Date(soldTxs[0].date).getFullYear() >= y;
+
+      return inv.status === 'Active' || firstSellInOrAfter;
+    });
   }, [investments, transactionsMap, yearFilter]);
 
   const typeCounts = React.useMemo(() => {
@@ -238,8 +212,9 @@ export default function DashboardPage() {
     return counts;
   }, [investmentsYearScoped]);
 
+
   const filteredAndSortedInvestments = React.useMemo(() => {
-    let filtered = [...investmentsYearScoped]; // <-- year scoped first
+    let filtered = [...investmentsYearScoped];
 
     if (typeFilter !== 'All') {
       filtered = filtered.filter(inv => inv.type === typeFilter);
