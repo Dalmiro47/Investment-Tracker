@@ -25,7 +25,7 @@ export function useAutoRefreshEtfHistory({ userId, recheckOnFocus = true, useUTC
   useEffect(() => {
     if (!userId) return;
 
-    // DEV: add ?etfForce to the ETF plan URL to force a run anytime
+    // DEV helper: add ?etfForce to the ETF plan URL to force a run anytime
     const devForce =
       typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('etfForce');
 
