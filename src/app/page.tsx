@@ -2,7 +2,6 @@
 "use client";
 
 import React from 'react';
-import { useRouter } from 'next/navigation';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries, getAllRateSchedules, addTransaction } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
@@ -35,7 +34,6 @@ import { performancePct } from '@/lib/types';
 import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
 import InvestmentListView from '@/components/investment-list';
 import type { SavingsRateChange } from '@/lib/types-savings';
-import type { PositionMetrics } from '@/lib/portfolio';
 import RateScheduleDialog from "@/components/rate-schedule-dialog";
 import { parseISO, endOfYear } from 'date-fns';
 import EtfPlansButton from '@/components/etf/EtfPlansButton';
@@ -52,7 +50,6 @@ const getCurrentRate = (rates?: SavingsRateChange[]) => {
 export default function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
   const [investments, setInvestments] = React.useState<Investment[]>([]);
   const [etfSummaries, setEtfSummaries] = React.useState<EtfSimSummary[]>([]);
   const [transactionsMap, setTransactionsMap] = React.useState<Record<string, Transaction[]>>({});
