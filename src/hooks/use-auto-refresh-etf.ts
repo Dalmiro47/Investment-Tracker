@@ -8,15 +8,16 @@ import { refreshEtfHistoryForMonth } from '@/app/actions/etf';
 type UseAutoRefreshEtfOpts = {
   userId?: string | null;
   recheckOnFocus?: boolean;
-  useUTC?: boolean; // default true
+  useUTC?: boolean;         // default true
 };
 
-function isFirstDay(useUTC = true) {
+const dbg = (...a: any[]) => { if (process.env.NODE_ENV !== 'production') console.log('[etf-auto]', ...a); };
+const FOCUS_DEBOUNCE_MS = 15_000;
+
+function isFirstDay(useUTC: boolean) {
   const d = new Date();
   return useUTC ? d.getUTCDate() === 1 : d.getDate() === 1;
 }
-
-const FOCUS_DEBOUNCE_MS = 15_000;
 
 export function useAutoRefreshEtfHistory({ userId, recheckOnFocus = true, useUTC = true }: UseAutoRefreshEtfOpts) {
   const { toast } = useToast();
@@ -25,33 +26,37 @@ export function useAutoRefreshEtfHistory({ userId, recheckOnFocus = true, useUTC
   useEffect(() => {
     if (!userId) return;
 
+    // DEV helper: add ?etfForce to the URL to force a run now
+    const devForce = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('etfForce');
+
     const attempt = async (reason: 'mount' | 'focus') => {
       const now = Date.now();
       if (reason === 'focus' && now - lastAttemptRef.current < FOCUS_DEBOUNCE_MS) return;
       lastAttemptRef.current = now;
 
-      if (!isFirstDay(useUTC)) return; // only run on day 1
+      if (!devForce && !isFirstDay(useUTC)) { dbg('skip: not first day'); return; }
 
       toast({ title: 'Refreshing ETF history…', description: 'Caching monthly series in background.' });
+      dbg('start', { reason, devForce });
 
-      const res = await refreshEtfHistoryForMonth(userId);
+      const res = await refreshEtfHistoryForMonth(userId, devForce ? { forced: true } : undefined);
+
       if (res.success) {
         toast({ title: 'ETF history updated', description: `${res.updatedCount ?? 0} series refreshed.` });
-      } else if (res.skippedReason === 'not_due') {
-        // quiet – it means we already refreshed this month
-      } else if (res.skippedReason === 'rate_limited') {
-        // quiet – just a short cooldown
+        dbg('success', res);
+      } else if (res.skippedReason === 'not_due' || res.skippedReason === 'rate_limited') {
+        dbg('skipped', res);
+        // keep quiet – it’s expected most days
       } else {
         toast({ title: 'ETF history refresh failed', description: res.message, variant: 'destructive' });
+        dbg('error', res);
       }
     };
 
     attempt('mount');
 
     if (!recheckOnFocus) return;
-    const onVis = () => {
-      if (document.visibilityState === 'visible') attempt('focus');
-    };
+    const onVis = () => { if (document.visibilityState === 'visible') attempt('focus'); };
     document.addEventListener('visibilitychange', onVis);
     return () => document.removeEventListener('visibilitychange', onVis);
   }, [userId, recheckOnFocus, useUTC, toast]);
