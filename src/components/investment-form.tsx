@@ -33,80 +33,7 @@ import React, { useEffect, useState } from "react"
 import { Checkbox } from "./ui/checkbox"
 import { Label } from "./ui/label"
 import AppDatePicker from '@/components/ui/app-date-picker';
-
-// --- Numeric input that plays nicely with RHF and users typing ---
-function NumericInput({
-  value,
-  onCommit,
-  placeholder,
-  allowDecimal = true,
-}: {
-  value: number | null | undefined;
-  onCommit: (n: number | null) => void;
-  placeholder?: string;
-  allowDecimal?: boolean;
-}) {
-  const [s, setS] = React.useState<string>(value != null ? String(value) : "");
-
-  // sync when form resets or when editing an existing investment
-  React.useEffect(() => {
-    setS(value != null ? String(value) : "");
-  }, [value]);
-
-  const sanitize = (raw: string) => {
-    // convert comma to dot and strip invalid chars
-    let v = raw.replace(",", ".").replace(/[^\d.]/g, "");
-    if (!allowDecimal) v = v.replace(/\./g, "");
-
-    // keep only the first dot
-    const i = v.indexOf(".");
-    if (i !== -1) v = v.slice(0, i + 1) + v.slice(i + 1).replace(/\./g, "");
-
-    // remove leading zeros unless "0." pattern
-    if (v.startsWith("0") && v.length > 1 && v[1] !== ".") {
-      v = v.replace(/^0+/, "");
-    }
-
-    return v;
-  };
-
-  const commit = () => {
-    const t = s.trim();
-    if (!t) {
-      onCommit(null);        // let RHF hold "empty" until user fills it
-      return;
-    }
-    const n = Number(t);
-    if (Number.isNaN(n)) {
-      // revert to controlled value
-      setS(value != null ? String(value) : "");
-      return;
-    }
-    const clamped = Math.max(0, n);
-    setS(String(clamped));
-    onCommit(clamped);
-  };
-
-  return (
-    <Input
-      placeholder={placeholder}
-      value={s}
-      onChange={(e) => setS(sanitize(e.target.value))}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        // block neg/exponent keys in number inputs
-        if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
-        if (e.key === "Enter") {
-          e.preventDefault();
-          commit();
-        }
-      }}
-      inputMode={allowDecimal ? "decimal" : "numeric"}
-      min={0}
-      step={allowDecimal ? "any" : 1}
-    />
-  );
-}
+import { NumericInput } from "./ui/numeric-input"
 
 
 interface InvestmentFormProps {
@@ -138,8 +65,8 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
     defaultValues: defaultFormValues,
   })
 
-  const [startingBalance, setStartingBalance] = useState<number>(0);
-  const [initialRatePct, setInitialRatePct] = useState<number>(2);
+  const [startingBalance, setStartingBalance] = useState<number | null>(null);
+  const [initialRatePct, setInitialRatePct] = useState<number | null>(null);
   
   const watchedType = useWatch({
     control: form.control,
@@ -151,8 +78,8 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
 
   useEffect(() => {
     if (isOpen) {
-        setStartingBalance(0);
-        setInitialRatePct(2);
+        setStartingBalance(null);
+        setInitialRatePct(null);
         const valuesToReset = investment 
             ? {
                 ...investment,
@@ -178,8 +105,8 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
       await Promise.resolve(
         onSubmit(
           values,
-          !isEditing && isIA ? startingBalance : undefined,
-          !isEditing && isIA ? initialRatePct : undefined
+          !isEditing && isIA ? (startingBalance ?? 0) : undefined,
+          !isEditing && isIA ? (initialRatePct ?? 0) : undefined
         )
       );
   };
@@ -280,25 +207,23 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
              <>
                {!isEditing && (
                   <>
-                    <div className="md:col-span-1">
+                    <div className="md:col-span-1 space-y-2">
                         <FormLabel>Starting Balance (optional)</FormLabel>
-                        <Input
-                            type="number"
-                            step="any"
-                            value={startingBalance}
-                            onChange={(e) => setStartingBalance(parseFloat(e.target.value) || 0)}
-                            placeholder="e.g. 3,000.00"
+                        <NumericInput
+                          value={startingBalance}
+                          onCommit={(n) => setStartingBalance(n ?? 0)}
+                          placeholder="e.g. 3,000.00"
+                          allowDecimal
                         />
                         <FormDescription>Recorded as a Deposit on the opening date.</FormDescription>
                     </div>
-                    <div className="md:col-span-1">
+                    <div className="md:col-span-1 space-y-2">
                         <FormLabel>Initial Interest Rate (%)</FormLabel>
-                        <Input
-                            type="number"
-                            step="0.01"
-                            value={initialRatePct}
-                            onChange={(e) => setInitialRatePct(parseFloat(e.target.value) || 0)}
-                            placeholder="e.g. 3.5"
+                         <NumericInput
+                          value={initialRatePct}
+                          onCommit={(n) => setInitialRatePct(n ?? 0)}
+                          placeholder="e.g. 3.5"
+                          allowDecimal
                         />
                         <FormDescription>Annual rate from your bank.</FormDescription>
                     </div>

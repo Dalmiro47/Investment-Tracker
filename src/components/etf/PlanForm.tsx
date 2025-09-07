@@ -30,6 +30,7 @@ import type { ETFPlan, ETFComponent } from "@/lib/types.etf";
 import React, { useEffect, useMemo } from "react";
 import AppDatePicker from "../ui/app-date-picker";
 import { parseISO } from 'date-fns';
+import { NumericInput } from "../ui/numeric-input";
 
 function PercentInput({
   value,            // 0..1 | null
@@ -229,7 +230,13 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Base Monthly Contribution (€)</FormLabel>
-                <FormControl><Input type="number" {...field} /></FormControl>
+                <FormControl>
+                    <NumericInput
+                        value={field.value}
+                        onCommit={(n) => field.onChange(n ?? undefined)}
+                        placeholder="e.g., 100.00"
+                    />
+                </FormControl>
                  <FormDescription>The starting amount. You can add step-ups below.</FormDescription>
                 <FormMessage />
               </FormItem>
@@ -241,7 +248,13 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
             render={({ field }) => (
               <FormItem>
                 <FormLabel>Fee per Contribution (%)</FormLabel>
-                <FormControl><Input type="number" step="0.01" {...field} onChange={e => field.onChange(parseFloat(e.target.value) / 100)} value={(field.value ?? 0) * 100} /></FormControl>
+                <FormControl>
+                  <NumericInput
+                    value={(field.value ?? 0) * 100}
+                    onCommit={(n) => field.onChange(n != null ? n / 100 : undefined)}
+                    placeholder="e.g., 0.1 for 0.1%"
+                  />
+                </FormControl>
                 <FormDescription>e.g., 0.1 for 0.1%</FormDescription>
                 <FormMessage />
               </FormItem>
@@ -284,7 +297,13 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                                 </TableCell>
                                 <TableCell>
                                     <FormField control={form.control} name={`contributionSteps.${index}.amount`}
-                                        render={({ field }) => <Input type="number" {...field} onChange={e => field.onChange(parseFloat(e.target.value) || 0)} placeholder="e.g. 200" />}
+                                        render={({ field }) => (
+                                           <NumericInput
+                                                value={field.value}
+                                                onCommit={(n) => field.onChange(n ?? undefined)}
+                                                placeholder="e.g. 200"
+                                            />
+                                        )}
                                     />
                                      <FormMessage className="text-xs mt-1">{form.formState.errors.contributionSteps?.[index]?.amount?.message}</FormMessage>
                                 </TableCell>
