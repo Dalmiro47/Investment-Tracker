@@ -2,6 +2,7 @@ import type {Metadata} from 'next';
 import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from '@/hooks/use-auth';
 import './globals.css';
+import 'react-datepicker/dist/react-datepicker.css';
 
 export const metadata: Metadata = {
   title: 'DDS Investment Tracker',

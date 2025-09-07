@@ -2,8 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-@import 'react-datepicker/dist/react-datepicker.css';
-
 body {
   font-family: 'PT Sans', sans-serif;
 }
