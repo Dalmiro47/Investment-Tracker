@@ -188,8 +188,8 @@ export function AppDatePicker({
                 value={date.getMonth()}
                 onChange={(e) => changeMonth(Number(e.target.value))}
               >
-                {months.map((m, idx) => (
-                  <option key={idx} value={idx}>{format(new Date(date.getFullYear(), idx, 1), 'MMMM')}</option>
+                {months.map((monthName, monthIndex) => (
+                  <option key={monthName} value={monthIndex}>{monthName}</option>
                 ))}
               </select>
 
@@ -198,8 +198,8 @@ export function AppDatePicker({
                 value={date.getFullYear()}
                 onChange={(e) => changeYear(Number(e.target.value))}
               >
-                {years.map((y) => (
-                  <option key={y} value={y}>{y}</option>
+                {years.map((year) => (
+                  <option key={year} value={year}>{year}</option>
                 ))}
               </select>
 
