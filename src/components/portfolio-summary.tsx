@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
 import type { Investment, Transaction, YearFilter, TaxSettings, AggregatedSummary } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
@@ -124,6 +124,8 @@ const getSummaryContext = (filter: YearFilter): { title: string, description: st
     }
 }
 
+export type PortfolioSummaryHandle = { openEstimate: () => void };
+
 interface PortfolioSummaryProps {
     summaryData: AggregatedSummary | null;
     sellYears: number[];
@@ -133,17 +135,32 @@ interface PortfolioSummaryProps {
     onYearFilterChange: (filter: YearFilter) => void;
 }
 
-export default function PortfolioSummary({ 
+function PortfolioSummaryImpl({ 
     summaryData, 
     sellYears, 
     isTaxView, 
     taxSettings,
     yearFilter,
     onYearFilterChange,
-}: PortfolioSummaryProps) {
+}: PortfolioSummaryProps, ref: React.Ref<PortfolioSummaryHandle>) {
     
     const [donutMode, setDonutMode] = useState<DonutMode>('market');
-    const [isTaxEstimateOpen, setIsTaxEstimateOpen] = useState(false);
+    const [isEstimateOpen, setIsEstimateOpen] = useState(false);
+
+    const openEstimate = useCallback(() => setIsEstimateOpen(true), []);
+    useImperativeHandle(ref, () => ({ openEstimate }), [openEstimate]);
+
+    useEffect(() => {
+      if (!summaryData?.taxSummary) {
+        setIsEstimateOpen(false);
+      }
+    }, [summaryData?.taxSummary]);
+
+    useEffect(() => {
+      if (yearFilter.kind !== 'year' || !isTaxView) {
+        setIsEstimateOpen(false);
+      }
+    }, [yearFilter.kind, isTaxView]);
     
     const handleYearChange = (value: string) => {
         if (value === 'all') {
@@ -289,8 +306,8 @@ export default function PortfolioSummary({
                         </Select>
                     </div>
                 </div>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-2 mb-4">
-                    {yearFilter.kind === 'year' && (
+                {yearFilter.kind === 'year' && (
+                    <div className="mt-4">
                         <Tabs value={yearFilter.mode} onValueChange={(v) => handleModeChange(v as YearViewMode)}>
                             <TabsList>
                                 <TabsTrigger value="combined">Combined</TabsTrigger>
@@ -298,15 +315,8 @@ export default function PortfolioSummary({
                                 <TabsTrigger value="holdings">Holdings</TabsTrigger>
                             </TabsList>
                         </Tabs>
-                    )}
-                    <div className="flex-grow"/>
-                    {showTaxEstimatorButton && (
-                        <Button variant="outline" size="sm" onClick={() => setIsTaxEstimateOpen(true)}>
-                            <Scale className="mr-2 h-4 w-4" />
-                            View Tax Estimate for {yearFilter.year}
-                        </Button>
-                    )}
-                </div>
+                    </div>
+                )}
             </CardHeader>
             <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -443,8 +453,8 @@ export default function PortfolioSummary({
         </Card>
         {yearFilter.kind === 'year' && (
             <TaxEstimateDialog 
-                isOpen={isTaxEstimateOpen}
-                onOpenChange={setIsTaxEstimateOpen}
+                isOpen={isEstimateOpen}
+                onOpenChange={setIsEstimateOpen}
                 taxSummary={taxSummary}
                 year={yearFilter.year}
                 taxSettings={taxSettings}
@@ -453,3 +463,5 @@ export default function PortfolioSummary({
         </TooltipProvider>
     );
 }
+
+export default forwardRef(PortfolioSummaryImpl);

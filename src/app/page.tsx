@@ -7,7 +7,7 @@ import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getA
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
-import PortfolioSummary from '@/components/portfolio-summary';
+import PortfolioSummary, { type PortfolioSummaryHandle } from '@/components/portfolio-summary';
 import { InvestmentForm } from '@/components/investment-form';
 import { TaxSettingsDialog } from '@/components/tax-settings-dialog';
 import { Button } from '@/components/ui/button';
@@ -35,9 +35,9 @@ import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
 import InvestmentListView from '@/components/investment-list';
 import type { SavingsRateChange } from '@/lib/types-savings';
 import RateScheduleDialog from "@/components/rate-schedule-dialog";
-import { parseISO, endOfYear } from 'date-fns';
+import { parseISO } from 'date-fns';
 import EtfPlansButton from '@/components/etf/EtfPlansButton';
-import { useRouter } from 'next/navigation';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -51,7 +51,6 @@ const getCurrentRate = (rates?: SavingsRateChange[]) => {
 export default function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
   const [investments, setInvestments] = React.useState<Investment[]>([]);
   const [etfSummaries, setEtfSummaries] = React.useState<EtfSimSummary[]>([]);
   const [transactionsMap, setTransactionsMap] = React.useState<Record<string, Transaction[]>>({});
@@ -87,6 +86,7 @@ export default function DashboardPage() {
   const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all' });
   const [isRatesOpen, setIsRatesOpen] = React.useState(false);
   const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
+  const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
 
 
   const fetchAllData = async (userId: string) => {
@@ -227,14 +227,14 @@ export default function DashboardPage() {
       Bond: 0,
       'Real Estate': 0,
     };
-
+  
     investmentsYearScoped.forEach((inv) => {
       if (counts[inv.type] !== undefined) {
         counts[inv.type] += 1;
         counts.All += 1;
       }
     });
-
+  
     return counts;
   }, [investmentsYearScoped]);
 
@@ -395,6 +395,40 @@ export default function DashboardPage() {
     return null; // AuthProvider handles redirects
   }
 
+  const canToggleTaxReport = yearFilter.kind === 'year' && viewMode === 'grid';
+  const selectedYear = yearFilter.kind === 'year' ? yearFilter.year : null;
+  const toggleDisabledReason =
+    selectedYear == null
+      ? 'Select a year to build the German Tax Report.'
+      : viewMode !== 'grid'
+      ? 'Switch to Cards view to see per-asset estimates.'
+      : undefined;
+      
+  const canOpenEstimate = selectedYear != null && isTaxView;
+  const estimateDisabledReason =
+    selectedYear == null
+      ? 'Select a year to view the estimate.'
+      : !isTaxView
+      ? 'Turn on German Tax Report to view the estimate.'
+      : undefined;
+
+  const setModeSafely = (mode: 'grid' | 'list') => {
+    if (isTaxView && mode === 'list') {
+      toast({
+        title: 'German Tax Report',
+        description: 'Turn off German Tax Report to use List view.',
+      });
+      return;
+    }
+    setViewMode(mode);
+  };
+
+  React.useEffect(() => {
+    if (!canToggleTaxReport && isTaxView) {
+      setIsTaxView(false);
+    }
+  }, [canToggleTaxReport, isTaxView]);
+
   return (
     <>
       <div className="min-h-screen w-full bg-background">
@@ -402,9 +436,16 @@ export default function DashboardPage() {
             isTaxView={isTaxView} 
             onTaxViewChange={setIsTaxView}
             onTaxSettingsClick={() => setIsTaxSettingsOpen(true)}
+            canToggleTaxReport={canToggleTaxReport}
+            selectedYear={selectedYear}
+            onViewTaxEstimate={() => summaryRef.current?.openEstimate()}
+            toggleDisabledReason={toggleDisabledReason}
+            canOpenEstimate={canOpenEstimate}
+            estimateDisabledReason={estimateDisabledReason}
         />
         <main className="p-4 sm:p-6 lg:p-8">
           <PortfolioSummary 
+            ref={summaryRef}
             summaryData={summaryData}
             sellYears={sellYears} 
             isTaxView={isTaxView}
@@ -422,16 +463,29 @@ export default function DashboardPage() {
                 <div className="rounded-md border p-1">
                   <button
                     className={`px-3 py-1 rounded ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                    onClick={() => setViewMode('grid')}
+                    onClick={() => setModeSafely('grid')}
                   >
                     Cards
                   </button>
-                  <button
-                    className={`px-3 py-1 rounded ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                    onClick={() => setViewMode('list')}
-                  >
-                    List
-                  </button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <button
+                            className={`px-3 py-1 rounded ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                            onClick={() => setModeSafely('list')}
+                            disabled={isTaxView}
+                            aria-disabled={isTaxView}
+                          >
+                            List
+                          </button>
+                        </span>
+                      </TooltipTrigger>
+                      {isTaxView && (
+                        <TooltipContent>Turn off German Tax Report to use List view.</TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
 
                 {viewMode === 'list' && (
