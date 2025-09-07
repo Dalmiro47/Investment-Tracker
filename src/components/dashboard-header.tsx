@@ -27,6 +27,8 @@ interface DashboardHeaderProps {
   selectedYear?: number | null;
   onViewTaxEstimate?: () => void;
   toggleDisabledReason?: string;
+  canOpenEstimate?: boolean;
+  estimateDisabledReason?: string;
 }
 
 export default function DashboardHeader({ 
@@ -37,6 +39,8 @@ export default function DashboardHeader({
   selectedYear = null,
   onViewTaxEstimate,
   toggleDisabledReason,
+  canOpenEstimate = false,
+  estimateDisabledReason,
 }: DashboardHeaderProps) {
   const { user, signOut } = useAuth();
   
@@ -49,7 +53,7 @@ export default function DashboardHeader({
     return name.substring(0, 2);
   };
   
-  const buttonDisabled = selectedYear == null;
+  const estimateDisabled = !canOpenEstimate;
   const toggleDisabled = !canToggleTaxReport;
   const estimateLabel = selectedYear != null ? `View Tax Estimate for ${selectedYear}` : 'View Tax Estimate';
 
@@ -75,16 +79,18 @@ export default function DashboardHeader({
                   <Button
                     size="sm"
                     onClick={() => onViewTaxEstimate?.()}
-                    disabled={buttonDisabled}
-                    aria-disabled={buttonDisabled}
+                    disabled={estimateDisabled}
+                    aria-disabled={estimateDisabled}
                   >
                     <Scale className="mr-2 h-4 w-4" />
                     {estimateLabel}
                   </Button>
                 </span>
               </TooltipTrigger>
-              {buttonDisabled && (
-                <TooltipContent>Select a year to build the German Tax Report.</TooltipContent>
+              {estimateDisabled && (
+                <TooltipContent>
+                  {estimateDisabledReason ?? 'Turn on German Tax Report and select a year.'}
+                </TooltipContent>
               )}
             </Tooltip>
           </TooltipProvider>
@@ -110,7 +116,7 @@ export default function DashboardHeader({
               </TooltipTrigger>
               {toggleDisabled && (
                 <TooltipContent>
-                  {toggleDisabledReason ?? 'Select a year to build the German Tax Report.'}
+                  {toggleDisabledReason ?? 'Select a year and switch to Cards view.'}
                 </TooltipContent>
               )}
             </Tooltip>

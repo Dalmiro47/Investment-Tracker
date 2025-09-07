@@ -294,8 +294,8 @@ function PortfolioSummaryImpl({
                         </Select>
                     </div>
                 </div>
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 mt-2 mb-4">
-                    {yearFilter.kind === 'year' && (
+                {yearFilter.kind === 'year' && (
+                    <div className="mt-4">
                         <Tabs value={yearFilter.mode} onValueChange={(v) => handleModeChange(v as YearViewMode)}>
                             <TabsList>
                                 <TabsTrigger value="combined">Combined</TabsTrigger>
@@ -303,15 +303,8 @@ function PortfolioSummaryImpl({
                                 <TabsTrigger value="holdings">Holdings</TabsTrigger>
                             </TabsList>
                         </Tabs>
-                    )}
-                    <div className="flex-grow"/>
-                    {showTaxEstimatorButton && (
-                        <Button variant="outline" size="sm" onClick={openEstimate}>
-                            <Scale className="mr-2 h-4 w-4" />
-                            View Tax Estimate for {yearFilter.year}
-                        </Button>
-                    )}
-                </div>
+                    </div>
+                )}
             </CardHeader>
             <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

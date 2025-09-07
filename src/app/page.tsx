@@ -37,6 +37,7 @@ import type { SavingsRateChange } from '@/lib/types-savings';
 import RateScheduleDialog from "@/components/rate-schedule-dialog";
 import { parseISO, endOfYear } from 'date-fns';
 import EtfPlansButton from '@/components/etf/EtfPlansButton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -402,6 +403,25 @@ export default function DashboardPage() {
       : viewMode !== 'grid'
       ? 'Switch to Cards view to see per-asset estimates.'
       : undefined;
+      
+  const canOpenEstimate = selectedYear != null && isTaxView;
+  const estimateDisabledReason =
+    selectedYear == null
+      ? 'Select a year to view the estimate.'
+      : !isTaxView
+      ? 'Turn on German Tax Report to view the estimate.'
+      : undefined;
+
+  const setModeSafely = (mode: 'grid' | 'list') => {
+    if (isTaxView && mode === 'list') {
+      toast({
+        title: 'German Tax Report',
+        description: 'Turn off German Tax Report to use List view.',
+      });
+      return;
+    }
+    setViewMode(mode);
+  };
 
   return (
     <>
@@ -414,6 +434,8 @@ export default function DashboardPage() {
             selectedYear={selectedYear}
             onViewTaxEstimate={() => summaryRef.current?.openEstimate()}
             toggleDisabledReason={toggleDisabledReason}
+            canOpenEstimate={canOpenEstimate}
+            estimateDisabledReason={estimateDisabledReason}
         />
         <main className="p-4 sm:p-6 lg:p-8">
           <PortfolioSummary 
@@ -435,16 +457,29 @@ export default function DashboardPage() {
                 <div className="rounded-md border p-1">
                   <button
                     className={`px-3 py-1 rounded ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                    onClick={() => setViewMode('grid')}
+                    onClick={() => setModeSafely('grid')}
                   >
                     Cards
                   </button>
-                  <button
-                    className={`px-3 py-1 rounded ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                    onClick={() => setViewMode('list')}
-                  >
-                    List
-                  </button>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <span>
+                          <button
+                            className={`px-3 py-1 rounded ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                            onClick={() => setModeSafely('list')}
+                            disabled={isTaxView}
+                            aria-disabled={isTaxView}
+                          >
+                            List
+                          </button>
+                        </span>
+                      </TooltipTrigger>
+                      {isTaxView && (
+                        <TooltipContent>Turn off German Tax Report to use List view.</TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
 
                 {viewMode === 'list' && (
