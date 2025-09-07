@@ -10,6 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import type { Investment } from "@/lib/types";
 import type { SavingsRateChange } from "@/lib/types-savings";
 import { addRateChange } from "@/lib/firestore";
+import AppDatePicker from "./ui/app-date-picker";
 
 type Props = {
   isOpen: boolean;
@@ -28,7 +29,7 @@ export default function RateScheduleDialog({
 }: Props) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [from, setFrom] = React.useState<string>(() => new Date().toISOString().slice(0,10));
+  const [from, setFrom] = React.useState<Date | null>(new Date());
   const [ratePct, setRatePct] = React.useState<string>("");
 
   const handleAdd = async () => {
@@ -38,8 +39,8 @@ export default function RateScheduleDialog({
       toast({ title: "Enter a date & rate", variant: "destructive" });
       return;
     }
-    await addRateChange(user.uid, investment.id, { from, annualRatePct: val });
-    toast({ title: "Rate added", description: `${val.toFixed(2)}% from ${from}` });
+    await addRateChange(user.uid, investment.id, { from: from.toISOString().slice(0, 10), annualRatePct: val });
+    toast({ title: "Rate added", description: `${val.toFixed(2)}% from ${from.toISOString().slice(0, 10)}` });
     setRatePct("");
     onChanged();
   };
@@ -74,7 +75,10 @@ export default function RateScheduleDialog({
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
             <div>
               <Label>Effective date</Label>
-              <Input type="date" value={from} onChange={e=>setFrom(e.target.value)} />
+              <AppDatePicker
+                value={from}
+                onChange={setFrom}
+              />
             </div>
             <div>
               <Label>Annual rate (%)</Label>
