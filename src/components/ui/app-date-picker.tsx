@@ -161,6 +161,8 @@ export function AppDatePicker({
             commitFromInputEl(e.target as HTMLInputElement);
           }
         }}
+        portalId="app-datepicker-portal"
+        shouldCloseOnSelect
         customInput={<DateTextInput />}
         dateFormat={inputFormat}
         locale={enGB}
