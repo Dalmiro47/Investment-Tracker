@@ -236,11 +236,12 @@ export default function DashboardPage() {
       }
     });
 
-    counts['ETF'] += etfSummaries.length;
-    counts['All'] = totalManual + etfSummaries.length;
+    const includePlans = (viewMode === 'list' && listMode === 'aggregated');
+    counts['ETF'] += includePlans ? etfSummaries.length : 0;
+    counts['All'] = totalManual + (includePlans ? etfSummaries.length : 0);
 
     return counts;
-  }, [investmentsYearScoped, etfSummaries]);
+  }, [investmentsYearScoped, etfSummaries, viewMode, listMode]);
 
   const filteredAndSortedInvestments = React.useMemo(() => {
     let filtered = [...investmentsYearScoped]; // <-- year scoped first
@@ -563,10 +564,17 @@ export default function DashboardPage() {
             <div className="text-center py-16">
               <h3 className="text-xl font-semibold text-foreground">No Investments Found</h3>
               <p className="text-muted-foreground mt-2">Add a new investment to get started.</p>
-               <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)} className="mt-4">
+              <div className="mt-4 flex items-center justify-center gap-3">
+                <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add First Investment
                 </Button>
+               {typeFilter === 'ETF' && (
+                 <Button variant="outline" onClick={() => router.push('/etf')}>
+                   ETF Plans
+                 </Button>
+               )}
+              </div>
             </div>
           )}
         </main>
