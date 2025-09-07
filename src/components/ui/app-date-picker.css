@@ -34,11 +34,10 @@
 
 .app-date-icon { width: 1rem; height: 1rem; }
 
-/* keep picker above dialogs and fully clickable */
-.react-datepicker-popper { z-index: 2147483647 !important; pointer-events: auto; }
+/* portal container for popper */
 #app-datepicker-portal { position: relative; z-index: 2147483647; }
-#app-datepicker-portal .react-datepicker { pointer-events: auto; }
-.react-datepicker__day { cursor: pointer; }        /* visual affordance */
+#app-datepicker-portal .react-datepicker,
+#app-datepicker-portal .react-datepicker-popper { pointer-events: auto; }
 
 
 /* panel */
@@ -70,6 +69,7 @@
 .react-datepicker__day {
   color: hsl(var(--foreground));
   background: transparent;
+  cursor: pointer;
 }
 .react-datepicker__day:hover {
   background: hsl(var(--secondary));

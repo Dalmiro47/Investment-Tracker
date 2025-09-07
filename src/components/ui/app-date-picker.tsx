@@ -2,6 +2,7 @@
 'use client';
 
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 import { parse, format, isValid } from 'date-fns';
 import DatePicker from 'react-datepicker';
 import enGB from 'date-fns/locale/en-GB';
@@ -110,6 +111,12 @@ const DateTextInput = React.forwardRef<
 });
 DateTextInput.displayName = 'DateTextInput';
 
+const PopperPortal: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  if (typeof window === 'undefined') return <>{children}</>;
+  const host = document.getElementById('app-datepicker-portal');
+  return host ? createPortal(children, host) : <>{children}</>;
+};
+
 export function AppDatePicker({
   value,
   onChange,
@@ -178,7 +185,7 @@ export function AppDatePicker({
         disabled={disabled}
         minDate={minDate}
         maxDate={maxDate}
-        portalId="app-datepicker-portal"
+        popperContainer={PopperPortal}
         showPopperArrow={false}
         popperPlacement="bottom-start"
         renderCustomHeader={({
