@@ -26,6 +26,7 @@ interface DashboardHeaderProps {
   canToggleTaxReport?: boolean;
   selectedYear?: number | null;
   onViewTaxEstimate?: () => void;
+  toggleDisabledReason?: string;
 }
 
 export default function DashboardHeader({ 
@@ -35,6 +36,7 @@ export default function DashboardHeader({
   canToggleTaxReport = false,
   selectedYear = null,
   onViewTaxEstimate,
+  toggleDisabledReason,
 }: DashboardHeaderProps) {
   const { user, signOut } = useAuth();
   
@@ -47,7 +49,8 @@ export default function DashboardHeader({
     return name.substring(0, 2);
   };
   
-  const disabled = !canToggleTaxReport;
+  const buttonDisabled = selectedYear == null;
+  const toggleDisabled = !canToggleTaxReport;
   const estimateLabel = selectedYear != null ? `View Tax Estimate for ${selectedYear}` : 'View Tax Estimate';
 
 
@@ -68,24 +71,20 @@ export default function DashboardHeader({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                {/* span wrapper lets tooltip work even when Button is disabled */}
                 <span>
                   <Button
-                    onClick={() => (onViewTaxEstimate ? onViewTaxEstimate() : onTaxViewChange(true))}
-                    disabled={disabled}
-                    aria-disabled={disabled}
-                    aria-describedby={disabled ? 'tax-report-disabled' : undefined}
                     size="sm"
+                    onClick={() => onViewTaxEstimate?.()}
+                    disabled={buttonDisabled}
+                    aria-disabled={buttonDisabled}
                   >
                     <Scale className="mr-2 h-4 w-4" />
                     {estimateLabel}
                   </Button>
                 </span>
               </TooltipTrigger>
-              {disabled && (
-                <TooltipContent>
-                  Select a year to build the German Tax Report.
-                </TooltipContent>
+              {buttonDisabled && (
+                <TooltipContent>Select a year to build the German Tax Report.</TooltipContent>
               )}
             </Tooltip>
           </TooltipProvider>
@@ -94,27 +93,31 @@ export default function DashboardHeader({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div className="flex items-center space-x-2">
-                   <Label htmlFor="tax-mode" className={cn("font-medium", disabled && "text-muted-foreground/50")}>German Tax Report</Label>
+                   <Label
+                    htmlFor="tax-mode"
+                    className={cn('font-medium', toggleDisabled && 'text-muted-foreground/50')}
+                  >
+                    German Tax Report
+                  </Label>
                     <Switch
                       id="tax-mode"
                       checked={isTaxView}
                       onCheckedChange={onTaxViewChange}
-                      disabled={disabled}
-                      aria-disabled={disabled}
-                      aria-describedby={disabled ? 'tax-report-disabled' : undefined}
+                      disabled={toggleDisabled}
+                      aria-disabled={toggleDisabled}
                     />
                 </div>
               </TooltipTrigger>
-              {disabled && (
+              {toggleDisabled && (
                 <TooltipContent>
-                  Select a year to build the German Tax Report.
+                  {toggleDisabledReason ?? 'Select a year to build the German Tax Report.'}
                 </TooltipContent>
               )}
             </Tooltip>
           </TooltipProvider>
            {/* a11y announcement for screen readers */}
           <span id="tax-report-disabled" className="sr-only">
-            German Tax Report controls are disabled. Select a year to enable.
+            German Tax Report controls may be disabled. Select a year and use Cards view to enable.
           </span>
         </div>
         <div className="flex items-center space-x-4">

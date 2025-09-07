@@ -7,7 +7,7 @@ import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getA
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
-import PortfolioSummary from '@/components/portfolio-summary';
+import PortfolioSummary, { type PortfolioSummaryHandle } from '@/components/portfolio-summary';
 import { InvestmentForm } from '@/components/investment-form';
 import { TaxSettingsDialog } from '@/components/tax-settings-dialog';
 import { Button } from '@/components/ui/button';
@@ -37,7 +37,6 @@ import type { SavingsRateChange } from '@/lib/types-savings';
 import RateScheduleDialog from "@/components/rate-schedule-dialog";
 import { parseISO, endOfYear } from 'date-fns';
 import EtfPlansButton from '@/components/etf/EtfPlansButton';
-import { useRouter } from 'next/navigation';
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -51,7 +50,6 @@ const getCurrentRate = (rates?: SavingsRateChange[]) => {
 export default function DashboardPage() {
   const { user } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
   const [investments, setInvestments] = React.useState<Investment[]>([]);
   const [etfSummaries, setEtfSummaries] = React.useState<EtfSimSummary[]>([]);
   const [transactionsMap, setTransactionsMap] = React.useState<Record<string, Transaction[]>>({});
@@ -87,6 +85,7 @@ export default function DashboardPage() {
   const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all' });
   const [isRatesOpen, setIsRatesOpen] = React.useState(false);
   const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
+  const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
 
 
   const fetchAllData = async (userId: string) => {
@@ -227,14 +226,14 @@ export default function DashboardPage() {
       Bond: 0,
       'Real Estate': 0,
     };
-
+  
     investmentsYearScoped.forEach((inv) => {
       if (counts[inv.type] !== undefined) {
         counts[inv.type] += 1;
         counts.All += 1;
       }
     });
-
+  
     return counts;
   }, [investmentsYearScoped]);
 
@@ -395,8 +394,14 @@ export default function DashboardPage() {
     return null; // AuthProvider handles redirects
   }
 
-  const canToggleTaxReport = yearFilter.kind === 'year';
-  const selectedYear = canToggleTaxReport ? yearFilter.year : null;
+  const canToggleTaxReport = yearFilter.kind === 'year' && viewMode === 'grid';
+  const selectedYear = yearFilter.kind === 'year' ? yearFilter.year : null;
+  const toggleDisabledReason =
+    selectedYear == null
+      ? 'Select a year to build the German Tax Report.'
+      : viewMode !== 'grid'
+      ? 'Switch to Cards view to see per-asset estimates.'
+      : undefined;
 
   return (
     <>
@@ -407,10 +412,12 @@ export default function DashboardPage() {
             onTaxSettingsClick={() => setIsTaxSettingsOpen(true)}
             canToggleTaxReport={canToggleTaxReport}
             selectedYear={selectedYear}
-            onViewTaxEstimate={() => setIsTaxView(true)}
+            onViewTaxEstimate={() => summaryRef.current?.openEstimate()}
+            toggleDisabledReason={toggleDisabledReason}
         />
         <main className="p-4 sm:p-6 lg:p-8">
           <PortfolioSummary 
+            ref={summaryRef}
             summaryData={summaryData}
             sellYears={sellYears} 
             isTaxView={isTaxView}
