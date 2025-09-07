@@ -2,7 +2,6 @@
 "use client";
 
 import React from 'react';
-import { useRouter } from 'next/navigation';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries, getAllRateSchedules, addTransaction } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
@@ -14,7 +13,7 @@ import { TaxSettingsDialog } from '@/components/tax-settings-dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, SlidersHorizontal, Loader2, RefreshCw, Briefcase } from 'lucide-react';
+import { PlusCircle, SlidersHorizontal, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -35,9 +34,10 @@ import { performancePct } from '@/lib/types';
 import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
 import InvestmentListView from '@/components/investment-list';
 import type { SavingsRateChange } from '@/lib/types-savings';
-import type { PositionMetrics } from '@/lib/portfolio';
 import RateScheduleDialog from "@/components/rate-schedule-dialog";
 import { parseISO, endOfYear } from 'date-fns';
+import EtfPlansButton from '@/components/etf/EtfPlansButton';
+import { useRouter } from 'next/navigation';
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -219,28 +219,24 @@ export default function DashboardPage() {
 
   const typeCounts = React.useMemo(() => {
     const counts: Record<InvestmentType | 'All', number> = {
-      'All': 0,
-      'Stock': 0,
-      'Crypto': 0,
-      'ETF': 0,
+      All: 0,
+      Stock: 0,
+      Crypto: 0,
+      ETF: 0,
       'Interest Account': 0,
-      'Bond': 0,
+      Bond: 0,
       'Real Estate': 0,
     };
-    
-    let totalManual = 0;
-    investmentsYearScoped.forEach(inv => {
+
+    investmentsYearScoped.forEach((inv) => {
       if (counts[inv.type] !== undefined) {
-        counts[inv.type]++;
-        totalManual++;
+        counts[inv.type] += 1;
+        counts.All += 1;
       }
     });
 
-    counts['ETF'] += etfSummaries.length;
-    counts['All'] = totalManual + etfSummaries.length;
-
     return counts;
-  }, [investmentsYearScoped, etfSummaries]);
+  }, [investmentsYearScoped]);
 
   const filteredAndSortedInvestments = React.useMemo(() => {
     let filtered = [...investmentsYearScoped]; // <-- year scoped first
@@ -461,10 +457,7 @@ export default function DashboardPage() {
                   {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                   Refresh Prices
                 </Button>
-                <Button onClick={() => router.push('/etf')}>
-                  <Briefcase className="mr-2 h-4 w-4" />
-                  ETF Plans
-                </Button>
+                <EtfPlansButton />
                  <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add Investment
@@ -563,10 +556,13 @@ export default function DashboardPage() {
             <div className="text-center py-16">
               <h3 className="text-xl font-semibold text-foreground">No Investments Found</h3>
               <p className="text-muted-foreground mt-2">Add a new investment to get started.</p>
-               <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)} className="mt-4">
+              <div className="mt-4 flex items-center justify-center gap-3">
+                <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add First Investment
                 </Button>
+               {typeFilter === 'ETF' && <EtfPlansButton />}
+              </div>
             </div>
           )}
         </main>

@@ -15,6 +15,8 @@ import { aggregateBySymbol, calculatePositionMetrics } from '@/lib/portfolio';
 import { format, parseISO } from 'date-fns';
 import { History, PlusCircle } from 'lucide-react';
 import type { SavingsRateChange } from '@/lib/types-savings';
+import { EtfSimLink } from '@/components/etf/EtfSimLink';
+import EtfPlansButton from '@/components/etf/EtfPlansButton';
 
 const fmtEur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
 const fmtQty = (v: number, d = 6) => v.toFixed(d);
@@ -193,7 +195,16 @@ export default function InvestmentListView({
   const rows: any[] = mode === 'flat' ? rowsFlat : rowsAgg;
 
   if (rows.length === 0) {
-    return <div className="text-center text-muted-foreground py-12">No matching assets for this view.</div>;
+    return (
+      <div className="text-center text-muted-foreground py-12">
+        <div>No matching assets for this view.</div>
+        {activeTypeFilter === 'ETF' && (
+          <div className="mt-3">
+            <EtfPlansButton />
+          </div>
+        )}
+      </div>
+    );
   }
 
   // --- IA-specific rendering when filter is Interest Accounts ---
@@ -303,7 +314,20 @@ export default function InvestmentListView({
               <tr key={r.key} className="border-t last:border-b [&>td]:px-4 [&>td]:py-3">
                 {showTypeColumn && <td className="font-medium">{r.type}</td>}
                 <td className="font-medium">
-                  {r.name}{r.ticker ? <span className="text-muted-foreground"> ({r.ticker})</span> : null}
+                  <div className="flex items-center gap-2">
+                    <div>
+                      <div>{r.name}</div>
+                      {r.ticker && <div className="text-xs text-muted-foreground">{r.ticker}</div>}
+                    </div>
+                    {r.type === 'ETF' && r.planId && (
+                      <EtfSimLink
+                        planId={r.planId}
+                        symbol={r.ticker ?? undefined}
+                        className="ml-1"
+                        showSummary
+                      />
+                    )}
+                  </div>
                 </td>
 
                 {showPurchaseDateCol && <td className="text-muted-foreground">{r.purchaseDate ? format(parseISO(r.purchaseDate), 'dd MMM yyyy') : '—'}</td>}

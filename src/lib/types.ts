@@ -31,6 +31,7 @@ export interface Investment {
   name: string;
   type: InvestmentType;
   ticker?: string;
+  planId?: string; // For linking manual ETF entries to a savings plan
 
   // SINGLE purchase
   purchaseDate: string;          // ISO
@@ -89,6 +90,7 @@ export const investmentSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   type: z.enum(['Stock', 'Bond', 'Crypto', 'Real Estate', 'ETF', 'Interest Account']),
   ticker: z.string().optional(),
+  planId: z.string().optional(),
   purchaseDate: z.date({ required_error: "Purchase date is required." }),
   purchaseQuantity: z.coerce.number().nonnegative(),
   purchasePricePerUnit: z.coerce.number().nonnegative(),

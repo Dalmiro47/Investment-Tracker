@@ -33,6 +33,7 @@ export interface PositionMetrics {
   performancePct: number; // totalPLDisplay / purchaseValue
   
   type: Investment['type'];
+  planId?: string;
 }
 
 export type AggregatedSymbolRow = {
@@ -41,6 +42,8 @@ export type AggregatedSymbolRow = {
   ticker?: string | null;
   type: Investment['type'];
   positions: number;
+  // when the underlying manual ETF is linked to a plan
+  planId?: string | null;
 
   buyQty: number;
   availableQty: number;
@@ -74,6 +77,7 @@ export function calculatePositionMetrics(
     capitalGainsYear: 0, dividendsYear: 0, interestYear: 0,
     realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0,
     type: inv.type,
+    planId: inv.planId,
   };
 
   // ✅ Interest Account: compute using rate schedule + transactions
@@ -221,6 +225,7 @@ export function calculatePositionMetrics(
     totalPLDisplay: toNum(totalPLDisplay),
     performancePct: toNum(performancePct, 4),
     type: inv.type,
+    planId: inv.planId,
   };
 }
 
@@ -246,6 +251,7 @@ export function aggregateBySymbol(
         ticker: inv.ticker ?? null,
         type: inv.type,
         positions: 0,
+        planId: inv.type === 'ETF' ? (inv.planId ?? null) : null,
 
         buyQty: 0,
         availableQty: 0,
@@ -271,6 +277,11 @@ export function aggregateBySymbol(
 
     const a = byKey.get(key)!;
     a.positions += 1;
+    // If multiple manual ETFs get merged, only keep a planId if they all agree.
+    if (inv.type === 'ETF') {
+      if (a.planId == null) a.planId = inv.planId ?? null;
+      else if (a.planId !== (inv.planId ?? null)) a.planId = null;
+    }
     a.buyQty += metrics.buyQty;
     a.availableQty += metrics.availableQty;
 
@@ -544,7 +555,3 @@ export function aggregateByType(
 
     return { rows, totals: finalTotals, taxSummary };
 }
-
-    
-
-    
