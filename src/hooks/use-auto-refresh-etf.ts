@@ -8,7 +8,7 @@ import { refreshEtfHistoryForMonth } from '@/app/actions/etf';
 type UseAutoRefreshEtfOpts = {
   userId?: string | null;
   recheckOnFocus?: boolean;
-  useUTC?: boolean;         // default true
+  useUTC?: boolean; // month boundary in UTC (recommended)
 };
 
 const dbg = (...a: any[]) => { if (process.env.NODE_ENV !== 'production') console.log('[etf-auto]', ...a); };
@@ -26,7 +26,7 @@ export function useAutoRefreshEtfHistory({ userId, recheckOnFocus = true, useUTC
   useEffect(() => {
     if (!userId) return;
 
-    // DEV helper: add ?etfForce to the URL to force a run now
+    // DEV: force a run via ?etfForce in the URL
     const devForce = typeof window !== 'undefined' && new URLSearchParams(window.location.search).has('etfForce');
 
     const attempt = async (reason: 'mount' | 'focus') => {
@@ -39,14 +39,13 @@ export function useAutoRefreshEtfHistory({ userId, recheckOnFocus = true, useUTC
       toast({ title: 'Refreshing ETF history…', description: 'Caching monthly series in background.' });
       dbg('start', { reason, devForce });
 
-      const res = await refreshEtfHistoryForMonth(userId, devForce ? { forced: true } : undefined);
+      const res = await refreshEtfHistoryForMonth(userId!, devForce ? { forced: true } : undefined);
 
       if (res.success) {
         toast({ title: 'ETF history updated', description: `${res.updatedCount ?? 0} series refreshed.` });
         dbg('success', res);
       } else if (res.skippedReason === 'not_due' || res.skippedReason === 'rate_limited') {
         dbg('skipped', res);
-        // keep quiet – it’s expected most days
       } else {
         toast({ title: 'ETF history refresh failed', description: res.message, variant: 'destructive' });
         dbg('error', res);
