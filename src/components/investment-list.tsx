@@ -200,7 +200,7 @@ export default function InvestmentListView({
         <div>No matching assets for this view.</div>
         {activeTypeFilter === 'ETF' && (
           <div className="mt-3">
-            <EtfPlansButton variant="outline" />
+            <EtfPlansButton />
           </div>
         )}
       </div>
