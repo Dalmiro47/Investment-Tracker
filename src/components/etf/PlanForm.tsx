@@ -141,7 +141,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
       title: "",
       startDate: new Date(),
       monthContribution: 100,
-      feePct: 0,
+      feePct: undefined,
       rebalanceOnContribution: false,
       contributionSteps: [],
       components: [
@@ -182,7 +182,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
             title: "",
             startDate: new Date(),
             monthContribution: 100,
-            feePct: 0,
+            feePct: undefined,
             rebalanceOnContribution: false,
             contributionSteps: [],
             components: [
@@ -250,7 +250,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                 <FormLabel>Fee per Contribution (%)</FormLabel>
                 <FormControl>
                   <NumericInput
-                    value={(field.value ?? 0) * 100}
+                    value={field.value == null ? null : field.value * 100}
                     onCommit={(n) => field.onChange(n != null ? n / 100 : undefined)}
                     placeholder="e.g., 0.1 for 0.1%"
                   />
@@ -319,7 +319,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
             </div>
              <Button
                 type="button" variant="outline" size="sm"
-                onClick={() => appendStep({ month: "", amount: 0 })}
+                onClick={() => appendStep({ month: "", amount: undefined as any })}
             >
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Step-up
             </Button>

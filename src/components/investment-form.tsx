@@ -94,6 +94,14 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
               };
 
         form.reset(valuesToReset);
+        
+        // If creating a new (non-Interest Account) investment, clear numeric fields
+        const addingNew = !investment;
+        const type = (valuesToReset.type ?? initialType);
+        if (addingNew && type !== 'Interest Account') {
+            form.setValue('purchaseQuantity', undefined as any, { shouldDirty: false });
+            form.setValue('purchasePricePerUnit', undefined as any, { shouldDirty: false });
+        }
     }
   }, [investment, form, isOpen, initialType]);
 
