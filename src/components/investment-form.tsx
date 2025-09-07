@@ -29,10 +29,11 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Investment, InvestmentFormValues, investmentSchema, InvestmentType } from "@/lib/types"
-import { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { Checkbox } from "./ui/checkbox"
 import { Label } from "./ui/label"
 import AppDatePicker from '@/components/ui/app-date-picker';
+import { NumericInput } from "./ui/numeric-input"
 
 
 interface InvestmentFormProps {
@@ -51,8 +52,8 @@ const defaultFormValues: InvestmentFormValues = {
   name: "",
   type: "Stock",
   purchaseDate: new Date(),
-  purchaseQuantity: 0,
-  purchasePricePerUnit: 0,
+  purchaseQuantity: undefined as any,
+  purchasePricePerUnit: undefined as any,
   ticker: "",
   stakingOrLending: false,
 };
@@ -64,8 +65,8 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
     defaultValues: defaultFormValues,
   })
 
-  const [startingBalance, setStartingBalance] = useState<number>(0);
-  const [initialRatePct, setInitialRatePct] = useState<number>(2);
+  const [startingBalance, setStartingBalance] = useState<number | null>(null);
+  const [initialRatePct, setInitialRatePct] = useState<number | null>(null);
   
   const watchedType = useWatch({
     control: form.control,
@@ -77,8 +78,8 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
 
   useEffect(() => {
     if (isOpen) {
-        setStartingBalance(0);
-        setInitialRatePct(2);
+        setStartingBalance(null);
+        setInitialRatePct(null);
         const valuesToReset = investment 
             ? {
                 ...investment,
@@ -93,6 +94,14 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
               };
 
         form.reset(valuesToReset);
+        
+        // If creating a new (non-Interest Account) investment, clear numeric fields
+        const addingNew = !investment;
+        const type = (valuesToReset.type ?? initialType);
+        if (addingNew && type !== 'Interest Account') {
+            form.setValue('purchaseQuantity', undefined as any, { shouldDirty: false });
+            form.setValue('purchasePricePerUnit', undefined as any, { shouldDirty: false });
+        }
     }
   }, [investment, form, isOpen, initialType]);
 
@@ -104,8 +113,8 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
       await Promise.resolve(
         onSubmit(
           values,
-          !isEditing && isIA ? startingBalance : undefined,
-          !isEditing && isIA ? initialRatePct : undefined
+          !isEditing && isIA ? (startingBalance ?? 0) : undefined,
+          !isEditing && isIA ? (initialRatePct ?? 0) : undefined
         )
       );
   };
@@ -206,25 +215,23 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
              <>
                {!isEditing && (
                   <>
-                    <div className="md:col-span-1">
+                    <div className="md:col-span-1 space-y-2">
                         <FormLabel>Starting Balance (optional)</FormLabel>
-                        <Input
-                            type="number"
-                            step="any"
-                            value={startingBalance}
-                            onChange={(e) => setStartingBalance(parseFloat(e.target.value) || 0)}
-                            placeholder="e.g. 3,000.00"
+                        <NumericInput
+                          value={startingBalance}
+                          onCommit={(n) => setStartingBalance(n ?? 0)}
+                          placeholder="e.g. 3,000.00"
+                          allowDecimal
                         />
                         <FormDescription>Recorded as a Deposit on the opening date.</FormDescription>
                     </div>
-                    <div className="md:col-span-1">
+                    <div className="md:col-span-1 space-y-2">
                         <FormLabel>Initial Interest Rate (%)</FormLabel>
-                        <Input
-                            type="number"
-                            step="0.01"
-                            value={initialRatePct}
-                            onChange={(e) => setInitialRatePct(parseFloat(e.target.value) || 0)}
-                            placeholder="e.g. 3.5"
+                         <NumericInput
+                          value={initialRatePct}
+                          onCommit={(n) => setInitialRatePct(n ?? 0)}
+                          placeholder="e.g. 3.5"
+                          allowDecimal
                         />
                         <FormDescription>Annual rate from your bank.</FormDescription>
                     </div>
@@ -234,34 +241,42 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
             ) : (
              <>
                 <FormField
-                control={form.control}
-                name="purchaseQuantity"
-                render={({ field }) => (
+                  control={form.control}
+                  name="purchaseQuantity"
+                  render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Purchase Quantity</FormLabel>
-                    <FormControl>
-                        <Input type="number" step="any" placeholder="e.g. 0.12" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
-                    </FormControl>
-                    <FormDescription>
-                        This is a one-time entry. Sells are added later.
-                    </FormDescription>
-                    <FormMessage />
+                      <FormLabel>Purchase Quantity</FormLabel>
+                      <FormControl>
+                        <NumericInput
+                          value={field.value as number | null | undefined}
+                          onCommit={(n) => field.onChange(n ?? undefined)}
+                          placeholder="e.g. 0.12"
+                          allowDecimal={true}
+                        />
+                      </FormControl>
+                      <FormDescription>This is a one-time entry. Sells are added later.</FormDescription>
+                      <FormMessage />
                     </FormItem>
-                )}
+                  )}
                 />
                 
                 <FormField
-                control={form.control}
-                name="purchasePricePerUnit"
-                render={({ field }) => (
+                  control={form.control}
+                  name="purchasePricePerUnit"
+                  render={({ field }) => (
                     <FormItem className={watchedType === 'Crypto' ? '' : 'md:col-span-2'}>
-                    <FormLabel>Purchase Price (per unit)</FormLabel>
-                    <FormControl>
-                        <Input type="number" step="any" placeholder="e.g. 150.50" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
-                    </FormControl>
-                    <FormMessage />
+                      <FormLabel>Purchase Price (per unit)</FormLabel>
+                      <FormControl>
+                        <NumericInput
+                          value={field.value as number | null | undefined}
+                          onCommit={(n) => field.onChange(n ?? undefined)}
+                          placeholder="e.g. 150.50"
+                          allowDecimal={true}
+                        />
+                      </FormControl>
+                      <FormMessage />
                     </FormItem>
-                )}
+                  )}
                 />
             </>
             )}
