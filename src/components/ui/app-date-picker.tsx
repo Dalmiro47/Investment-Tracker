@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -177,6 +178,7 @@ export function AppDatePicker({
         disabled={disabled}
         minDate={minDate}
         maxDate={maxDate}
+        portalId="app-datepicker-portal"
         showPopperArrow={false}
         popperPlacement="bottom-start"
         renderCustomHeader={({
