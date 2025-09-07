@@ -144,7 +144,26 @@ export function AppDatePicker({
       <DatePicker
         selected={value ?? null}
         onChange={(d) => onChange(d ? toLocalStartOfDay(d as Date) : null)}
-        // Parse whatever the user typed when they leave the field or press Enter
+        // ⬇️ Mask: keep digits only, auto-insert slashes, keep caret
+        onChangeRaw={(e) => {
+            const input = e.target as HTMLInputElement;
+            let digits = input.value.replace(/\D/g, '').slice(0, 8); // ddmmyyyy (max 8)
+
+            let out = '';
+            if (digits.length <= 2) out = digits;
+            else if (digits.length <= 4) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
+            else out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+
+            input.value = out;
+
+            // place caret at the logical position after formatting
+            const caret =
+            digits.length <= 2 ? digits.length :
+            digits.length <= 4 ? digits.length + 1 :
+            Math.min(out.length, digits.length + 2);
+
+            requestAnimationFrame(() => input.setSelectionRange(caret, caret));
+        }}
         onBlur={(e) => commitFromInputEl(e.target as HTMLInputElement)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {

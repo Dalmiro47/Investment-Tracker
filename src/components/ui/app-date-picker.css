@@ -34,54 +34,58 @@
 }
 
 /* react-datepicker theming */
-.react-datepicker-popper { 
-  z-index: 60 !important; 
-}
+/* keep picker above dialogs */
+.react-datepicker-popper { z-index: 60 !important; }
 
+/* panel */
 .react-datepicker {
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
   color: hsl(var(--foreground));
   border-radius: .5rem;
-  box-shadow: var(--shadow, 0 10px 24px rgba(0,0,0,.25));
+  box-shadow: 0 10px 24px rgba(0,0,0,.25);
   overflow: hidden;
 }
 
+/* header */
 .react-datepicker__header {
   background: hsl(var(--card));
   border-bottom: 1px solid hsl(var(--border));
+  padding-top: .5rem;
 }
 
-.react-datepicker__current-month,
-.react-datepicker__day-name {
-  color: hsl(var(--muted-foreground));
-}
-
-.react-datepicker__day {
+/* month/year dropdowns */
+.react-datepicker__month-select,
+.react-datepicker__year-select {
+  background: hsl(var(--card));
   color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+  border-radius: .375rem;
+  padding: 2px 6px;
 }
 
+/* day grid */
+.react-datepicker__day-name { color: hsl(var(--muted-foreground)); }
+.react-datepicker__day { color: hsl(var(--foreground)); }
+.react-datepicker__day:hover { background: hsl(var(--muted)); }
+.react-datepicker__day--outside-month,
+.react-datepicker__day--disabled {
+  color: hsl(var(--muted-foreground));
+  opacity: .6;
+}
+
+/* selected/keyboard-selected */
 .react-datepicker__day--selected,
 .react-datepicker__day--keyboard-selected,
 .react-datepicker__month-text--selected,
 .react-datepicker__year-text--selected {
-  background-color: hsl(var(--primary));
+  background: hsl(var(--primary));
   color: hsl(var(--primary-foreground));
 }
 
-.react-datepicker__day:hover {
-  background: hsl(var(--muted));
-}
-
+/* nav arrows */
 .react-datepicker__navigation-icon::before {
   border-color: hsl(var(--muted-foreground));
-}
-
-.react-datepicker__month-dropdown,
-.react-datepicker__year-dropdown {
-  background: hsl(var(--popover));
-  color: hsl(var(--foreground));
-  border: 1px solid hsl(var(--border));
 }
 
 .app-date-container {
@@ -90,7 +94,7 @@
 
 .app-date-footer {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: .5rem;
   padding: .5rem .75rem .75rem;
   border-top: 1px solid hsl(var(--border));
