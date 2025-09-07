@@ -2,7 +2,7 @@
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useForm, useWatch } from "react-hook-form"
+import { Controller, useForm, useWatch } from "react-hook-form"
 import { Button } from "@/components/ui/button"
 import {
   Form,
@@ -28,15 +28,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
-import { Calendar } from "@/components/ui/calendar"
 import { Investment, InvestmentFormValues, investmentSchema, InvestmentType } from "@/lib/types"
 import { useEffect, useState } from "react"
-import { cn } from "@/lib/utils"
-import { CalendarIcon } from "lucide-react"
-import { format } from "date-fns"
 import { Checkbox } from "./ui/checkbox"
 import { Label } from "./ui/label"
+import AppDatePicker from '@/components/ui/app-date-picker';
+
 
 interface InvestmentFormProps {
   isOpen: boolean;
@@ -67,7 +64,6 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
     defaultValues: defaultFormValues,
   })
 
-  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
   const [startingBalance, setStartingBalance] = useState<number>(0);
   const [initialRatePct, setInitialRatePct] = useState<number>(2);
   
@@ -189,50 +185,24 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                 />
             ) : <div />}
 
-             <FormField
-              control={form.control}
-              name="purchaseDate"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>{isIA ? "Opening Date" : "Purchase Date"}</FormLabel>
-                   <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-                    <PopoverTrigger asChild>
-                      <FormControl>
-                        <Button
-                          variant={"outline"}
-                          className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                          )}
-                        >
-                          {field.value ? (
-                            format(field.value, "PPP")
-                          ) : (
-                            <span>Pick a date</span>
-                          )}
-                          <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                      </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={(date) => {
-                            if (date) field.onChange(date);
-                            setIsCalendarOpen(false);
-                        }}
-                        disabled={(date) =>
-                          date > new Date() || date < new Date("1900-01-01")
-                        }
-                        initialFocus
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            <FormItem>
+              <FormLabel>{isIA ? "Opening Date" : "Purchase Date"}</FormLabel>
+              <Controller
+                control={form.control}
+                name="purchaseDate"
+                render={({ field }) => (
+                  <AppDatePicker
+                    value={field.value ?? null}
+                    onChange={(d) => field.onChange(d)}
+                    placeholder="dd/mm/yyyy"
+                    clearable
+                    showToday
+                    maxDate={new Date()}
+                  />
+                )}
+              />
+              <FormMessage />
+            </FormItem>
 
             {isIA ? (
              <>

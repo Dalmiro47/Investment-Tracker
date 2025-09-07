@@ -8,7 +8,7 @@ import { getTransactions, addTransaction, deleteTransaction, updateTransaction }
 import type { Investment, Transaction, TransactionFormValues } from "@/lib/types";
 import { availableQty } from "@/lib/types";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm, useWatch } from "react-hook-form";
+import { useForm, useWatch, Controller } from "react-hook-form";
 import { transactionSchema } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,12 +52,11 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { CalendarIcon, PlusCircle, Loader2, MoreVertical, Edit, Trash2 } from "lucide-react";
+import { PlusCircle, Loader2, MoreVertical, Edit, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
+import AppDatePicker from "./ui/app-date-picker";
 
 // --- TransactionForm ---
 interface TransactionFormProps {
@@ -116,7 +115,6 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
     }, [editingTransaction, typeOptions, investment, form]);
 
 
-    const [isCalendarOpen, setIsCalendarOpen] = useState(false);
     const watchedType = useWatch({ control: form.control, name: "type" });
 
 
@@ -160,37 +158,23 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                             </FormItem>
                         )}
                     />
-                    <FormField
-                        control={form.control}
-                        name="date"
-                        render={({ field }) => (
-                            <FormItem>
-                                <FormLabel>Date</FormLabel>
-                                <Popover open={isCalendarOpen} onOpenChange={setIsCalendarOpen}>
-                                    <PopoverTrigger asChild>
-                                        <FormControl>
-                                            <Button variant="outline" className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}>
-                                                {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                                            </Button>
-                                        </FormControl>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="start">
-                                        <Calendar
-                                            mode="single"
-                                            selected={field.value}
-                                            onSelect={(date) => {
-                                                if (date) field.onChange(date);
-                                                setIsCalendarOpen(false);
-                                            }}
-                                            disabled={(date) => date > new Date() || date < new Date("1900-01-01")}
-                                            initialFocus
-                                        />
-                                    </PopoverContent>
-                                </Popover>
-                            </FormItem>
-                        )}
-                    />
+                     <FormItem>
+                        <FormLabel>Date</FormLabel>
+                         <Controller
+                            control={form.control}
+                            name="date"
+                            render={({ field }) => (
+                                <AppDatePicker
+                                value={field.value ?? null}
+                                onChange={field.onChange}
+                                placeholder="dd/mm/yyyy"
+                                clearable
+                                showToday
+                                maxDate={new Date()}
+                                />
+                            )}
+                        />
+                     </FormItem>
                 </div>
 
                 {watchedType === 'Sell' && (

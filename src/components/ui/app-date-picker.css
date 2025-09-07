@@ -1,0 +1,111 @@
+
+/* Uses your CSS variables so it automatically matches the app theme */
+
+.app-date-input-wrap {
+  width: 100%;
+}
+
+.app-date-input {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: .5rem;
+  width: 100%;
+  background: hsl(var(--background));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--foreground));
+  border-radius: .5rem;
+  padding: .5rem .75rem;
+}
+
+.app-date-input-field {
+  background: transparent;
+  color: inherit;
+  outline: none;
+  border: none;
+  width: 100%;
+  font-size: .9rem;
+}
+
+.app-date-icon {
+  width: 1rem;
+  height: 1rem;
+  color: hsl(var(--muted-foreground));
+}
+
+/* react-datepicker theming */
+.react-datepicker {
+  background: hsl(var(--popover));
+  border: 1px solid hsl(var(--border));
+  color: hsl(var(--popover-foreground));
+  border-radius: .5rem;
+  box-shadow: var(--shadow, 0 10px 24px rgba(0,0,0,.25));
+  overflow: hidden;
+}
+
+.react-datepicker__header {
+  background: hsl(var(--popover));
+  border-bottom: 1px solid hsl(var(--border));
+}
+
+.react-datepicker__current-month,
+.react-datepicker__day-name {
+  color: hsl(var(--muted-foreground));
+}
+
+.react-datepicker__day {
+  color: hsl(var(--foreground));
+}
+
+.react-datepicker__day--selected,
+.react-datepicker__month-text--selected,
+.react-datepicker__year-text--selected,
+.react-datepicker__day--keyboard-selected {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
+}
+
+.react-datepicker__day:hover {
+  background: hsl(var(--muted));
+}
+
+.react-datepicker__navigation-icon::before {
+  border-color: hsl(var(--muted-foreground));
+}
+
+.react-datepicker__month-dropdown,
+.react-datepicker__year-dropdown {
+  background: hsl(var(--popover));
+  color: hsl(var(--foreground));
+  border: 1px solid hsl(var(--border));
+}
+
+.app-date-container {
+  position: relative;
+}
+
+.app-date-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: .5rem;
+  padding: .5rem .75rem .75rem;
+  border-top: 1px solid hsl(var(--border));
+  background: hsl(var(--popover));
+}
+
+.app-date-footer-btn {
+  font-size: .825rem;
+  padding: .25rem .5rem;
+  border-radius: .375rem;
+  color: hsl(var(--foreground));
+  background: hsl(var(--muted));
+}
+
+.app-date-footer-btn:hover {
+  background: hsl(var(--muted)/.8);
+}
+
+.app-date-clear {
+  color: hsl(var(--destructive-foreground));
+  background: hsl(var(--destructive));
+}

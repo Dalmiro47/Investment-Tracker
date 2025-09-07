@@ -22,15 +22,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { CalendarIcon, PlusCircle, Trash2 } from "lucide-react";
-import { format, parseISO } from "date-fns";
-import type { ETFPlan, ETFComponent, ContributionStep } from "@/lib/types.etf";
+import { PlusCircle, Trash2 } from "lucide-react";
+import type { ETFPlan, ETFComponent } from "@/lib/types.etf";
 import React, { useEffect, useMemo } from "react";
+import AppDatePicker from "../ui/app-date-picker";
+import { parseISO } from 'date-fns';
 
 function PercentInput({
   value,            // 0..1 | null
@@ -207,32 +206,24 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
               </FormItem>
             )}
           />
-           <FormField
-            control={form.control}
-            name="startDate"
-            render={({ field }) => (
-              <FormItem className="flex flex-col">
-                <FormLabel>Start Date</FormLabel>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <FormControl>
-                      <Button
-                        variant={"outline"}
-                        className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}
-                      >
-                        {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                      </Button>
-                    </FormControl>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar mode="single" selected={field.value} onSelect={field.onChange} disabled={(date) => date > new Date()} initialFocus />
-                  </PopoverContent>
-                </Popover>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
+           <FormItem className="flex flex-col">
+              <FormLabel>Start Date</FormLabel>
+               <Controller
+                control={form.control}
+                name="startDate"
+                render={({ field }) => (
+                  <AppDatePicker
+                    value={field.value ?? null}
+                    onChange={field.onChange}
+                    placeholder="dd/mm/yyyy"
+                    clearable
+                    showToday
+                    maxDate={new Date()}
+                  />
+                )}
+              />
+              <FormMessage />
+            </FormItem>
           <FormField
             control={form.control}
             name="monthContribution"
