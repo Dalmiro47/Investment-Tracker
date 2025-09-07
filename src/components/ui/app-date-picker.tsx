@@ -161,6 +161,7 @@ export function AppDatePicker({
             commitFromInputEl(e.target as HTMLInputElement);
           }
         }}
+        withPortal
         portalId="app-datepicker-portal"
         shouldCloseOnSelect
         customInput={<DateTextInput />}
