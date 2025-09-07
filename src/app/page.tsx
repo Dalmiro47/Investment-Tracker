@@ -395,6 +395,9 @@ export default function DashboardPage() {
     return null; // AuthProvider handles redirects
   }
 
+  const canToggleTaxReport = yearFilter.kind === 'year';
+  const selectedYear = canToggleTaxReport ? yearFilter.year : null;
+
   return (
     <>
       <div className="min-h-screen w-full bg-background">
@@ -402,6 +405,9 @@ export default function DashboardPage() {
             isTaxView={isTaxView} 
             onTaxViewChange={setIsTaxView}
             onTaxSettingsClick={() => setIsTaxSettingsOpen(true)}
+            canToggleTaxReport={canToggleTaxReport}
+            selectedYear={selectedYear}
+            onViewTaxEstimate={() => setIsTaxView(true)}
         />
         <main className="p-4 sm:p-6 lg:p-8">
           <PortfolioSummary 

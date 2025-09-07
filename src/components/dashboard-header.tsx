@@ -1,6 +1,7 @@
 
 "use client";
 
+import React from 'react';
 import Link from 'next/link';
 import { CircleDollarSign, LayoutGrid, LogOut, User, Settings } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -9,14 +10,31 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem,
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useAuth } from '@/hooks/use-auth';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
+
 
 interface DashboardHeaderProps {
   isTaxView: boolean;
   onTaxViewChange: (checked: boolean) => void;
   onTaxSettingsClick: () => void;
+  canToggleTaxReport?: boolean;
+  selectedYear?: number | null;
+  onViewTaxEstimate?: () => void;
 }
 
-export default function DashboardHeader({ isTaxView, onTaxViewChange, onTaxSettingsClick }: DashboardHeaderProps) {
+export default function DashboardHeader({ 
+  isTaxView, 
+  onTaxViewChange, 
+  onTaxSettingsClick,
+  canToggleTaxReport = false,
+  selectedYear = null,
+  onViewTaxEstimate,
+}: DashboardHeaderProps) {
   const { user, signOut } = useAuth();
   
   const getInitials = (name: string | null | undefined) => {
@@ -27,6 +45,10 @@ export default function DashboardHeader({ isTaxView, onTaxViewChange, onTaxSetti
     }
     return name.substring(0, 2);
   };
+  
+  const disabled = !canToggleTaxReport;
+  const estimateLabel = selectedYear != null ? `View Tax Estimate for ${selectedYear}` : 'View Tax Estimate';
+
 
   return (
     <header className="sticky top-0 z-40 w-full border-b bg-card">
@@ -36,21 +58,62 @@ export default function DashboardHeader({ isTaxView, onTaxViewChange, onTaxSetti
           <span className="font-headline text-xl font-bold tracking-tight">DDS Investment Tracker</span>
         </Link>
         <div className="flex flex-1 items-center justify-center space-x-4">
-          <div className="flex items-center space-x-2">
-            <Label htmlFor="tax-mode" className="font-medium">German Tax Report</Label>
-            <Switch
-              id="tax-mode"
-              checked={isTaxView}
-              onCheckedChange={onTaxViewChange}
-              aria-label="Toggle tax report view"
-            />
-          </div>
-          {isTaxView && (
-            <Button variant="outline" size="sm" onClick={onTaxSettingsClick}>
+          
+           <Button variant="outline" size="sm" onClick={onTaxSettingsClick}>
               <Settings className="mr-2 h-4 w-4" />
               Tax Settings
             </Button>
-          )}
+            
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                {/* span wrapper lets tooltip work even when Button is disabled */}
+                <span>
+                  <Button
+                    onClick={() => (onViewTaxEstimate ? onViewTaxEstimate() : onTaxViewChange(true))}
+                    disabled={disabled}
+                    aria-disabled={disabled}
+                    aria-describedby={disabled ? 'tax-report-disabled' : undefined}
+                    size="sm"
+                  >
+                    {estimateLabel}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {disabled && (
+                <TooltipContent>
+                  Select a year to build the German Tax Report.
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center space-x-2">
+                   <Label htmlFor="tax-mode" className={cn("font-medium", disabled && "text-muted-foreground/50")}>German Tax Report</Label>
+                    <Switch
+                      id="tax-mode"
+                      checked={isTaxView}
+                      onCheckedChange={onTaxViewChange}
+                      disabled={disabled}
+                      aria-disabled={disabled}
+                      aria-describedby={disabled ? 'tax-report-disabled' : undefined}
+                    />
+                </div>
+              </TooltipTrigger>
+              {disabled && (
+                <TooltipContent>
+                  Select a year to build the German Tax Report.
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+           {/* a11y announcement for screen readers */}
+          <span id="tax-report-disabled" className="sr-only">
+            German Tax Report controls are disabled. Select a year to enable.
+          </span>
         </div>
         <div className="flex items-center space-x-4">
           <DropdownMenu>
