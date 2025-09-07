@@ -29,10 +29,84 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Investment, InvestmentFormValues, investmentSchema, InvestmentType } from "@/lib/types"
-import { useEffect, useState } from "react"
+import React, { useEffect, useState } from "react"
 import { Checkbox } from "./ui/checkbox"
 import { Label } from "./ui/label"
 import AppDatePicker from '@/components/ui/app-date-picker';
+
+// --- Numeric input that plays nicely with RHF and users typing ---
+function NumericInput({
+  value,
+  onCommit,
+  placeholder,
+  allowDecimal = true,
+}: {
+  value: number | null | undefined;
+  onCommit: (n: number | null) => void;
+  placeholder?: string;
+  allowDecimal?: boolean;
+}) {
+  const [s, setS] = React.useState<string>(value != null ? String(value) : "");
+
+  // sync when form resets or when editing an existing investment
+  React.useEffect(() => {
+    setS(value != null ? String(value) : "");
+  }, [value]);
+
+  const sanitize = (raw: string) => {
+    // convert comma to dot and strip invalid chars
+    let v = raw.replace(",", ".").replace(/[^\d.]/g, "");
+    if (!allowDecimal) v = v.replace(/\./g, "");
+
+    // keep only the first dot
+    const i = v.indexOf(".");
+    if (i !== -1) v = v.slice(0, i + 1) + v.slice(i + 1).replace(/\./g, "");
+
+    // remove leading zeros unless "0." pattern
+    if (v.startsWith("0") && v.length > 1 && v[1] !== ".") {
+      v = v.replace(/^0+/, "");
+    }
+
+    return v;
+  };
+
+  const commit = () => {
+    const t = s.trim();
+    if (!t) {
+      onCommit(null);        // let RHF hold "empty" until user fills it
+      return;
+    }
+    const n = Number(t);
+    if (Number.isNaN(n)) {
+      // revert to controlled value
+      setS(value != null ? String(value) : "");
+      return;
+    }
+    const clamped = Math.max(0, n);
+    setS(String(clamped));
+    onCommit(clamped);
+  };
+
+  return (
+    <Input
+      placeholder={placeholder}
+      value={s}
+      onChange={(e) => setS(sanitize(e.target.value))}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        // block neg/exponent keys in number inputs
+        if (["e", "E", "+", "-"].includes(e.key)) e.preventDefault();
+        if (e.key === "Enter") {
+          e.preventDefault();
+          commit();
+        }
+      }}
+      inputMode={allowDecimal ? "decimal" : "numeric"}
+      min={0}
+      step={allowDecimal ? "any" : 1}
+    />
+  );
+}
 
 
 interface InvestmentFormProps {
@@ -234,34 +308,42 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
             ) : (
              <>
                 <FormField
-                control={form.control}
-                name="purchaseQuantity"
-                render={({ field }) => (
+                  control={form.control}
+                  name="purchaseQuantity"
+                  render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Purchase Quantity</FormLabel>
-                    <FormControl>
-                        <Input type="number" step="any" placeholder="e.g. 0.12" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
-                    </FormControl>
-                    <FormDescription>
-                        This is a one-time entry. Sells are added later.
-                    </FormDescription>
-                    <FormMessage />
+                      <FormLabel>Purchase Quantity</FormLabel>
+                      <FormControl>
+                        <NumericInput
+                          value={field.value as number | null | undefined}
+                          onCommit={(n) => field.onChange(n ?? undefined)}
+                          placeholder="e.g. 0.12"
+                          allowDecimal={true}
+                        />
+                      </FormControl>
+                      <FormDescription>This is a one-time entry. Sells are added later.</FormDescription>
+                      <FormMessage />
                     </FormItem>
-                )}
+                  )}
                 />
                 
                 <FormField
-                control={form.control}
-                name="purchasePricePerUnit"
-                render={({ field }) => (
+                  control={form.control}
+                  name="purchasePricePerUnit"
+                  render={({ field }) => (
                     <FormItem className={watchedType === 'Crypto' ? '' : 'md:col-span-2'}>
-                    <FormLabel>Purchase Price (per unit)</FormLabel>
-                    <FormControl>
-                        <Input type="number" step="any" placeholder="e.g. 150.50" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
-                    </FormControl>
-                    <FormMessage />
+                      <FormLabel>Purchase Price (per unit)</FormLabel>
+                      <FormControl>
+                        <NumericInput
+                          value={field.value as number | null | undefined}
+                          onCommit={(n) => field.onChange(n ?? undefined)}
+                          placeholder="e.g. 150.50"
+                          allowDecimal={true}
+                        />
+                      </FormControl>
+                      <FormMessage />
                     </FormItem>
-                )}
+                  )}
                 />
             </>
             )}
