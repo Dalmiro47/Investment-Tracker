@@ -1,3 +1,4 @@
+
 'use client';
 
 import Link from 'next/link';
@@ -16,7 +17,7 @@ type Props = {
 export function EtfSimLink({ planId, symbol, className, showSummary = true }: Props) {
   const { data, loading } = useEtfSimCache(planId);
 
-  const href = `/etf/${encodeURIComponent(planId)}`;
+  const href = `/etf/${encodeURIComponent(planId)}${symbol ? `?symbol=${encodeURIComponent(symbol)}` : ''}`;
 
   const chip = (label: string, tone: 'primary' | 'muted' = 'primary') => (
     <span
