@@ -5,8 +5,7 @@ import type { Investment } from '@/lib/types';
 import axios from 'axios';
 import { dec, sub, EPS } from '@/lib/money';
 import { adminDb } from '@/lib/firebase-admin';
-import { serverTimestamp, Timestamp } from 'firebase-admin/firestore';
-import { getAuth } from 'firebase-admin/auth';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
 
 interface UpdateResult {
@@ -14,6 +13,8 @@ interface UpdateResult {
   message: string;
   updatedInvestments: Investment[];
   failedInvestmentNames?: string[];
+  skippedReason?: 'rate_limited';
+  nextAllowedAt?: string;
 }
 
 const SERVER_DEBOUNCE_MS = 10 * 60 * 1000; // 10 minutes
@@ -230,14 +231,16 @@ export async function refreshInvestmentPrices(
         return {
           success: false,
           updatedInvestments: [],
-          message: `rate_limited: Try again after ${new Date(lastRefreshAt + SERVER_DEBOUNCE_MS).toLocaleString()}`,
+          message: 'rate_limited',
+          skippedReason: 'rate_limited',
+          nextAllowedAt: new Date(lastRefreshAt + SERVER_DEBOUNCE_MS).toISOString(),
         };
       }
     }
   }
 
   try {
-    await metaRef.set({ lastRefreshAt: serverTimestamp() }, { merge: true });
+    await metaRef.set({ lastRefreshAt: FieldValue.serverTimestamp() }, { merge: true });
 
     const { updatedInvestments, failedInvestmentNames } = await doPriceRefresh(currentInvestments);
 
@@ -252,7 +255,7 @@ export async function refreshInvestmentPrices(
     }
 
     await metaRef.set(
-        { lastRefreshCompletedAt: serverTimestamp(), updatedCount, failedCount },
+        { lastRefreshCompletedAt: FieldValue.serverTimestamp(), updatedCount, failedCount },
         { merge: true }
     );
 

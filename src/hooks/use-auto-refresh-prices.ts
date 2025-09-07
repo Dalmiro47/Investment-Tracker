@@ -48,10 +48,19 @@ export function useAutoRefreshPrices({
         
         const res = await refreshInvestmentPrices(investments, { userId: userId });
         
-        if (res?.success === false && res.message.includes('rate_limited')) {
-            // Note: server now returns success:false for rate limit, so we check message
-            // This part might need adjustment based on final server action response shape
-        } else if (res.success) {
+        if (res?.skippedReason === 'rate_limited') {
+            if (!toastSilent) {
+                toast({
+                    title: 'Recently refreshed',
+                    description: res.nextAllowedAt
+                        ? `Next auto-refresh after ${new Date(res.nextAllowedAt).toLocaleString()}`
+                        : 'Please try again later.',
+                });
+            }
+            return;
+        }
+
+        if (res.success) {
             localStorage.setItem(LAST_KEY, String(Date.now()));
             if (!toastSilent) {
                 toast({

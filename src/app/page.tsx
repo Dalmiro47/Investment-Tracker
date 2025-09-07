@@ -159,6 +159,18 @@ export default function DashboardPage() {
 
     const result = await refreshInvestmentPrices(investments, { userId: user.uid, forced: true });
 
+    if (result.skippedReason === 'rate_limited') {
+        toast({
+            title: 'Recently refreshed',
+            description: result.nextAllowedAt
+                ? `Try again after ${new Date(result.nextAllowedAt).toLocaleString()}`
+                : 'Please try again later.',
+        });
+        setIsRefreshing(false);
+        return;
+    }
+
+
     if (result.success) {
       await fetchAllData(user.uid);
     }
@@ -193,22 +205,17 @@ export default function DashboardPage() {
 
   const typeCounts = React.useMemo(() => {
     const counts: Record<InvestmentType | 'All', number> = {
-      All: 0,
-      Stock: 0,
-      Crypto: 0,
-      ETF: 0,
-      'Interest Account': 0,
-      Bond: 0,
-      'Real Estate': 0,
+        'All': 0, 'Stock': 0, 'Crypto': 0, 'ETF': 0,
+        'Interest Account': 0, 'Bond': 0, 'Real Estate': 0,
     };
-  
-    investmentsYearScoped.forEach((inv) => {
-      if (counts[inv.type] !== undefined) {
-        counts[inv.type] += 1;
-        counts.All += 1;
-      }
+    
+    investmentsYearScoped.forEach(inv => {
+        if (counts[inv.type] !== undefined) {
+            counts[inv.type]++;
+            counts.All++;
+        }
     });
-  
+
     return counts;
   }, [investmentsYearScoped]);
 
