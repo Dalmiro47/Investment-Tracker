@@ -1,8 +1,11 @@
 'use server';
 
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
-import { getEtfPlans, getEtfPlan } from '@/lib/firestore.etfPlan'; 
+import { getEtfPlans, getEtfPlan } from '@/lib/firestore.etfPlan';
 
 type EtfHistoryResult = {
   success: boolean;
@@ -22,7 +25,6 @@ async function doRefreshEtfHistory(userId: string): Promise<number> {
   const plans = await getEtfPlans(userId);
   if (!plans.length) return 0;
 
-  // earliest plan start defines history lower bound
   const sinceISO = plans.map(p => p.startDate).sort()[0];
 
   let totalUpdated = 0;
@@ -30,9 +32,8 @@ async function doRefreshEtfHistory(userId: string): Promise<number> {
     const plan = await getEtfPlan(userId, p.id);
     if (!plan || !plan.components?.length) continue;
 
-    // call your existing per-plan historical refresher
-    const since = sinceISO; // (you can normalize to startOfMonth on the inside)
-    const res = await (await import('./prices')).refreshEtfPlanPrices(userId, plan.id, plan.components, since);
+    const res = await (await import('./prices'))
+      .refreshEtfPlanPrices(userId, plan.id, plan.components, sinceISO);
     if (res?.ok) totalUpdated += plan.components.length;
   }
   return totalUpdated;
