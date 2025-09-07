@@ -525,32 +525,38 @@ export function aggregateByType(
     // Step 5: Calculate tax summary if applicable
     let taxSummary: YearTaxSummary | null = null;
     if (yearFilter.kind === 'year' && taxSettings) {
-        const capitalIncome = metricsPerInvestment
-            .reduce((sum, p) => sum + p.capitalGainsYear + p.dividendsYear + p.interestYear, 0);
-
-        const shortTermCryptoGains = metricsPerInvestment
-            .reduce((sum, p) => sum + p.shortTermCryptoGainYear, 0);
-            
-        const capitalTaxResult = calcCapitalTax({
-            year: yearFilter.year,
-            filing: taxSettings.filingStatus,
-            churchRate: taxSettings.churchRate,
-            capitalIncome: capitalIncome
-        });
-        
-        const cryptoTaxResult = calcCryptoTax({
-            year: yearFilter.year,
-            marginalRate: taxSettings.cryptoMarginalRate,
-            churchRate: taxSettings.churchRate,
-            shortTermGains: shortTermCryptoGains
-        });
-
-        taxSummary = {
-            capitalTaxResult,
-            cryptoTaxResult,
-            grandTotal: capitalTaxResult.total + cryptoTaxResult.total,
-            totalShortTermGains: shortTermCryptoGains,
-        };
+      // Normalize: accept either `churchTaxRate` (UI) or `churchRate` (calculators).
+      const churchRate =
+        (taxSettings as any).churchTaxRate ??
+        (taxSettings as any).churchRate ??
+        0;
+    
+      const capitalIncome = metricsPerInvestment
+        .reduce((sum, p) => sum + p.capitalGainsYear + p.dividendsYear + p.interestYear, 0);
+    
+      const shortTermCryptoGains = metricsPerInvestment
+        .reduce((sum, p) => sum + p.shortTermCryptoGainYear, 0);
+    
+      const capitalTaxResult = calcCapitalTax({
+        year: yearFilter.year,
+        filing: taxSettings.filingStatus,
+        churchRate,                // ✅ now defined
+        capitalIncome,
+      });
+    
+      const cryptoTaxResult = calcCryptoTax({
+        year: yearFilter.year,
+        marginalRate: taxSettings.cryptoMarginalRate,
+        churchRate,                // ✅ now defined
+        shortTermGains: shortTermCryptoGains,
+      });
+    
+      taxSummary = {
+        capitalTaxResult,
+        cryptoTaxResult,
+        grandTotal: capitalTaxResult.total + cryptoTaxResult.total,
+        totalShortTermGains: shortTermCryptoGains,
+      };
     }
 
     return { rows, totals: finalTotals, taxSummary };
