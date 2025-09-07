@@ -75,29 +75,6 @@ export default function DashboardHeader({
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <span>
-                  <Button
-                    size="sm"
-                    onClick={() => onViewTaxEstimate?.()}
-                    disabled={estimateDisabled}
-                    aria-disabled={estimateDisabled}
-                  >
-                    <Scale className="mr-2 h-4 w-4" />
-                    {estimateLabel}
-                  </Button>
-                </span>
-              </TooltipTrigger>
-              {estimateDisabled && (
-                <TooltipContent>
-                  {estimateDisabledReason ?? 'Turn on German Tax Report and select a year.'}
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
                 <div className="flex items-center space-x-2">
                    <Label
                     htmlFor="tax-mode"
@@ -121,6 +98,30 @@ export default function DashboardHeader({
               )}
             </Tooltip>
           </TooltipProvider>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Button
+                    size="sm"
+                    onClick={() => onViewTaxEstimate?.()}
+                    disabled={estimateDisabled}
+                    aria-disabled={estimateDisabled}
+                  >
+                    <Scale className="mr-2 h-4 w-4" />
+                    {estimateLabel}
+                  </Button>
+                </span>
+              </TooltipTrigger>
+              {estimateDisabled && (
+                <TooltipContent>
+                  {estimateDisabledReason ?? 'Turn on German Tax Report and select a year.'}
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+
            {/* a11y announcement for screen readers */}
           <span id="tax-report-disabled" className="sr-only">
             German Tax Report controls may be disabled. Select a year and use Cards view to enable.

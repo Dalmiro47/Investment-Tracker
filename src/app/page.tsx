@@ -35,7 +35,7 @@ import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
 import InvestmentListView from '@/components/investment-list';
 import type { SavingsRateChange } from '@/lib/types-savings';
 import RateScheduleDialog from "@/components/rate-schedule-dialog";
-import { parseISO, endOfYear } from 'date-fns';
+import { parseISO } from 'date-fns';
 import EtfPlansButton from '@/components/etf/EtfPlansButton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
@@ -422,6 +422,12 @@ export default function DashboardPage() {
     }
     setViewMode(mode);
   };
+
+  React.useEffect(() => {
+    if (!canToggleTaxReport && isTaxView) {
+      setIsTaxView(false);
+    }
+  }, [canToggleTaxReport, isTaxView]);
 
   return (
     <>

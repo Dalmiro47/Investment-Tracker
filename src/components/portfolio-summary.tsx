@@ -149,6 +149,18 @@ function PortfolioSummaryImpl({
 
     const openEstimate = useCallback(() => setIsEstimateOpen(true), []);
     useImperativeHandle(ref, () => ({ openEstimate }), [openEstimate]);
+
+    useEffect(() => {
+      if (!summaryData?.taxSummary) {
+        setIsEstimateOpen(false);
+      }
+    }, [summaryData?.taxSummary]);
+
+    useEffect(() => {
+      if (yearFilter.kind !== 'year' || !isTaxView) {
+        setIsEstimateOpen(false);
+      }
+    }, [yearFilter.kind, isTaxView]);
     
     const handleYearChange = (value: string) => {
         if (value === 'all') {
