@@ -130,7 +130,7 @@ export function AppDatePicker({
 }: AppDatePickerProps) {
   const [isOpen, setIsOpen] = React.useState(false);
   const inputElRef = React.useRef<HTMLInputElement>(null);
-  const didSelectRef = React.useRef(false); // <-- new
+  const didSelectRef = React.useRef(false); // track if a day was picked this open cycle
 
   const commitFromInputEl = (el: HTMLInputElement | null) => {
     if (!el) return;
@@ -152,12 +152,12 @@ export function AppDatePicker({
       <DatePicker
         selected={value ?? null}
         
-        onChange={(d) => {
-          didSelectRef.current = true; // <-- mark a real selection
-          onChange(d ? new Date(d.getFullYear(), d.getMonth(), d.getDate()) : null);
+        onSelect={(d) => {
+            if (!d) return onChange(null);
+            didSelectRef.current = true;
+            onChange(new Date(d.getFullYear(), d.getMonth(), d.getDate()));
         }}
-
-        // mask while typing
+        
         onChangeRaw={(e) => {
           const input = e.target as HTMLInputElement;
           let digits = input.value.replace(/\D/g, '').slice(0, 8);
@@ -173,33 +173,29 @@ export function AppDatePicker({
           requestAnimationFrame(() => input.setSelectionRange(caret, caret));
         }}
         
-        onBlur={(e) => {
-          if (isOpen || didSelectRef.current) return;
-          const next = (e.relatedTarget as HTMLElement | null);
-          if (next && (next.closest('.react-datepicker') || next.closest('#app-datepicker-portal'))) return;
-          commitFromInputEl(e.currentTarget as HTMLInputElement);
-        }}
-        
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
-            commitFromInputEl(e.target as HTMLInputElement);
+            commitFromInputEl(inputElRef.current);
           }
-        }}
-        
-        onCalendarOpen={() => setIsOpen(true)}
-        onCalendarClose={() => {
-          setIsOpen(false);
-          if (didSelectRef.current) {
-            didSelectRef.current = false; // consume the flag, do NOT commit
-            return;
-          }
-          // no selection -> user likely typed; commit the text
-          commitFromInputEl(inputElRef.current);
         }}
 
-        popperContainer={PopperPortal}
+        onCalendarOpen={() => setIsOpen(true)}
+        onCalendarClose={() => {
+            setIsOpen(false);
+            if (didSelectRef.current) {
+                didSelectRef.current = false;
+            } else {
+                commitFromInputEl(inputElRef.current);
+            }
+        }}
+
+        onClickOutside={() => {
+            if (!didSelectRef.current) commitFromInputEl(inputElRef.current);
+        }}
+        
         shouldCloseOnSelect
+        popperContainer={PopperPortal}
 
         customInput={<DateTextInput ref={inputElRef} />}
         dateFormat={inputFormat}
