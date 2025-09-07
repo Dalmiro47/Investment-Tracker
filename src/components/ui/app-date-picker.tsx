@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -140,7 +139,6 @@ export function AppDatePicker({
       <DatePicker
         selected={value ?? null}
         onChange={(d) => onChange(d ? toLocalStartOfDay(d as Date) : null)}
-        onSelect={(d) => onChange(d ? toLocalStartOfDay(d as Date) : null)}
         /* live mask + keep caret */
         onChangeRaw={(e) => {
           const input = e.target as HTMLInputElement;
