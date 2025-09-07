@@ -2,14 +2,12 @@
 
 import * as React from 'react';
 import { parse, format, isValid } from 'date-fns';
-import DatePicker, { registerLocale } from 'react-datepicker';
+import DatePicker from 'react-datepicker';
 import enGB from 'date-fns/locale/en-GB';
 import { Calendar as CalendarIcon } from 'lucide-react';
 import clsx from 'clsx';
 
 import './app-date-picker.css';
-
-registerLocale('en-GB', enGB);
 
 export type AppDatePickerProps = {
   value: Date | null | undefined;
@@ -36,16 +34,46 @@ function toLocalStartOfDay(d: Date): Date {
 
 // Try multiple formats when user types
 function parseUserInput(v: string, fmt: string): Date | null {
-  const trimmed = v.trim();
-  if (!trimmed) return null;
+  const raw = v.trim();
+  if (!raw) return null;
 
-  const tryFormats = [fmt, 'yyyy-MM-dd', 'dd.MM.yyyy', 'MM/dd/yyyy'];
+  // allow ddMMyyyy (no slashes) in addition to the normal formats
+  const tryFormats = [
+    fmt,                // e.g. dd/MM/yyyy
+    'ddMMyyyy',         // 05082002
+    'yyyy-MM-dd',
+    'dd.MM.yyyy',
+    'MM/dd/yyyy',
+    'd/M/yyyy',         // be more forgiving
+    'dd/M/yyyy',
+  ];
+
   for (const f of tryFormats) {
-    const parsed = parse(trimmed, f, new Date());
+    const parsed = parse(raw, f, new Date());
     if (isValid(parsed)) return toLocalStartOfDay(parsed);
   }
   return null;
 }
+
+/** Proper custom input that forwards ref + props from react-datepicker */
+const DateTextInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
+  ({ className, disabled, ...props }, ref) => {
+    return (
+      <div className={clsx('app-date-input', disabled && 'opacity-60')}>
+        <input
+          ref={ref}
+          {...props}
+          className={clsx('app-date-input-field', className)}
+          inputMode="numeric"
+          aria-label="Date"
+          disabled={disabled}
+        />
+        <CalendarIcon className="app-date-icon" />
+      </div>
+    );
+  }
+);
+DateTextInput.displayName = 'DateTextInput';
 
 export function AppDatePicker({
   value,
@@ -59,24 +87,26 @@ export function AppDatePicker({
   clearable = true,
   showToday = true,
 }: AppDatePickerProps) {
-  const [text, setText] = React.useState<string>(
-    value ? format(value, inputFormat) : ''
-  );
 
-  React.useEffect(() => {
-    setText(value ? format(value, inputFormat) : '');
-  }, [value, inputFormat]);
+  // commit text the user typed (on blur or Enter)
+  const commitFromInputEl = (el: HTMLInputElement | null) => {
+    if (!el) return;
+    const raw = el.value;
+    const parsed = parseUserInput(raw, inputFormat);
 
-  // when user types
-  const handleChangeRaw = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setText(e.target.value);
-  };
-
-  const commitTextIfParsable = () => {
-    const parsed = parseUserInput(text, inputFormat);
-    if (parsed) onChange(parsed);
-    else if (!text.trim()) onChange(null);
-    else setText(value ? format(value, inputFormat) : '');
+    if (!raw.trim()) {
+      onChange(null);
+      return;
+    }
+    if (parsed) {
+      // clamp to min/max if provided
+      if (minDate && parsed < toLocalStartOfDay(minDate)) return onChange(toLocalStartOfDay(minDate));
+      if (maxDate && parsed > toLocalStartOfDay(maxDate)) return onChange(toLocalStartOfDay(maxDate));
+      onChange(parsed);
+    } else {
+      // invalid -> snap back to current value
+      // letting react-datepicker re-render the previous value
+    }
   };
 
   const CalendarContainer = (props: any) => {
@@ -109,49 +139,32 @@ export function AppDatePicker({
     );
   };
 
-  const customInput = (
-    <div className={clsx('app-date-input', disabled && 'opacity-60')}>
-      <input
-        value={text}
-        onChange={handleChangeRaw}
-        placeholder={placeholder}
-        disabled={disabled}
-        className="app-date-input-field"
-        inputMode="numeric"
-        aria-label="Date"
-      />
-      <CalendarIcon className="app-date-icon" />
-    </div>
-  );
-
   return (
     <div className={clsx('app-date-input-wrap', className)}>
       <DatePicker
         selected={value ?? null}
         onChange={(d) => onChange(d ? toLocalStartOfDay(d as Date) : null)}
-        onChangeRaw={handleChangeRaw}
-        onBlur={commitTextIfParsable}
+        // Parse whatever the user typed when they leave the field or press Enter
+        onBlur={(e) => commitFromInputEl(e.target as HTMLInputElement)}
         onKeyDown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
-            commitTextIfParsable();
+            commitFromInputEl(e.target as HTMLInputElement);
           }
         }}
-        customInput={customInput}
+        // IMPORTANT: let react-datepicker control the input value and caret.
+        customInput={<DateTextInput />}
         dateFormat={inputFormat}
-        locale="en-GB"
-        // Month & Year dropdowns (like Manage Rates)
+        locale={enGB}
+        placeholderText={placeholder}
         showMonthDropdown
         showYearDropdown
         dropdownMode="select"
-        // UX
-        calendarStartDay={1} // Monday
+        calendarStartDay={1}
         disabled={disabled}
         minDate={minDate}
         maxDate={maxDate}
-        // Style container & footer
         calendarContainer={CalendarContainer}
-        // Clean popper
         showPopperArrow={false}
         popperPlacement="bottom-start"
       />
