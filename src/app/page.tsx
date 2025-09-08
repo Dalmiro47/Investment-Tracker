@@ -158,7 +158,7 @@ export default function DashboardPage() {
     setIsRefreshing(true);
     toast({ title: 'Refreshing Prices...', description: 'Please wait while we fetch the latest data.' });
 
-    const result = await refreshInvestmentPrices(investments, { userId: user.uid, forced: true });
+    const result = await refreshInvestmentPrices({ userId: user.uid, forced: true });
 
     if (result.skippedReason === 'rate_limited') {
         toast({

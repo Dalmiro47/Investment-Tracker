@@ -212,7 +212,6 @@ async function doPriceRefresh(currentInvestments: Investment[]): Promise<Omit<Up
 
 
 export async function refreshInvestmentPrices(
-  currentInvestments: Investment[],
   options?: { forced?: boolean; userId?: string }
 ): Promise<UpdateResult> {
   const { forced = false, userId } = options ?? {};
@@ -241,6 +240,9 @@ export async function refreshInvestmentPrices(
 
   try {
     await metaRef.set({ lastRefreshAt: FieldValue.serverTimestamp() }, { merge: true });
+
+    const snap = await adminDb.collection(`users/${userId}/investments`).get();
+    const currentInvestments = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Investment[];
 
     const { updatedInvestments, failedInvestmentNames } = await doPriceRefresh(currentInvestments);
     
