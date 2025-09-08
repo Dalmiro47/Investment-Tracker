@@ -94,7 +94,7 @@ async function migrateUser(uid: string, dryRun: boolean) {
     let newId = newBaseId;
     const candidateRef = col.doc(newId);
     const candidateSnap = await candidateRef.get();
-    if (candidateSnap.exists()) {
+    if (candidateSnap.exists) {
       newId = `${newBaseId}-${shortHash(d.id)}`;
     }
 

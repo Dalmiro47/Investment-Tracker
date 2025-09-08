@@ -13,6 +13,8 @@ export function buildInvestmentId(uId: string, inv: {
   name?: string; ticker?: string; type?: string; purchaseDate?: string | Date; createdAt?: any;
 }) {
   const base = inv.ticker || inv.name || inv.type || 'asset';
+  
+  // Robustly handle different date types
   const dateStr = typeof inv.purchaseDate === 'string' 
     ? inv.purchaseDate.slice(0,10) 
     : inv.purchaseDate instanceof Date 
