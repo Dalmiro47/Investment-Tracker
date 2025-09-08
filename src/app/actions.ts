@@ -243,6 +243,15 @@ export async function refreshInvestmentPrices(
     await metaRef.set({ lastRefreshAt: FieldValue.serverTimestamp() }, { merge: true });
 
     const { updatedInvestments, failedInvestmentNames } = await doPriceRefresh(currentInvestments);
+    
+    if (updatedInvestments.length > 0) {
+        const batch = adminDb.batch();
+        updatedInvestments.forEach(inv => {
+            const ref = adminDb.doc(`users/${userId}/investments/${inv.id}`);
+            batch.update(ref, { currentValue: inv.currentValue });
+        });
+        await batch.commit();
+    }
 
     const updatedCount = updatedInvestments.length;
     const failedCount = failedInvestmentNames?.length ?? 0;
