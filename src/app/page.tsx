@@ -27,9 +27,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { writeBatch } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { doc } from 'firebase/firestore';
 import { TransactionHistoryDialog } from '@/components/transaction-history-dialog';
 import { performancePct } from '@/lib/types';
 import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
@@ -158,7 +155,7 @@ export default function DashboardPage() {
     setIsRefreshing(true);
     toast({ title: 'Refreshing Prices...', description: 'Please wait while we fetch the latest data.' });
 
-    const result = await refreshInvestmentPrices(investments, { userId: user.uid, forced: true });
+    const result = await refreshInvestmentPrices({ userId: user.uid, forced: true });
 
     if (result.skippedReason === 'rate_limited') {
         toast({

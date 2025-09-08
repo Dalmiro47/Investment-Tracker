@@ -63,7 +63,7 @@ export function useAutoRefreshPrices({
         }
         dbg('start refresh', { reason });
 
-        const res = await refreshInvestmentPrices(investments, { userId });
+        const res = await refreshInvestmentPrices({ userId });
 
         if (res?.skippedReason === 'rate_limited') {
           dbg('server rate-limited until', res.nextAllowedAt);
@@ -80,15 +80,15 @@ export function useAutoRefreshPrices({
 
         if (res.success) {
           localStorage.setItem(LAST_KEY, String(Date.now()));
-          dbg('success', { updated: res.updatedInvestments.length, failed: res.failedInvestmentNames?.length ?? 0 });
+          dbg('success', { updated: res.updatedCount, failed: res.failedInvestmentNames?.length ?? 0 });
 
           if (!toastSilent) {
             const failed = res.failedInvestmentNames?.length ?? 0;
             toast({
               title: 'Prices refreshed',
               description: failed
-                ? `${res.updatedInvestments.length} updated, ${failed} failed`
-                : `${res.updatedInvestments.length} updated successfully.`,
+                ? `${res.updatedCount} updated, ${failed} failed`
+                : `${res.updatedCount} updated successfully.`,
             });
           }
           onComplete?.();

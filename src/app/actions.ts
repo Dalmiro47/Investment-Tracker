@@ -7,17 +7,23 @@ import { dec, sub, EPS } from '@/lib/money';
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
+// Throttle manual/auto refresh to avoid API bans
+const SERVER_DEBOUNCE_MS = 10 * 60 * 1000; // 10 minutes
 
 interface UpdateResult {
   success: boolean;
   message: string;
-  updatedInvestments: Investment[];
+  updatedCount: number;
   failedInvestmentNames?: string[];
   skippedReason?: 'rate_limited';
   nextAllowedAt?: string;
 }
 
-const SERVER_DEBOUNCE_MS = 10 * 60 * 1000; // 10 minutes
+type RefreshInternalResult = {
+  updatedInvestments: Pick<Investment, 'id' | 'name' | 'type' | 'currentValue'>[];
+  failedInvestmentNames?: string[];
+};
+
 
 /* ---------------- Helpers ---------------- */
 
@@ -152,8 +158,8 @@ async function fetchCryptoPrices(ids: string[]): Promise<Record<string, number>>
 }
 
 /* ---------------- Refresh pipeline ---------------- */
-async function doPriceRefresh(currentInvestments: Investment[]): Promise<Omit<UpdateResult, 'success' | 'message'>> {
-    const updates: Investment[] = [];
+async function doPriceRefresh(currentInvestments: Investment[]): Promise<RefreshInternalResult> {
+    const updates: RefreshInternalResult['updatedInvestments'] = [];
     const failed: string[] = [];
 
     const cryptoItems = currentInvestments.filter(
@@ -185,7 +191,7 @@ async function doPriceRefresh(currentInvestments: Investment[]): Promise<Omit<Up
       }
       const curr = inv.currentValue ?? null;
       if (curr === null || sub(dec(price), dec(curr)).abs().gt(EPS)) {
-        updates.push({ ...inv, currentValue: price });
+        updates.push({ id: inv.id, name: inv.name, type: inv.type, currentValue: price });
       }
     }
 
@@ -203,7 +209,7 @@ async function doPriceRefresh(currentInvestments: Investment[]): Promise<Omit<Up
       }
       const curr = inv.currentValue ?? null;
       if (curr === null || sub(dec(price), dec(curr)).abs().gt(EPS)) {
-        updates.push({ ...inv, currentValue: price });
+        updates.push({ id: inv.id, name: inv.name, type: inv.type, currentValue: price });
       }
     });
 
@@ -212,12 +218,11 @@ async function doPriceRefresh(currentInvestments: Investment[]): Promise<Omit<Up
 
 
 export async function refreshInvestmentPrices(
-  currentInvestments: Investment[],
   options?: { forced?: boolean; userId?: string }
 ): Promise<UpdateResult> {
   const { forced = false, userId } = options ?? {};
   if (!userId) {
-    return { success: false, updatedInvestments: [], message: 'User not found.' };
+    return { success: false, message: 'User not found.', updatedCount: 0 };
   }
 
   const metaRef = adminDb.doc(`users/${userId}/meta/pricing`);
@@ -230,10 +235,10 @@ export async function refreshInvestmentPrices(
       if (now - lastRefreshAt < SERVER_DEBOUNCE_MS) {
         return {
           success: false,
-          updatedInvestments: [],
           message: 'rate_limited',
           skippedReason: 'rate_limited',
           nextAllowedAt: new Date(lastRefreshAt + SERVER_DEBOUNCE_MS).toISOString(),
+          updatedCount: 0,
         };
       }
     }
@@ -242,7 +247,28 @@ export async function refreshInvestmentPrices(
   try {
     await metaRef.set({ lastRefreshAt: FieldValue.serverTimestamp() }, { merge: true });
 
+    const snap = await adminDb.collection(`users/${userId}/investments`).where('status', '==', 'Active').get();
+    const currentInvestments = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Investment[];
+
     const { updatedInvestments, failedInvestmentNames } = await doPriceRefresh(currentInvestments);
+    
+    if (updatedInvestments.length > 0) {
+      const batch = adminDb.batch();
+      const now = FieldValue.serverTimestamp();
+
+      updatedInvestments.forEach(inv => {
+        const ref = adminDb.doc(`users/${userId}/investments/${inv.id}`);
+        batch.update(ref, {
+          currentValue: inv.currentValue,
+          currentPrice: inv.currentValue,
+          currentPriceEur: inv.currentValue,
+          lastPriceAt: now,
+          lastPriceSource: inv.type === 'Crypto' ? 'coingecko' : 'yahoo',
+        });
+      });
+
+      await batch.commit();
+    }
 
     const updatedCount = updatedInvestments.length;
     const failedCount = failedInvestmentNames?.length ?? 0;
@@ -261,16 +287,16 @@ export async function refreshInvestmentPrices(
 
     return {
       success: true,
-      updatedInvestments: updatedInvestments,
       message,
+      updatedCount,
       failedInvestmentNames: failedInvestmentNames,
     };
   } catch (err) {
     console.error('Error refreshing investment prices:', err);
     return {
       success: false,
-      updatedInvestments: [],
       message: 'An unexpected error occurred while refreshing prices.',
+      updatedCount: 0,
     };
   }
 }
