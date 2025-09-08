@@ -342,10 +342,12 @@ export default function InvestmentCard({
                     <p className="text-muted-foreground">Avg. Sell Price</p>
                     <p className="font-mono font-semibold">{!soldQty.eq(0) ? formatCurrency(displayAvgSellPrice) : 'N/A'}</p>
                 </div>
-                 <div className="space-y-1">
-                    <p className="text-muted-foreground">Current Price</p>
-                    <p className="font-mono font-semibold">{formatCurrency(investment.currentValue ?? 0)}</p>
-                </div>
+                {status !== 'Sold' && (
+                  <div className="space-y-1">
+                      <p className="text-muted-foreground">Current Price</p>
+                      <p className="font-mono font-semibold">{formatCurrency(investment.currentValue ?? 0)}</p>
+                  </div>
+                )}
             </div>
             
             <Separator />
