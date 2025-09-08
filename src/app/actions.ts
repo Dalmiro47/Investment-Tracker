@@ -17,7 +17,11 @@ interface UpdateResult {
   nextAllowedAt?: string;
 }
 
-const SERVER_DEBOUNCE_MS = 10 * 60 * 1000; // 10 minutes
+type RefreshInternalResult = {
+  updatedInvestments: Pick<Investment, 'id' | 'name' | 'type' | 'currentValue'>[];
+  failedInvestmentNames?: string[];
+};
+
 
 /* ---------------- Helpers ---------------- */
 
@@ -152,8 +156,8 @@ async function fetchCryptoPrices(ids: string[]): Promise<Record<string, number>>
 }
 
 /* ---------------- Refresh pipeline ---------------- */
-async function doPriceRefresh(currentInvestments: Investment[]): Promise<Omit<UpdateResult, 'success' | 'message' | 'updatedCount'>> {
-    const updates: Investment[] = [];
+async function doPriceRefresh(currentInvestments: Investment[]): Promise<RefreshInternalResult> {
+    const updates: RefreshInternalResult['updatedInvestments'] = [];
     const failed: string[] = [];
 
     const cryptoItems = currentInvestments.filter(
@@ -185,7 +189,7 @@ async function doPriceRefresh(currentInvestments: Investment[]): Promise<Omit<Up
       }
       const curr = inv.currentValue ?? null;
       if (curr === null || sub(dec(price), dec(curr)).abs().gt(EPS)) {
-        updates.push({ ...inv, currentValue: price });
+        updates.push({ id: inv.id, name: inv.name, type: inv.type, currentValue: price });
       }
     }
 
@@ -203,13 +207,11 @@ async function doPriceRefresh(currentInvestments: Investment[]): Promise<Omit<Up
       }
       const curr = inv.currentValue ?? null;
       if (curr === null || sub(dec(price), dec(curr)).abs().gt(EPS)) {
-        updates.push({ ...inv, currentValue: price });
+        updates.push({ id: inv.id, name: inv.name, type: inv.type, currentValue: price });
       }
     });
 
-    // This is an internal-only function, so returning the full Investment object is fine here.
-    // The public function will sanitize it.
-    return { updatedInvestments: updates, failedInvestmentNames: failed } as any;
+    return { updatedInvestments: updates, failedInvestmentNames: failed };
 }
 
 
@@ -243,10 +245,10 @@ export async function refreshInvestmentPrices(
   try {
     await metaRef.set({ lastRefreshAt: FieldValue.serverTimestamp() }, { merge: true });
 
-    const snap = await adminDb.collection(`users/${userId}/investments`).get();
+    const snap = await adminDb.collection(`users/${userId}/investments`).where('status', '==', 'Active').get();
     const currentInvestments = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Investment[];
 
-    const { updatedInvestments, failedInvestmentNames } = (await doPriceRefresh(currentInvestments)) as { updatedInvestments: Investment[], failedInvestmentNames?: string[] };
+    const { updatedInvestments, failedInvestmentNames } = await doPriceRefresh(currentInvestments);
     
     if (updatedInvestments.length > 0) {
       const batch = adminDb.batch();
@@ -255,12 +257,9 @@ export async function refreshInvestmentPrices(
       updatedInvestments.forEach(inv => {
         const ref = adminDb.doc(`users/${userId}/investments/${inv.id}`);
         batch.update(ref, {
-          // primary canonical field
           currentValue: inv.currentValue,
-          // backward-compat aliases (UI might be reading one of these)
           currentPrice: inv.currentValue,
           currentPriceEur: inv.currentValue,
-          // helpful metadata
           lastPriceAt: now,
           lastPriceSource: inv.type === 'Crypto' ? 'coingecko' : 'yahoo',
         });

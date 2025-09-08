@@ -27,9 +27,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { writeBatch } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { doc } from 'firebase/firestore';
 import { TransactionHistoryDialog } from '@/components/transaction-history-dialog';
 import { performancePct } from '@/lib/types';
 import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
