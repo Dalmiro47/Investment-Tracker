@@ -11,7 +11,7 @@ import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 interface UpdateResult {
   success: boolean;
   message: string;
-  updatedInvestments: Investment[];
+  updatedCount: number;
   failedInvestmentNames?: string[];
   skippedReason?: 'rate_limited';
   nextAllowedAt?: string;
@@ -152,7 +152,7 @@ async function fetchCryptoPrices(ids: string[]): Promise<Record<string, number>>
 }
 
 /* ---------------- Refresh pipeline ---------------- */
-async function doPriceRefresh(currentInvestments: Investment[]): Promise<Omit<UpdateResult, 'success' | 'message'>> {
+async function doPriceRefresh(currentInvestments: Investment[]): Promise<Omit<UpdateResult, 'success' | 'message' | 'updatedCount'>> {
     const updates: Investment[] = [];
     const failed: string[] = [];
 
@@ -207,7 +207,9 @@ async function doPriceRefresh(currentInvestments: Investment[]): Promise<Omit<Up
       }
     });
 
-    return { updatedInvestments: updates, failedInvestmentNames: failed };
+    // This is an internal-only function, so returning the full Investment object is fine here.
+    // The public function will sanitize it.
+    return { updatedInvestments: updates, failedInvestmentNames: failed } as any;
 }
 
 
@@ -216,7 +218,7 @@ export async function refreshInvestmentPrices(
 ): Promise<UpdateResult> {
   const { forced = false, userId } = options ?? {};
   if (!userId) {
-    return { success: false, updatedInvestments: [], message: 'User not found.' };
+    return { success: false, message: 'User not found.', updatedCount: 0 };
   }
 
   const metaRef = adminDb.doc(`users/${userId}/meta/pricing`);
@@ -229,10 +231,10 @@ export async function refreshInvestmentPrices(
       if (now - lastRefreshAt < SERVER_DEBOUNCE_MS) {
         return {
           success: false,
-          updatedInvestments: [],
           message: 'rate_limited',
           skippedReason: 'rate_limited',
           nextAllowedAt: new Date(lastRefreshAt + SERVER_DEBOUNCE_MS).toISOString(),
+          updatedCount: 0,
         };
       }
     }
@@ -244,7 +246,7 @@ export async function refreshInvestmentPrices(
     const snap = await adminDb.collection(`users/${userId}/investments`).get();
     const currentInvestments = snap.docs.map(d => ({ id: d.id, ...(d.data() as any) })) as Investment[];
 
-    const { updatedInvestments, failedInvestmentNames } = await doPriceRefresh(currentInvestments);
+    const { updatedInvestments, failedInvestmentNames } = (await doPriceRefresh(currentInvestments)) as { updatedInvestments: Investment[], failedInvestmentNames?: string[] };
     
     if (updatedInvestments.length > 0) {
       const batch = adminDb.batch();
@@ -284,16 +286,16 @@ export async function refreshInvestmentPrices(
 
     return {
       success: true,
-      updatedInvestments: updatedInvestments,
       message,
+      updatedCount,
       failedInvestmentNames: failedInvestmentNames,
     };
   } catch (err) {
     console.error('Error refreshing investment prices:', err);
     return {
       success: false,
-      updatedInvestments: [],
       message: 'An unexpected error occurred while refreshing prices.',
+      updatedCount: 0,
     };
   }
 }
