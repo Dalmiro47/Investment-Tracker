@@ -1,4 +1,3 @@
-
 export const toSlug = (s: string) =>
   s.toLowerCase()
    .normalize('NFKD').replace(/[\u0300-\u036f]/g,'')
