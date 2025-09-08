@@ -1,8 +1,10 @@
 
+
 import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query, where, getDocs, collectionGroup, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues, TaxSettings, EtfSimSummary } from './types';
 import type { SavingsRateChange } from './types-savings';
+import { buildInvestmentId, toSlug } from './ids';
 
 const investmentsCol = (uid: string) => collection(db, 'users', uid, 'investments');
 const txCol = (uid: string, invId: string) => collection(db, 'users', uid, 'investments', invId, 'transactions');
@@ -42,6 +44,9 @@ export async function addInvestment(
   data: InvestmentFormValues,
   initialRatePct?: number
 ): Promise<string> {
+
+  const id = buildInvestmentId(uid, data);
+
   const investmentData = {
     ...data,
     purchaseDate: toTS(data.purchaseDate),
@@ -52,16 +57,19 @@ export async function addInvestment(
     dividends: 0,
     interest: 0,
     status: 'Active',
+    slug: toSlug(data.ticker || data.name || data.type),
+    symbol: data.ticker ?? null,
     createdAt: serverTimestamp(),
   };
+  
+  const newDocRef = doc(db, `users/${uid}/investments/${id}`);
+  await setDoc(newDocRef, investmentData);
 
-  const newDocRef = await addDoc(investmentsCol(uid), investmentData);
-
-  if (data.type === 'Interest Account') {
+  if (data.type === 'Interest Account' && typeof initialRatePct === 'number') {
       const rateScheduleRef = collection(db, 'users', uid, 'investments', newDocRef.id, 'rateSchedule');
       await addDoc(rateScheduleRef, {
         from: data.purchaseDate.toISOString().slice(0,10),
-        annualRatePct: (typeof initialRatePct === 'number' ? initialRatePct : 2.0),
+        annualRatePct: initialRatePct,
       });
   }
   return newDocRef.id;
