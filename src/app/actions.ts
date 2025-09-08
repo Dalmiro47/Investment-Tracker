@@ -7,6 +7,8 @@ import { dec, sub, EPS } from '@/lib/money';
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
+// Throttle manual/auto refresh to avoid API bans
+const SERVER_DEBOUNCE_MS = 10 * 60 * 1000; // 10 minutes
 
 interface UpdateResult {
   success: boolean;
