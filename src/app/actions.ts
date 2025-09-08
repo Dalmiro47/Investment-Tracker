@@ -245,12 +245,24 @@ export async function refreshInvestmentPrices(
     const { updatedInvestments, failedInvestmentNames } = await doPriceRefresh(currentInvestments);
     
     if (updatedInvestments.length > 0) {
-        const batch = adminDb.batch();
-        updatedInvestments.forEach(inv => {
-            const ref = adminDb.doc(`users/${userId}/investments/${inv.id}`);
-            batch.update(ref, { currentValue: inv.currentValue });
+      const batch = adminDb.batch();
+      const now = FieldValue.serverTimestamp();
+
+      updatedInvestments.forEach(inv => {
+        const ref = adminDb.doc(`users/${userId}/investments/${inv.id}`);
+        batch.update(ref, {
+          // primary canonical field
+          currentValue: inv.currentValue,
+          // backward-compat aliases (UI might be reading one of these)
+          currentPrice: inv.currentValue,
+          currentPriceEur: inv.currentValue,
+          // helpful metadata
+          lastPriceAt: now,
+          lastPriceSource: inv.type === 'Crypto' ? 'coingecko' : 'yahoo',
         });
-        await batch.commit();
+      });
+
+      await batch.commit();
     }
 
     const updatedCount = updatedInvestments.length;
