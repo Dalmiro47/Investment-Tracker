@@ -202,7 +202,7 @@ function PortfolioSummaryImpl({
 
     }, [summaryData, donutMode]);
 
-    if (!summaryData || summaryData.rows.length === 0) {
+    if (!summaryData) {
         return null;
     }
 
@@ -247,9 +247,9 @@ function PortfolioSummaryImpl({
                                             <h4 className="font-semibold">Yearly View Modes</h4>
                                             <p className="text-muted-foreground">When a specific year is selected, these modes change which investments are included in the summary.</p>
                                             <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
-                                                <li><span className="font-semibold text-foreground">Combined:</span> (Default) Shows all currently open positions PLUS any positions that had a sale in the selected year. Realized P/L is year-specific.</li>
-                                                <li><span className="font-semibold text-foreground">Realized (Tax):</span> Shows ONLY positions that had a sale in the selected year. This is a pure tax-reporting view.</li>
                                                 <li><span className="font-semibold text-foreground">Holdings:</span> Shows ONLY currently open positions. Realized P/L is shown as zero.</li>
+                                                <li><span className="font-semibold text-foreground">Realized (Tax):</span> Shows ONLY positions that had a sale in the selected year. This is a pure tax-reporting view.</li>
+                                                <li><span className="font-semibold text-foreground">Combined:</span> (Default) Shows all currently open positions PLUS any positions that had a sale in the selected year. Realized P/L is year-specific.</li>
                                             </ul>
                                         </div>
                                         <div>
@@ -352,7 +352,16 @@ function PortfolioSummaryImpl({
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {rows.map(item => {
+                              {rows.length === 0 ? (
+                                <TableRow>
+                                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                                    {yearFilter.kind === 'year'
+                                      ? `No assets were sold in ${yearFilter.year}.`
+                                      : 'No assets match this view.'}
+                                  </TableCell>
+                                </TableRow>
+                              ) : (
+                                rows.map(item => {
                                     const portfolioPercentage = totalPortfolioValue > 0 
                                       ? ((donutMode === 'market' ? item.marketValue : item.economicValue) / totalPortfolioValue)
                                       : 0;
@@ -371,7 +380,8 @@ function PortfolioSummaryImpl({
                                         <TableCell className={cn("text-right font-mono", item.performancePct >= 0 ? "text-green-500" : "text-destructive")}>{formatPercent(item.performancePct)}</TableCell>
                                         <TableCell className="text-right font-mono">{formatPercent(portfolioPercentage)}</TableCell>
                                     </TableRow>
-                                )})}
+                                )})
+                              )}
                             </TableBody>
                             <TableFooter>
                                 <TableRow className="bg-muted/50 font-bold">
