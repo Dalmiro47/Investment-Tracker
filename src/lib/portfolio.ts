@@ -580,12 +580,21 @@ export function aggregateByType(
     
     let taxSummary: YearTaxSummary | null = null;
     if (yearFilter.kind === 'year' && taxSettings) {
+      const metricsForTax = investments.map(inv =>
+        calculatePositionMetrics(
+          inv,
+          transactionsMap[inv.id] ?? [],
+          yearFilter,
+          rateSchedulesMap[inv.id]
+        )
+      );
+
       const churchRate = (taxSettings as any).churchTaxRate ?? (taxSettings as any).churchRate ?? 0;
     
-      const capitalIncome = metricsPerInvestment
+      const capitalIncome = metricsForTax
         .reduce((sum, p) => sum + p.capitalGainsYear + p.dividendsYear + p.interestYear, 0);
     
-      const shortTermCryptoGains = metricsPerInvestment
+      const shortTermCryptoGains = metricsForTax
         .reduce((sum, p) => sum + p.shortTermCryptoGainYear, 0);
     
       const capitalTaxResult = calcCapitalTax({
