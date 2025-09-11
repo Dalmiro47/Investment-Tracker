@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
@@ -96,32 +97,57 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
     );
 }
 
-const getSummaryContext = (filter: YearFilter): { title: string, description: string } => {
-    if (filter.kind === 'all') {
+const getSummaryContext = (filter: YearFilter): { title: string; description: string } => {
+  // ---- All Years (lifetime) ----
+  if (filter.kind === 'all') {
+    switch (filter.mode) {
+      case 'holdings':
         return {
-            title: 'Portfolio Summary – Lifetime Performance',
-            description: 'Includes all realized gains since inception + current unrealized gains on holdings.'
+          title: 'Portfolio Summary – Lifetime (Holdings Snapshot)',
+          description:
+            'Shows only open positions as of today and their current unrealized gains. Realized gains excluded.',
+        };
+      case 'realized':
+        return {
+          title: 'Portfolio Summary – Lifetime (Realized-Only)',
+          description:
+            'Shows lifetime realized gains from sold positions. Unrealized gains excluded. Useful for tax history.',
+        };
+      case 'combined':
+      default:
+        return {
+          title: 'Portfolio Summary – Lifetime (Combined)',
+          description:
+            'Includes all realized gains since inception + current unrealized gains on holdings.',
         };
     }
-    const year = filter.year;
-    switch (filter.mode) {
-        case 'combined':
-            return {
-                title: `Portfolio Summary – Year ${year} (Combined)`,
-                description: 'Shows this year’s realized gains + current unrealized gains on holdings. Not a pure tax view.'
-            };
-        case 'realized':
-            return {
-                title: `Portfolio Summary – Year ${year} (Tax-Only)`,
-                description: 'Shows only assets sold in this year. Unrealized gains excluded. Used for tax estimates.'
-            };
-        case 'holdings':
-            return {
-                title: `Portfolio Summary – Year ${year} (Holdings Snapshot)`,
-                description: 'Shows only open positions and their current unrealized gains.'
-            };
-    }
-}
+  }
+
+  // ---- Specific Year (unchanged) ----
+  const year = filter.year;
+  switch (filter.mode) {
+    case 'combined':
+      return {
+        title: `Portfolio Summary – Year ${year} (Combined)`,
+        description:
+          'Shows this year’s realized gains + current unrealized gains on holdings. Not a pure tax view.',
+      };
+    case 'realized':
+      return {
+        title: `Portfolio Summary – Year ${year} (Tax-Only)`,
+        description:
+          'Shows only assets sold in this year. Unrealized gains excluded. Used for tax estimates.',
+      };
+    case 'holdings':
+    default:
+      return {
+        title: `Portfolio Summary – Year ${year} (Holdings Snapshot)`,
+        description:
+          'Shows only open positions and their current unrealized gains.',
+      };
+  }
+};
+
 
 export type PortfolioSummaryHandle = { openEstimate: () => void };
 
@@ -145,6 +171,11 @@ function PortfolioSummaryImpl({
     
     const [donutMode, setDonutMode] = useState<DonutMode>('market');
     const [isEstimateOpen, setIsEstimateOpen] = useState(false);
+
+    useEffect(() => {
+      if (yearFilter.mode === 'holdings') setDonutMode('market');
+      else setDonutMode('economic'); // realized or combined
+    }, [yearFilter.mode]);
 
     const openEstimate = useCallback(() => setIsEstimateOpen(true), []);
     useImperativeHandle(ref, () => ({ openEstimate }), [openEstimate]);
@@ -214,6 +245,10 @@ function PortfolioSummaryImpl({
     const isYearView = yearFilter.kind === 'year';
     const isAllView = yearFilter.kind === 'all';
 
+    const pctLabel =
+        yearFilter.mode === 'realized'
+            ? '(Realized)'
+            : donutMode === 'market' ? '(Market)' : '(Economic)';
 
     return (
         <TooltipProvider>
@@ -328,8 +363,33 @@ function PortfolioSummaryImpl({
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Asset Type</TableHead>
-                                    <TableHead className="text-right">Cost Basis</TableHead>
-                                    <TableHead className="text-right">Market Value</TableHead>
+                                    <TableHead className="text-right">
+                                        {yearFilter.mode === 'realized'
+                                            ? (
+                                            <Tooltip>
+                                                <TooltipTrigger className="cursor-help underline decoration-dashed">
+                                                Cost Basis (sold)
+                                                </TooltipTrigger>
+                                                <TooltipContent>Cost basis of the lots sold in this {yearFilter.kind === 'all' ? 'lifetime period' : `year (${yearFilter.year})`}.</TooltipContent>
+                                            </Tooltip>
+                                            )
+                                            : 'Cost Basis'}
+                                    </TableHead>
+                                    <TableHead className="text-right">
+                                        {yearFilter.mode === 'realized' ? (
+                                            <Tooltip>
+                                            <TooltipTrigger className="cursor-help underline decoration-dashed">
+                                                Realized Value
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                Cash proceeds from sold lots
+                                                {yearFilter.kind === 'year' ? ` in ${yearFilter.year}` : ' (lifetime)'}.
+                                            </TooltipContent>
+                                            </Tooltip>
+                                        ) : (
+                                            'Market Value'
+                                        )}
+                                    </TableHead>
                                     <TableHead className="text-right">
                                         {isYearView ? (
                                              <Tooltip>
@@ -348,7 +408,7 @@ function PortfolioSummaryImpl({
                                     </TableHead>
                                     <TableHead className="text-right">Total P/L</TableHead>
                                     <TableHead className="text-right">Performance</TableHead>
-                                    <TableHead className="text-right">% of Portfolio</TableHead>
+                                    <TableHead className="text-right">% of Portfolio {pctLabel}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
