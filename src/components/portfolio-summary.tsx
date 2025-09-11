@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import { useState, useMemo, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
@@ -358,8 +359,30 @@ function PortfolioSummaryImpl({
                             <TableHeader>
                                 <TableRow>
                                     <TableHead>Asset Type</TableHead>
-                                    <TableHead className="text-right">Cost Basis</TableHead>
-                                    <TableHead className="text-right">Market Value</TableHead>
+                                    <TableHead className="text-right">
+                                        {yearFilter.mode === 'realized'
+                                            ? (
+                                            <Tooltip>
+                                                <TooltipTrigger className="cursor-help underline decoration-dashed">
+                                                Cost Basis (sold)
+                                                </TooltipTrigger>
+                                                <TooltipContent>Cost basis of the lots sold in this {yearFilter.kind === 'all' ? 'lifetime period' : `year (${yearFilter.year})`}.</TooltipContent>
+                                            </Tooltip>
+                                            )
+                                            : 'Cost Basis'}
+                                    </TableHead>
+                                    <TableHead className="text-right">
+                                        {yearFilter.mode === 'realized'
+                                            ? (
+                                            <Tooltip>
+                                                <TooltipTrigger className="cursor-help underline decoration-dashed">
+                                                Market Value
+                                                </TooltipTrigger>
+                                                <TooltipContent>Not applicable in Realized view (only sold lots are shown).</TooltipContent>
+                                            </Tooltip>
+                                            )
+                                            : 'Market Value'}
+                                    </TableHead>
                                     <TableHead className="text-right">
                                         {isYearView ? (
                                              <Tooltip>
