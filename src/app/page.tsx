@@ -202,20 +202,33 @@ export default function DashboardPage() {
   }, [investments, transactionsMap, yearFilter]);
 
   const typeCounts = React.useMemo(() => {
+    // 1) Start with the year-scoped pool.
+    // 2) Apply the SAME status logic used for the cards:
+    //    - Tax view ⇒ only Sold
+    //    - Otherwise ⇒ honor the statusFilter (or All)
+    const base = investmentsYearScoped.filter(inv =>
+      isTaxView
+        ? inv.status === 'Sold'
+        : (statusFilter === 'All' ? true : inv.status === statusFilter)
+    );
+  
     const counts: Record<InvestmentType | 'All', number> = {
-        'All': 0, 'Stock': 0, 'Crypto': 0, 'ETF': 0,
-        'Interest Account': 0, 'Bond': 0, 'Real Estate': 0,
+      All: 0,
+      Stock: 0,
+      Crypto: 0,
+      ETF: 0,
+      'Interest Account': 0,
+      Bond: 0,
+      'Real Estate': 0,
     };
-    
-    investmentsYearScoped.forEach(inv => {
-        if (counts[inv.type] !== undefined) {
-            counts[inv.type]++;
-            counts.All++;
-        }
+  
+    base.forEach(inv => {
+      counts.All++;
+      counts[inv.type] = (counts[inv.type] ?? 0) + 1;
     });
-
+  
     return counts;
-  }, [investmentsYearScoped]);
+  }, [investmentsYearScoped, isTaxView, statusFilter]);
 
 
   const filteredAndSortedInvestments = React.useMemo(() => {
