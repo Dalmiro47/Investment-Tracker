@@ -245,6 +245,10 @@ function PortfolioSummaryImpl({
     const isYearView = yearFilter.kind === 'year';
     const isAllView = yearFilter.kind === 'all';
 
+    const pctLabel =
+        yearFilter.mode === 'realized'
+            ? '(Realized)'
+            : donutMode === 'market' ? '(Market)' : '(Economic)';
 
     return (
         <TooltipProvider>
@@ -404,7 +408,7 @@ function PortfolioSummaryImpl({
                                     </TableHead>
                                     <TableHead className="text-right">Total P/L</TableHead>
                                     <TableHead className="text-right">Performance</TableHead>
-                                    <TableHead className="text-right">% of Portfolio {donutMode === 'market' ? '(Market)' : '(Economic)'}</TableHead>
+                                    <TableHead className="text-right">% of Portfolio {pctLabel}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -534,6 +538,3 @@ function PortfolioSummaryImpl({
 }
 
 export default forwardRef(PortfolioSummaryImpl);
-
-
-    

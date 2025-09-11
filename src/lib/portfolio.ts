@@ -460,37 +460,31 @@ export function aggregateByType(
                 unrealizedPL: dec(0),
                 totalPL: dec(0),
                 purchaseValue: dec(0),
-                perfBase: dec(0),     // <-- NEW: denominator for performance
-                realizedValue: dec(0),          // NEW: aggregate realized proceeds
+                perfBase: dec(0),
+                realizedValue: dec(0),
             };
         }
         const t = byType[p.type];
     
-        // Basis of remaining (open) slice
         const remainingBasis =
             p.type === 'Interest Account'
-            ? dec(p.purchaseValue)                         // IA: net deposits
+            ? dec(p.purchaseValue)
             : mul(dec(p.availableQty), dec(p.buyPrice));
-    
-        // Basis of sold slice (lifetime vs year)
+
         const soldBasisAll  = mul(dec(p.soldQtyAll),  dec(p.buyPrice));
         const soldBasisYear = mul(dec(p.soldQtyYear), dec(p.buyPrice));
-        const soldBasis = (yearFilter.kind === 'all') ? soldBasisAll : soldBasisYear;
-    
-        // ---- NEW: realized value (proceeds) for the correct slice ----
-        const realizedValueSlice =
-          (yearFilter.kind === 'all') ? dec(p.realizedProceedsAll) : dec(p.realizedProceedsYear);
-    
-        // What to show as "Cost Basis" depends on mode
+        const soldBasis     = (yearFilter.kind === 'all') ? soldBasisAll : soldBasisYear;
+
+        const realizedValueSlice = (yearFilter.kind === 'all') ? dec(p.realizedProceedsAll) : dec(p.realizedProceedsYear);
+
         let displayCostBasis = remainingBasis;
         if (yearFilter.mode === 'realized') {
-            displayCostBasis = (p.type === 'Interest Account') ? dec(0) : soldBasis; // IA has no "sold" concept
+            displayCostBasis = (p.type === 'Interest Account') ? dec(0) : soldBasis;
         } else if (yearFilter.mode === 'combined') {
             displayCostBasis = (p.type === 'Interest Account') ? remainingBasis
-                             : add(remainingBasis, soldBasis);
+                            : add(remainingBasis, soldBasis);
         }
-    
-        // Denominator for performance (%)
+
         let perfBaseAdd = remainingBasis;
         if (yearFilter.mode === 'realized') {
             perfBaseAdd = (p.type === 'Interest Account') ? dec(0) : soldBasis;
@@ -506,7 +500,7 @@ export function aggregateByType(
         t.totalPL       = add(t.totalPL, dec(p.totalPLDisplay));
         t.purchaseValue = add(t.purchaseValue, dec(p.purchaseValue));
         t.perfBase      = add(t.perfBase, perfBaseAdd);
-        t.realizedValue = add(t.realizedValue, realizedValueSlice);  // NEW
+        t.realizedValue = add(t.realizedValue, realizedValueSlice);
     });
 
     const rows = Object.values(byType).map(t => {
@@ -515,7 +509,6 @@ export function aggregateByType(
       let realizedPL   = t.realizedPL;
   
       if (yearFilter.mode === 'realized') {
-        // In Realized view, show realized proceeds in the "Market Value" column
         marketValue  = t.realizedValue;
         unrealizedPL = dec(0);
       } else if (yearFilter.mode === 'holdings') {
@@ -524,16 +517,15 @@ export function aggregateByType(
   
       const totalPL = add(unrealizedPL, realizedPL);
   
-      // Economic value: in Realized view we want the donut to represent realized proceeds
       const econValue =
         (yearFilter.mode === 'realized')
-          ? marketValue                    // realized proceeds
-          : add(marketValue, realizedPL);  // default behavior
+          ? marketValue
+          : add(marketValue, realizedPL);
   
       return {
         type: t.type,
         costBasis: toNum(t.costBasis),
-        marketValue: toNum(marketValue),         // becomes "Realized Value" in UI for realized mode
+        marketValue: toNum(marketValue),
         realizedPL: toNum(realizedPL),
         unrealizedPL: toNum(unrealizedPL),
         totalPL: toNum(totalPL),
@@ -543,7 +535,6 @@ export function aggregateByType(
     });
 
 
-    // Add aggregated ETF data as a new row (skip in realized mode)
     if (etfSummaries.length > 0 && yearFilter.mode !== 'realized') {
       const etfMetrics = getEtfMetrics(etfSummaries, yearFilter);
       if (etfMetrics.costBasis > 0 || etfMetrics.marketValue > 0) {
@@ -561,7 +552,6 @@ export function aggregateByType(
       }
     }
     
-    // Calculate final totals
     const totals = rows.reduce((acc, row) => {
         acc.costBasis += row.costBasis;
         acc.marketValue += row.marketValue;
@@ -584,7 +574,9 @@ export function aggregateByType(
         unrealizedPL: totals.unrealizedPL,
         totalPL: totals.totalPL,
         performancePct: totals.purchaseValue.gt(0) ? totals.totalPL / toNum(totals.purchaseValue) : 0,
-        economicValue: totals.marketValue + totals.realizedPL,
+        economicValue: (yearFilter.mode === 'realized')
+            ? totals.marketValue
+            : totals.marketValue + totals.realizedPL,
     };
     
     let taxSummary: YearTaxSummary | null = null;
@@ -621,6 +613,3 @@ export function aggregateByType(
 
     return { rows, totals: finalTotals, taxSummary };
 }
-
-
-    
