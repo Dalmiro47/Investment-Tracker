@@ -1,7 +1,7 @@
 
 
 import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary, ViewMode } from './types';
-import { dec, add, sub, mul, div, toNum } from '@/lib/money';
+import { dec, add, sub, mul, div, toNum } from './money';
 import { isCryptoSellTaxFree, calcCapitalTax, calcCryptoTax, CapitalTaxResult, CryptoTaxResult } from './tax';
 import { differenceInDays, parseISO, endOfYear } from 'date-fns';
 import { computeSavings } from '@/lib/savings';
@@ -12,6 +12,7 @@ export interface PositionMetrics {
   buyQty: number;
   buyPrice: number;
   soldQtyAll: number;
+  soldQtyYear: number;
   availableQty: number;
   purchaseValue: number; // The full original cost, does not decrease with sells. For IA: Net Deposits.
   marketValue: number;
@@ -72,7 +73,7 @@ export function calculatePositionMetrics(
 ): PositionMetrics {
   
   const zeroMetrics: Omit<PositionMetrics, 'type'> & {type: Investment['type']} = {
-    buyQty: 0, buyPrice: 0, soldQtyAll: 0, availableQty: 0, purchaseValue: 0, marketValue: 0,
+    buyQty: 0, buyPrice: 0, soldQtyAll: 0, soldQtyYear: 0, availableQty: 0, purchaseValue: 0, marketValue: 0,
     realizedPLAll: 0, realizedPLYear: 0, unrealizedPL: 0, shortTermCryptoGainYear: 0,
     capitalGainsYear: 0, dividendsYear: 0, interestYear: 0,
     realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0,
@@ -147,6 +148,7 @@ export function calculatePositionMetrics(
   let realizedPLYear = dec(0);
   let shortTermCryptoGainYear = dec(0);
   let capitalGainsYear = dec(0);
+  let soldQtyYear = dec(0);
   
   const dividends = txs.filter(t => t.type === 'Dividend');
   const interests = txs.filter(t => t.type === 'Interest');
@@ -157,7 +159,7 @@ export function calculatePositionMetrics(
   if (yearFilter.kind === 'year') {
     const sellsInYear = sells.filter(t => new Date(t.date).getFullYear() === yearFilter.year);
     if (sellsInYear.length > 0) {
-      const soldQtyYear = sellsInYear.reduce((sum, t) => add(sum, dec(t.quantity)), dec(0));
+      soldQtyYear = sellsInYear.reduce((sum, t) => add(sum, dec(t.quantity)), dec(0));
       const realizedProceedsYear = sellsInYear.reduce((sum, t) => add(sum, dec(t.totalAmount)), dec(0));
       const sellCostBasisYear = mul(soldQtyYear, buyPrice);
       realizedPLYear = sub(realizedProceedsYear, sellCostBasisYear);
@@ -211,6 +213,7 @@ export function calculatePositionMetrics(
     buyQty: toNum(buyQty, 8),
     buyPrice: toNum(buyPrice),
     soldQtyAll: toNum(soldQtyAll, 8),
+    soldQtyYear: toNum(soldQtyYear, 8),
     availableQty: toNum(availableQty, 8),
     purchaseValue: toNum(purchaseValue),
     marketValue: toNum(marketValue),
@@ -442,18 +445,36 @@ export function aggregateByType(
     metricsPerInvestment.forEach(p => {
         if (!byType[p.type]) {
             byType[p.type] = {
-                type: p.type, costBasis: dec(0), marketValue: dec(0),
-                realizedPL: dec(0), unrealizedPL: dec(0), totalPL: dec(0),
+                type: p.type,
+                costBasis: dec(0),
+                marketValue: dec(0),
+                realizedPL: dec(0),
+                unrealizedPL: dec(0),
+                totalPL: dec(0),
                 purchaseValue: dec(0),
             };
         }
         const t = byType[p.type];
 
-        const lotCostBasis = p.type === 'Interest Account'
-          ? dec(p.purchaseValue)
-          : mul(dec(p.availableQty), dec(p.buyPrice));
-      
-        t.costBasis    = add(t.costBasis, lotCostBasis);
+        // cost basis of the still-open slice
+        const remainingCostBasis =
+        p.type === 'Interest Account'
+            ? dec(p.purchaseValue) // IA: net deposits
+            : mul(dec(p.availableQty), dec(p.buyPrice));
+
+        // NEW: add realized slice cost basis only for COMBINED
+        let realizedSliceBasis = dec(0);
+        if (yearFilter.mode === 'combined' && p.type !== 'Interest Account') {
+        if (yearFilter.kind === 'all') {
+            realizedSliceBasis = mul(dec(p.soldQtyAll), dec(p.buyPrice));
+        } else {
+            realizedSliceBasis = mul(dec(p.soldQtyYear), dec(p.buyPrice));
+        }
+        }
+
+        const displayCostBasis = add(remainingCostBasis, realizedSliceBasis);
+
+        t.costBasis    = add(t.costBasis, displayCostBasis);
         t.marketValue  = add(t.marketValue, dec(p.marketValue));
         t.realizedPL   = add(t.realizedPL, dec(p.realizedPLDisplay));
         t.unrealizedPL = add(t.unrealizedPL, dec(p.unrealizedPL));
@@ -462,26 +483,29 @@ export function aggregateByType(
     });
 
     const rows = Object.values(byType).map(t => {
-      let costBasis = t.costBasis;
-      let marketValue = t.marketValue;
-      let unrealizedPL = t.unrealizedPL;
+        let costBasis = t.costBasis;
+        let marketValue = t.marketValue;
+        let unrealizedPL = t.unrealizedPL;
 
-      if (yearFilter.mode === 'realized') {
-          costBasis = dec(0);
-          marketValue = dec(0);
-          unrealizedPL = dec(0);
-      }
+        if (yearFilter.mode === 'realized') {
+            costBasis = dec(0);
+            marketValue = dec(0);
+            unrealizedPL = dec(0);
+        }
 
-      return {
-        type: t.type,
-        costBasis: toNum(costBasis),
-        marketValue: toNum(marketValue),
-        realizedPL: toNum(yearFilter.mode === 'holdings' ? dec(0) : t.realizedPL),
-        unrealizedPL: toNum(unrealizedPL),
-        totalPL: toNum(add(unrealizedPL, yearFilter.mode === 'holdings' ? dec(0) : t.realizedPL)),
-        performancePct: toNum(t.purchaseValue.gt(0) ? div(add(unrealizedPL, t.realizedPL), t.purchaseValue) : dec(0), 4),
-        economicValue: toNum(add(marketValue, t.realizedPL)),
-      };
+        return {
+            type: t.type,
+            costBasis: toNum(costBasis),
+            marketValue: toNum(marketValue),
+            realizedPL: toNum(yearFilter.mode === 'holdings' ? dec(0) : t.realizedPL),
+            unrealizedPL: toNum(unrealizedPL),
+            totalPL: toNum(add(unrealizedPL, yearFilter.mode === 'holdings' ? dec(0) : t.realizedPL)),
+            performancePct: toNum(
+                t.purchaseValue.gt(0) ? div(add(unrealizedPL, t.realizedPL), t.purchaseValue) : dec(0),
+                4
+            ),
+            economicValue: toNum(add(marketValue, t.realizedPL)),
+        };
     });
 
     // Add aggregated ETF data as a new row (skip in realized mode)
