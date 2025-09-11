@@ -21,6 +21,9 @@ export interface PositionMetrics {
   realizedPLAll: number;
   realizedPLYear: number;
   unrealizedPL: number;
+
+  realizedProceedsAll: number;
+  realizedProceedsYear: number;
   
   // Tax-specific metrics for the filtered year
   shortTermCryptoGainYear: number;
@@ -76,6 +79,7 @@ export function calculatePositionMetrics(
     buyQty: 0, buyPrice: 0, soldQtyAll: 0, soldQtyYear: 0, availableQty: 0, purchaseValue: 0, marketValue: 0,
     realizedPLAll: 0, realizedPLYear: 0, unrealizedPL: 0, shortTermCryptoGainYear: 0,
     capitalGainsYear: 0, dividendsYear: 0, interestYear: 0,
+    realizedProceedsAll: 0, realizedProceedsYear: 0,
     realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0,
     type: inv.type,
     planId: inv.planId,
@@ -146,6 +150,7 @@ export function calculatePositionMetrics(
   const realizedPLAll = sub(realizedProceedsAll, sellCostBasisAll);
   
   let realizedPLYear = dec(0);
+  let realizedProceedsYear = dec(0);
   let shortTermCryptoGainYear = dec(0);
   let capitalGainsYear = dec(0);
   let soldQtyYear = dec(0);
@@ -160,7 +165,8 @@ export function calculatePositionMetrics(
     const sellsInYear = sells.filter(t => new Date(t.date).getFullYear() === yearFilter.year);
     if (sellsInYear.length > 0) {
       soldQtyYear = sellsInYear.reduce((sum, t) => add(sum, dec(t.quantity)), dec(0));
-      const realizedProceedsYear = sellsInYear.reduce((sum, t) => add(sum, dec(t.totalAmount)), dec(0));
+      const realizedProceedsYearRaw = sellsInYear.reduce((sum, t) => add(sum, dec(t.totalAmount)), dec(0));
+      realizedProceedsYear = realizedProceedsYearRaw;
       const sellCostBasisYear = mul(soldQtyYear, buyPrice);
       realizedPLYear = sub(realizedProceedsYear, sellCostBasisYear);
     }
@@ -220,6 +226,8 @@ export function calculatePositionMetrics(
     realizedPLAll: toNum(realizedPLAll),
     realizedPLYear: toNum(realizedPLYear),
     unrealizedPL: toNum(unrealizedPL),
+    realizedProceedsAll: toNum(realizedProceedsAll),
+    realizedProceedsYear: toNum(realizedProceedsYear),
     shortTermCryptoGainYear: toNum(shortTermCryptoGainYear),
     capitalGainsYear: toNum(capitalGainsYear),
     dividendsYear: toNum(dividendsYear),
@@ -453,31 +461,36 @@ export function aggregateByType(
                 totalPL: dec(0),
                 purchaseValue: dec(0),
                 perfBase: dec(0),     // <-- NEW: denominator for performance
+                realizedValue: dec(0),          // NEW: aggregate realized proceeds
             };
         }
         const t = byType[p.type];
-
+    
         // Basis of remaining (open) slice
         const remainingBasis =
             p.type === 'Interest Account'
             ? dec(p.purchaseValue)                         // IA: net deposits
             : mul(dec(p.availableQty), dec(p.buyPrice));
-
+    
         // Basis of sold slice (lifetime vs year)
         const soldBasisAll  = mul(dec(p.soldQtyAll),  dec(p.buyPrice));
         const soldBasisYear = mul(dec(p.soldQtyYear), dec(p.buyPrice));
         const soldBasis = (yearFilter.kind === 'all') ? soldBasisAll : soldBasisYear;
-
+    
+        // ---- NEW: realized value (proceeds) for the correct slice ----
+        const realizedValueSlice =
+          (yearFilter.kind === 'all') ? dec(p.realizedProceedsAll) : dec(p.realizedProceedsYear);
+    
         // What to show as "Cost Basis" depends on mode
         let displayCostBasis = remainingBasis;
         if (yearFilter.mode === 'realized') {
             displayCostBasis = (p.type === 'Interest Account') ? dec(0) : soldBasis; // IA has no "sold" concept
         } else if (yearFilter.mode === 'combined') {
             displayCostBasis = (p.type === 'Interest Account') ? remainingBasis
-                                : add(remainingBasis, soldBasis);
+                             : add(remainingBasis, soldBasis);
         }
-
-        // Performance denominator: how much capital is represented by the selected slice
+    
+        // Denominator for performance (%)
         let perfBaseAdd = remainingBasis;
         if (yearFilter.mode === 'realized') {
             perfBaseAdd = (p.type === 'Interest Account') ? dec(0) : soldBasis;
@@ -485,39 +498,47 @@ export function aggregateByType(
             perfBaseAdd = (p.type === 'Interest Account') ? remainingBasis
                         : add(remainingBasis, soldBasis);
         }
-
-        t.costBasis    = add(t.costBasis,    displayCostBasis);
-        t.marketValue  = add(t.marketValue,  dec(p.marketValue));
-        t.realizedPL   = add(t.realizedPL,   dec(p.realizedPLDisplay));
-        t.unrealizedPL = add(t.unrealizedPL, dec(p.unrealizedPL));
-        t.totalPL      = add(t.totalPL,      dec(p.totalPLDisplay));
-        t.purchaseValue= add(t.purchaseValue, dec(p.purchaseValue));
-        t.perfBase     = add(t.perfBase,     perfBaseAdd);
+    
+        t.costBasis     = add(t.costBasis, displayCostBasis);
+        t.marketValue   = add(t.marketValue, dec(p.marketValue));
+        t.realizedPL    = add(t.realizedPL, dec(p.realizedPLDisplay));
+        t.unrealizedPL  = add(t.unrealizedPL, dec(p.unrealizedPL));
+        t.totalPL       = add(t.totalPL, dec(p.totalPLDisplay));
+        t.purchaseValue = add(t.purchaseValue, dec(p.purchaseValue));
+        t.perfBase      = add(t.perfBase, perfBaseAdd);
+        t.realizedValue = add(t.realizedValue, realizedValueSlice);  // NEW
     });
 
     const rows = Object.values(byType).map(t => {
-      // Hide MV/Unrlzd in realized mode
-      let costBasis = t.costBasis;
-      let marketValue = t.marketValue;
+      let marketValue  = t.marketValue;
       let unrealizedPL = t.unrealizedPL;
-
+      let realizedPL   = t.realizedPL;
+  
       if (yearFilter.mode === 'realized') {
-        marketValue = dec(0);
+        // In Realized view, show realized proceeds in the "Market Value" column
+        marketValue  = t.realizedValue;
         unrealizedPL = dec(0);
+      } else if (yearFilter.mode === 'holdings') {
+        realizedPL = dec(0);
       }
-
-      const totalPL = add(unrealizedPL, (yearFilter.mode === 'holdings' ? dec(0) : t.realizedPL));
-
+  
+      const totalPL = add(unrealizedPL, realizedPL);
+  
+      // Economic value: in Realized view we want the donut to represent realized proceeds
+      const econValue =
+        (yearFilter.mode === 'realized')
+          ? marketValue                    // realized proceeds
+          : add(marketValue, realizedPL);  // default behavior
+  
       return {
         type: t.type,
-        costBasis: toNum(costBasis),
-        marketValue: toNum(marketValue),
-        realizedPL: toNum(yearFilter.mode === 'holdings' ? dec(0) : t.realizedPL),
+        costBasis: toNum(t.costBasis),
+        marketValue: toNum(marketValue),         // becomes "Realized Value" in UI for realized mode
+        realizedPL: toNum(realizedPL),
         unrealizedPL: toNum(unrealizedPL),
         totalPL: toNum(totalPL),
-        // Use perfBase (slice-aware) instead of full purchaseValue
         performancePct: toNum(t.perfBase.gt(0) ? div(totalPL, t.perfBase) : dec(0), 4),
-        economicValue: toNum(add(marketValue, (yearFilter.mode === 'holdings' ? dec(0) : t.realizedPL))),
+        economicValue: toNum(econValue),
       };
     });
 
@@ -600,3 +621,6 @@ export function aggregateByType(
 
     return { rows, totals: finalTotals, taxSummary };
 }
+
+
+    

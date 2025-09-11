@@ -372,16 +372,19 @@ function PortfolioSummaryImpl({
                                             : 'Cost Basis'}
                                     </TableHead>
                                     <TableHead className="text-right">
-                                        {yearFilter.mode === 'realized'
-                                            ? (
+                                        {yearFilter.mode === 'realized' ? (
                                             <Tooltip>
-                                                <TooltipTrigger className="cursor-help underline decoration-dashed">
-                                                Market Value
-                                                </TooltipTrigger>
-                                                <TooltipContent>Not applicable in Realized view (only sold lots are shown).</TooltipContent>
+                                            <TooltipTrigger className="cursor-help underline decoration-dashed">
+                                                Realized Value
+                                            </TooltipTrigger>
+                                            <TooltipContent>
+                                                Cash proceeds from sold lots
+                                                {yearFilter.kind === 'year' ? ` in ${yearFilter.year}` : ' (lifetime)'}.
+                                            </TooltipContent>
                                             </Tooltip>
-                                            )
-                                            : 'Market Value'}
+                                        ) : (
+                                            'Market Value'
+                                        )}
                                     </TableHead>
                                     <TableHead className="text-right">
                                         {isYearView ? (
@@ -531,3 +534,6 @@ function PortfolioSummaryImpl({
 }
 
 export default forwardRef(PortfolioSummaryImpl);
+
+
+    
