@@ -72,7 +72,9 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
 
             {/* NEW: Allowance Remaining */}
             <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground pl-2">Allowance Remaining</span>
+              <span className="text-muted-foreground pl-2">
+                Allowance Remaining ({formatCurrency(capital.allowance ?? 0)})
+              </span>
               <span className="font-mono">{formatCurrency(capitalAllowanceRemaining)}</span>
             </div>
 
@@ -596,4 +598,5 @@ function PortfolioSummaryImpl({
 
 export default forwardRef(PortfolioSummaryImpl);
 
+    
     
