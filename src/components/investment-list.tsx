@@ -406,8 +406,8 @@ export default function InvestmentListView({
         {totals && (
             <tfoot className="font-bold bg-muted/50 border-t-2">
                 <tr className="[&>td]:px-4 [&>td]:py-3 [&>td]:whitespace-nowrap">
-                    {showTypeColumn && <td></td>}
                     <td>Total</td>
+                    {showTypeColumn && <td></td>}
                     {showPurchaseDateCol && <td></td>}
                     {showStatusCol && <td></td>}
                     
@@ -443,5 +443,3 @@ export default function InvestmentListView({
     </div>
   );
 }
-
-    
