@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import { useState, useMemo, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
@@ -62,14 +61,14 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                     {/* Capital Gains */}
                     <div className="p-3 rounded-md bg-muted/50 border">
                         <h4 className="font-semibold mb-2">Capital Income (§20 EStG)</h4>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Total Capital Income</span> <span className="font-mono">{formatCurrency(capital.allowance + capital.taxableBase)}</span></div>
-                        <div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Allowance Used</span> <span className="font-mono">- {formatCurrency(capital.allowanceUsed)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Total Capital Income</span> <span className="font-mono">{formatCurrency((capital.taxableBase ?? 0) + (capital.allowanceUsed ?? 0))}</span></div>
+                        <div className="flex justify-between text-xs"><span className="text-muted-foreground pl-2">Allowance Used</span> <span className="font-mono">- {formatCurrency(Math.min(capital.allowance, capital.allowanceUsed || capital.taxableBase))}</span></div>
                         <div className="border-t my-1"></div>
                         <div className="flex justify-between font-medium"><span className="">Taxable Base</span> <span className="font-mono">{formatCurrency(capital.taxableBase)}</span></div>
                         <Separator className="my-2" />
                         <div className="flex justify-between"><span className="text-muted-foreground">Base Tax ({formatPercent(TAX.abgeltungsteuer)})</span> <span className="font-mono">{formatCurrency(capital.baseTax)}</span></div>
                         <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge ({formatPercent(TAX.soliRate)})</span> <span className="font-mono">{formatCurrency(capital.soli)}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax ({formatPercent(taxSettings.churchTaxRate)})</span> <span className="font-mono">{formatCurrency(capital.church)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax ({taxSettings.churchTaxRate ? formatPercent(taxSettings.churchTaxRate) : '0%'})</span> <span className="font-mono">{formatCurrency(capital.church)}</span></div>
                         <div className="flex justify-between font-bold mt-1"><span className="">Total Capital Tax</span> <span className="font-mono">{formatCurrency(capital.total)}</span></div>
                     </div>
 
@@ -83,7 +82,7 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                         <Separator className="my-2" />
                         <div className="flex justify-between"><span className="text-muted-foreground">Income Tax ({formatPercent(taxSettings.cryptoMarginalRate)})</span> <span className="font-mono">{formatCurrency(crypto.incomeTax)}</span></div>
                         <div className="flex justify-between"><span className="text-muted-foreground">Solidarity Surcharge ({formatPercent(TAX.soliRate)})</span> <span className="font-mono">{formatCurrency(crypto.soli)}</span></div>
-                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax ({formatPercent(taxSettings.churchTaxRate)})</span> <span className="font-mono">{formatCurrency(crypto.church)}</span></div>
+                        <div className="flex justify-between"><span className="text-muted-foreground">Church Tax ({taxSettings.churchTaxRate ? formatPercent(taxSettings.churchTaxRate) : '0%'})</span> <span className="font-mono">{formatCurrency(crypto.church)}</span></div>
                         <div className="flex justify-between font-bold mt-1"><span className="">Total Crypto Tax</span> <span className="font-mono">{formatCurrency(crypto.total)}</span></div>
                     </div>
                     

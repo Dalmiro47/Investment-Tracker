@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React from 'react';
@@ -619,6 +618,7 @@ export default function DashboardPage() {
                     interestYear={metrics?.interestYear ?? 0}
                     currentRatePct={getCurrentRate(rateSchedulesMap[investment.id])}
                     onManageRates={() => handleManageRates(investment)}
+                    taxSummary={summaryData.taxSummary}
                   />
                 )
               })}
@@ -688,4 +688,3 @@ export default function DashboardPage() {
     </>
   );
 }
-
