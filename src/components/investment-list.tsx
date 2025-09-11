@@ -232,7 +232,7 @@ export default function InvestmentListView({
     const showPercentPortfolioCol = mode === 'aggregated';
     return (
       <div className="mt-2 rounded-md border bg-card">
-        <div className="relative max-h-[70vh] overflow-auto">
+        <div className="relative max-h-[70vh] overflow-auto scroll-area">
           <table className="w-full min-w-[1000px] text-sm">
             <thead className="sticky top-0 z-10 bg-background/95 text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-[0_1px_0_0_var(--border)]">
               <tr className="[&>th]:px-4 [&>th]:py-3 text-left">
@@ -306,7 +306,7 @@ export default function InvestmentListView({
 
   return (
     <div className="mt-2 rounded-md border bg-card">
-      <div className="relative max-h-[70vh] overflow-auto">
+      <div className="relative max-h-[70vh] overflow-auto scroll-area">
         <table className="w-full min-w-[1000px] text-sm">
           <thead className="sticky top-0 z-10 bg-background/95 text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-[0_1px_0_0_var(--border)]">
             <tr className="[&>th]:px-4 [&>th]:py-3 [&>th]:whitespace-nowrap text-left">
