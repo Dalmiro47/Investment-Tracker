@@ -10,9 +10,9 @@ import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wa
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { dec, toNum, formatCurrency, formatQty, formatPercent, div, mul, sub, add } from '@/lib/money';
-import { getCryptoTaxInfo, estimateCardTax } from '@/lib/tax';
+import { getCryptoTaxInfo, estimateCardTax, TAX } from '@/lib/tax';
 import { performancePct as calculatePerformancePct } from '@/lib/types';
-import type { PositionMetrics } from '@/lib/portfolio';
+import type { PositionMetrics, YearTaxSummary } from '@/lib/portfolio';
 
 import {
   DropdownMenu,
@@ -36,11 +36,13 @@ interface InvestmentCardProps {
   onViewHistory: () => void;
   onAddTransaction: () => void;
   taxSettings: TaxSettings | null;
+  taxSummary?: YearTaxSummary | null;
   realizedPLYear: number;
   dividendsYear: number;
   interestYear: number;
   currentRatePct?: number | null;
   onManageRates?: () => void;
+  soldOn?: string | null;
 }
 
 const typeIcons: Record<Investment['type'], React.ReactNode> = {
@@ -61,11 +63,13 @@ export default function InvestmentCard({
   onViewHistory, 
   onAddTransaction,
   taxSettings,
+  taxSummary,
   realizedPLYear,
   dividendsYear,
   interestYear,
   currentRatePct,
   onManageRates,
+  soldOn,
 }: InvestmentCardProps) {
   const { name, type, status, ticker, purchaseDate, realizedPnL } = investment;
   
@@ -108,18 +112,43 @@ export default function InvestmentCard({
   const isCrypto = investment.type === 'Crypto';
   const cryptoTax = isCrypto ? getCryptoTaxInfo(investment) : null;
   
-  const estimatedTax = taxSettings ? estimateCardTax(
-    {
-      type: investment.type,
-      realizedPL: realizedPLYear,
-      dividends: dividendsYear,
-      interest: interestYear,
-      purchaseDate: investment.purchaseDate
-    },
-    taxSettings
-  ) : null;
-  
   const totalTaxable = realizedPLYear + dividendsYear + interestYear;
+  
+  // ---- Capital income (stocks/ETFs/bonds/interest) allowance-aware estimate ----
+  const isCapitalAsset =
+    investment.type === 'Stock' ||
+    investment.type === 'ETF' ||
+    investment.type === 'Bond' ||
+    investment.type === 'Interest Account';
+
+  let allowanceAwareTaxDue = 0;
+  let expl: { capitalIncome: number; allowanceApplied: number; taxableBase: number; baseTax: number; soli: number; church: number } | null = null;
+  let estimatedTaxForCard = 0;
+
+  if (isTaxView && taxSettings) {
+      if (isCapitalAsset && taxSummary) {
+        const capital = taxSummary.capitalTaxResult;
+        const remainingAllowance = Math.max(0, (capital.allowance ?? 0) - (capital.allowanceUsed ?? 0));
+
+        const capitalIncomeThisAsset =
+          (realizedPLYear ?? 0) + (dividendsYear ?? 0) + (interestYear ?? 0);
+
+        const allowanceApplied = Math.min(remainingAllowance, Math.max(0, capitalIncomeThisAsset));
+        const taxableBase = Math.max(0, capitalIncomeThisAsset - allowanceApplied);
+
+        const baseTax = taxableBase * TAX.abgeltungsteuer;
+        const soli    = baseTax * TAX.soliRate;
+        const church  = baseTax * (taxSettings.churchTaxRate ?? 0);
+
+        allowanceAwareTaxDue = baseTax + soli + church;
+        estimatedTaxForCard = allowanceAwareTaxDue;
+        expl = { capitalIncome: capitalIncomeThisAsset, allowanceApplied, taxableBase, baseTax, soli, church };
+      } else if (investment.type === 'Crypto') {
+        const cryptoEstimate = estimateCardTax({ type: 'Crypto', realizedPL: realizedPLYear, dividends: 0, interest: 0, purchaseDate: investment.purchaseDate }, taxSettings);
+        estimatedTaxForCard = cryptoEstimate.total;
+        expl = null;
+      }
+  }
 
   const Stat = ({ label, value, trend }: { label: string, value: string, trend?: 'up' | 'down' }) => (
     <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md text-center">
@@ -265,7 +294,7 @@ export default function InvestmentCard({
               <span className="">Total Taxable Income (Year)</span>
               <span className="font-mono">{formatCurrency(totalTaxable)}</span>
             </div>
-            {estimatedTax && (
+            {taxSettings && (
               <div className="flex justify-between items-center text-primary font-bold border-t pt-2 mt-1">
                   <TooltipProvider>
                     <Tooltip>
@@ -275,24 +304,53 @@ export default function InvestmentCard({
                           <Info className="h-3.5 w-3.5" />
                         </span>
                       </TooltipTrigger>
-                      <TooltipContent className="max-w-xs text-left">
-                        <div className="font-normal text-sm space-y-1">
-                          {estimatedTax.isTaxFree && (
-                            <p className="font-semibold text-green-500">Potentially tax-free due to holding period.</p>
-                          )}
-                          <p><span className="font-semibold">Taxable Base:</span> {formatCurrency(estimatedTax.taxBase)}</p>
-                          <p><span className="font-semibold">Tax Rate (est.):</span> {formatPercent(estimatedTax.taxRate)}</p>
-                          <Separator className="my-1"/>
-                          <p><span className="font-semibold">Income Tax:</span> {formatCurrency(estimatedTax.tax)}</p>
-                          <p><span className="font-semibold">Solidarity Surcharge:</span> {formatCurrency(estimatedTax.soli)}</p>
-                          <p><span className="font-semibold">Church Tax:</span> {formatCurrency(estimatedTax.church)}</p>
-                          <Separator className="my-1"/>
-                          <p className="text-xs text-muted-foreground pt-1 font-bold">Note: Portfolio-wide allowances/thresholds are applied in the main Tax Estimate report.</p>
-                        </div>
+                      <TooltipContent className="max-w-xs text-sm">
+                        {isCapitalAsset && expl ? (
+                          <div className="space-y-1">
+                            <div className="flex justify-between">
+                              <span>Capital Income (this asset)</span>
+                              <span className="font-mono">{formatCurrency(expl.capitalIncome)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs text-muted-foreground">
+                              <span>Allowance Applied</span>
+                              <span className="font-mono">- {formatCurrency(expl.allowanceApplied)}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span className="font-medium">Taxable Base</span>
+                              <span className="font-mono">{formatCurrency(expl.taxableBase)}</span>
+                            </div>
+                            <div className="border-t my-1" />
+                            <div className="flex justify-between text-xs">
+                              <span>Base Tax ({formatPercent(TAX.abgeltungsteuer)})</span>
+                              <span className="font-mono">{formatCurrency(expl.baseTax)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span>Solidarity ({formatPercent(TAX.soliRate)})</span>
+                              <span className="font-mono">{formatCurrency(expl.soli)}</span>
+                            </div>
+                            <div className="flex justify-between text-xs">
+                              <span>Church Tax ({taxSettings?.churchTaxRate ? formatPercent(taxSettings.churchTaxRate) : '0%'})</span>
+                              <span className="font-mono">{formatCurrency(expl.church)}</span>
+                            </div>
+                            <div className="border-t my-1" />
+                            <div className="flex justify-between font-semibold">
+                              <span>Estimated Tax (this asset)</span>
+                              <span className="font-mono">{formatCurrency(allowanceAwareTaxDue)}</span>
+                            </div>
+                            <p className="text-xs text-muted-foreground mt-1 pt-1 border-t">
+                              Uses your remaining annual capital gains allowance before applying taxes. Final tax depends on your full-year totals.
+                            </p>
+                          </div>
+                        ) : isCrypto ? (
+                            <div className="font-normal text-sm space-y-1">
+                                <p className="font-semibold text-green-500">Crypto tax is based on personal income rate.</p>
+                                <p>This estimate uses the global setting. See the main Tax Estimate dialog for a full breakdown.</p>
+                            </div>
+                        ) : null}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                <span className="font-mono">{formatCurrency(estimatedTax.total)}</span>
+                <span className="font-mono">{formatCurrency(estimatedTaxForCard)}</span>
               </div>
             )}
           </div>
@@ -379,6 +437,11 @@ export default function InvestmentCard({
           {purchaseDate && (
             <div>
                 {isIA ? 'Started on ' : 'Purchased on '}{format(parseISO(purchaseDate), 'dd MMM yyyy')}
+            </div>
+          )}
+          {status === 'Sold' && soldOn && (
+            <div className="mt-1">
+              Sold on {format(parseISO(soldOn), 'dd MMM yyyy')}
             </div>
           )}
           {isCrypto && cryptoTax?.taxFreeDate && (

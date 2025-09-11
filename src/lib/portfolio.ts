@@ -448,90 +448,89 @@ export function aggregateByType(
         calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], yearFilter, rateSchedulesMap[inv.id])
     );
     
-    // Aggregate financial metrics by type for manual investments
     const byType: Record<string, any> = {};
     metricsPerInvestment.forEach(p => {
-        if (!byType[p.type]) {
-            byType[p.type] = {
-                type: p.type,
-                costBasis: dec(0),
-                marketValue: dec(0),
-                realizedPL: dec(0),
-                unrealizedPL: dec(0),
-                totalPL: dec(0),
-                purchaseValue: dec(0),
-                perfBase: dec(0),
-                realizedValue: dec(0),
-            };
-        }
-        const t = byType[p.type];
-    
-        const remainingBasis =
-            p.type === 'Interest Account'
-            ? dec(p.purchaseValue)
-            : mul(dec(p.availableQty), dec(p.buyPrice));
+      if (!byType[p.type]) {
+        byType[p.type] = {
+          type: p.type,
+          costBasis: dec(0),
+          marketValue: dec(0),
+          realizedPL: dec(0),
+          unrealizedPL: dec(0),
+          totalPL: dec(0),
+          purchaseValue: dec(0),
+          perfBase: dec(0),
+          realizedValue: dec(0),
+        };
+      }
+      const t = byType[p.type];
 
-        const soldBasisAll  = mul(dec(p.soldQtyAll),  dec(p.buyPrice));
-        const soldBasisYear = mul(dec(p.soldQtyYear), dec(p.buyPrice));
-        const soldBasis     = (yearFilter.kind === 'all') ? soldBasisAll : soldBasisYear;
+      const remainingBasis =
+        p.type === 'Interest Account' ? dec(p.purchaseValue)
+                                      : mul(dec(p.availableQty), dec(p.buyPrice));
 
-        const realizedValueSlice = (yearFilter.kind === 'all') ? dec(p.realizedProceedsAll) : dec(p.realizedProceedsYear);
+      const soldBasisAll  = mul(dec(p.soldQtyAll),  dec(p.buyPrice));
+      const soldBasisYear = mul(dec(p.soldQtyYear), dec(p.buyPrice));
+      const soldBasis     = (yearFilter.kind === 'all') ? soldBasisAll : soldBasisYear;
 
-        let displayCostBasis = remainingBasis;
-        if (yearFilter.mode === 'realized') {
-            displayCostBasis = (p.type === 'Interest Account') ? dec(0) : soldBasis;
-        } else if (yearFilter.mode === 'combined') {
-            displayCostBasis = (p.type === 'Interest Account') ? remainingBasis
-                            : add(remainingBasis, soldBasis);
-        }
+      const realizedValueSlice =
+        (yearFilter.kind === 'all') ? dec(p.realizedProceedsAll) : dec(p.realizedProceedsYear);
 
-        let perfBaseAdd = remainingBasis;
-        if (yearFilter.mode === 'realized') {
-            perfBaseAdd = (p.type === 'Interest Account') ? dec(0) : soldBasis;
-        } else if (yearFilter.mode === 'combined') {
-            perfBaseAdd = (p.type === 'Interest Account') ? remainingBasis
-                        : add(remainingBasis, soldBasis);
-        }
-    
-        t.costBasis     = add(t.costBasis, displayCostBasis);
-        t.marketValue   = add(t.marketValue, dec(p.marketValue));
-        t.realizedPL    = add(t.realizedPL, dec(p.realizedPLDisplay));
-        t.unrealizedPL  = add(t.unrealizedPL, dec(p.unrealizedPL));
-        t.totalPL       = add(t.totalPL, dec(p.totalPLDisplay));
-        t.purchaseValue = add(t.purchaseValue, dec(p.purchaseValue));
-        t.perfBase      = add(t.perfBase, perfBaseAdd);
-        t.realizedValue = add(t.realizedValue, realizedValueSlice);
+      let displayCostBasis = remainingBasis;
+      if (yearFilter.mode === 'realized') {
+        displayCostBasis = (p.type === 'Interest Account') ? dec(0) : soldBasis;
+      } else if (yearFilter.mode === 'combined') {
+        displayCostBasis = (p.type === 'Interest Account') ? remainingBasis
+                          : add(remainingBasis, soldBasis);
+      }
+
+      let perfBaseAdd = remainingBasis;
+      if (yearFilter.mode === 'realized') {
+        perfBaseAdd = (p.type === 'Interest Account') ? dec(0) : soldBasis;
+      } else if (yearFilter.mode === 'combined') {
+        perfBaseAdd = (p.type === 'Interest Account') ? remainingBasis
+                    : add(remainingBasis, soldBasis);
+      }
+
+      t.costBasis     = add(t.costBasis, displayCostBasis);
+      t.marketValue   = add(t.marketValue, dec(p.marketValue));
+      t.realizedPL    = add(t.realizedPL, dec(p.realizedPLDisplay));
+      t.unrealizedPL  = add(t.unrealizedPL, dec(p.unrealizedPL));
+      t.totalPL       = add(t.totalPL, dec(p.totalPLDisplay));
+      t.purchaseValue = add(t.purchaseValue, dec(p.purchaseValue));
+      t.perfBase      = add(t.perfBase, perfBaseAdd);
+      t.realizedValue = add(t.realizedValue, realizedValueSlice);
     });
 
     const rows = Object.values(byType).map(t => {
-      let marketValue  = t.marketValue;
-      let unrealizedPL = t.unrealizedPL;
-      let realizedPL   = t.realizedPL;
-  
-      if (yearFilter.mode === 'realized') {
-        marketValue  = t.realizedValue;
-        unrealizedPL = dec(0);
-      } else if (yearFilter.mode === 'holdings') {
-        realizedPL = dec(0);
-      }
-  
-      const totalPL = add(unrealizedPL, realizedPL);
-  
-      const econValue =
-        (yearFilter.mode === 'realized')
-          ? marketValue
-          : add(marketValue, realizedPL);
-  
-      return {
-        type: t.type,
-        costBasis: toNum(t.costBasis),
-        marketValue: toNum(marketValue),
-        realizedPL: toNum(realizedPL),
-        unrealizedPL: toNum(unrealizedPL),
-        totalPL: toNum(totalPL),
-        performancePct: toNum(t.perfBase.gt(0) ? div(totalPL, t.perfBase) : dec(0), 4),
-        economicValue: toNum(econValue),
-      };
+        let marketValue  = t.marketValue;
+        let unrealizedPL = t.unrealizedPL;
+        let realizedPL   = t.realizedPL;
+
+        if (yearFilter.mode === 'realized') {
+          marketValue  = t.realizedValue;
+          unrealizedPL = dec(0);
+        } else if (yearFilter.mode === 'holdings') {
+          realizedPL = dec(0);
+        }
+
+        const totalPL = add(unrealizedPL, realizedPL);
+
+        const econValue =
+          (yearFilter.mode === 'realized')
+            ? marketValue
+            : add(marketValue, realizedPL);
+
+        return {
+            type: t.type,
+            costBasis: toNum(t.costBasis),
+            marketValue: toNum(marketValue),
+            realizedPL: toNum(realizedPL),
+            unrealizedPL: toNum(unrealizedPL),
+            totalPL: toNum(totalPL),
+            performancePct: toNum(t.perfBase.gt(0) ? div(totalPL, t.perfBase) : dec(0), 4),
+            economicValue: toNum(econValue),
+        };
     });
 
 
@@ -581,12 +580,21 @@ export function aggregateByType(
     
     let taxSummary: YearTaxSummary | null = null;
     if (yearFilter.kind === 'year' && taxSettings) {
+      const metricsForTax = investments.map(inv =>
+        calculatePositionMetrics(
+          inv,
+          transactionsMap[inv.id] ?? [],
+          yearFilter,
+          rateSchedulesMap[inv.id]
+        )
+      );
+
       const churchRate = (taxSettings as any).churchTaxRate ?? (taxSettings as any).churchRate ?? 0;
     
-      const capitalIncome = metricsPerInvestment
+      const capitalIncome = metricsForTax
         .reduce((sum, p) => sum + p.capitalGainsYear + p.dividendsYear + p.interestYear, 0);
     
-      const shortTermCryptoGains = metricsPerInvestment
+      const shortTermCryptoGains = metricsForTax
         .reduce((sum, p) => sum + p.shortTermCryptoGainYear, 0);
     
       const capitalTaxResult = calcCapitalTax({
