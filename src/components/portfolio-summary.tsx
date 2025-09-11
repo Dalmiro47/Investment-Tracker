@@ -96,32 +96,57 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
     );
 }
 
-const getSummaryContext = (filter: YearFilter): { title: string, description: string } => {
-    if (filter.kind === 'all') {
+const getSummaryContext = (filter: YearFilter): { title: string; description: string } => {
+  // ---- All Years (lifetime) ----
+  if (filter.kind === 'all') {
+    switch (filter.mode) {
+      case 'holdings':
         return {
-            title: 'Portfolio Summary – Lifetime Performance',
-            description: 'Includes all realized gains since inception + current unrealized gains on holdings.'
+          title: 'Portfolio Summary – Lifetime (Holdings Snapshot)',
+          description:
+            'Shows only open positions as of today and their current unrealized gains. Realized gains excluded.',
+        };
+      case 'realized':
+        return {
+          title: 'Portfolio Summary – Lifetime (Realized-Only)',
+          description:
+            'Shows lifetime realized gains from sold positions. Unrealized gains excluded. Useful for tax history.',
+        };
+      case 'combined':
+      default:
+        return {
+          title: 'Portfolio Summary – Lifetime (Combined)',
+          description:
+            'Includes all realized gains since inception + current unrealized gains on holdings.',
         };
     }
-    const year = filter.year;
-    switch (filter.mode) {
-        case 'combined':
-            return {
-                title: `Portfolio Summary – Year ${year} (Combined)`,
-                description: 'Shows this year’s realized gains + current unrealized gains on holdings. Not a pure tax view.'
-            };
-        case 'realized':
-            return {
-                title: `Portfolio Summary – Year ${year} (Tax-Only)`,
-                description: 'Shows only assets sold in this year. Unrealized gains excluded. Used for tax estimates.'
-            };
-        case 'holdings':
-            return {
-                title: `Portfolio Summary – Year ${year} (Holdings Snapshot)`,
-                description: 'Shows only open positions and their current unrealized gains.'
-            };
-    }
-}
+  }
+
+  // ---- Specific Year (unchanged) ----
+  const year = filter.year;
+  switch (filter.mode) {
+    case 'combined':
+      return {
+        title: `Portfolio Summary – Year ${year} (Combined)`,
+        description:
+          'Shows this year’s realized gains + current unrealized gains on holdings. Not a pure tax view.',
+      };
+    case 'realized':
+      return {
+        title: `Portfolio Summary – Year ${year} (Tax-Only)`,
+        description:
+          'Shows only assets sold in this year. Unrealized gains excluded. Used for tax estimates.',
+      };
+    case 'holdings':
+    default:
+      return {
+        title: `Portfolio Summary – Year ${year} (Holdings Snapshot)`,
+        description:
+          'Shows only open positions and their current unrealized gains.',
+      };
+  }
+};
+
 
 export type PortfolioSummaryHandle = { openEstimate: () => void };
 
@@ -147,8 +172,8 @@ function PortfolioSummaryImpl({
     const [isEstimateOpen, setIsEstimateOpen] = useState(false);
 
     useEffect(() => {
-        if (yearFilter.mode === 'holdings') setDonutMode('market');
-        else setDonutMode('economic'); // realized or combined
+      if (yearFilter.mode === 'holdings') setDonutMode('market');
+      else setDonutMode('economic'); // realized or combined
     }, [yearFilter.mode]);
 
     const openEstimate = useCallback(() => setIsEstimateOpen(true), []);
