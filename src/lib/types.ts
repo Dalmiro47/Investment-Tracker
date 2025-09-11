@@ -7,9 +7,11 @@ export type SortKey = 'purchaseDate' | 'performance' | 'totalAmount';
 
 export type TransactionType = 'Sell' | 'Dividend' | 'Interest' | 'Deposit' | 'Withdrawal';
 
+export type ViewMode = 'combined' | 'realized' | 'holdings';
+
 export type YearFilter =
-  | { kind: 'all' }
-  | { kind: 'year'; year: number; mode: 'combined' | 'realized' | 'holdings' };
+  | { kind: 'all'; mode: ViewMode }
+  | { kind: 'year'; year: number; mode: ViewMode };
 
 export interface TaxSettings {
   churchTaxRate: 0 | 0.08 | 0.09;

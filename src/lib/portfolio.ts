@@ -1,6 +1,6 @@
 
 
-import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary } from './types';
+import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary, ViewMode } from './types';
 import { dec, add, sub, mul, div, toNum } from '@/lib/money';
 import { isCryptoSellTaxFree, calcCapitalTax, calcCryptoTax, CapitalTaxResult, CryptoTaxResult } from './tax';
 import { differenceInDays, parseISO, endOfYear } from 'date-fns';
@@ -389,59 +389,55 @@ export function aggregateByType(
   taxSettings: TaxSettings | null,
   rateSchedulesMap: Record<string, SavingsRateChange[]>
 ): AggregatedSummary {
-    let metricsPerInvestment: PositionMetrics[] = [];
     
-    // Step 1: Filter investments based on the selected view mode
+    // active today?
+    const isActiveToday = (inv: Investment) => (inv.purchaseQuantity ?? 0) > (inv.totalSoldQty ?? 0) || inv.type === 'Interest Account';
+    // existed by the end of the selected year?
+    const existedByYearEnd = (inv: Investment, year: number) => {
+        const p = parseISO(inv.purchaseDate);
+        const eoy = endOfYear(new Date(Date.UTC(year, 0, 1)));
+        return p.getTime() <= eoy.getTime();
+    };
+    const hasSellsInYear = (txs: Transaction[], year: number) => txs.some(tx => tx.type === 'Sell' && new Date(tx.date).getFullYear() === year);
+
+    let includedInvestments = investments;
+
     if (yearFilter.kind === 'year') {
-        const investmentsWithSellsInYear = new Set<string>();
-        Object.entries(transactionsMap).forEach(([invId, txs]) => {
-            if (txs.some(tx => tx.type === 'Sell' && new Date(tx.date).getFullYear() === yearFilter.year)) {
-                investmentsWithSellsInYear.add(invId);
-            }
-        });
-
-        // active today?
-        const isActiveToday = (inv: Investment) => (inv.purchaseQuantity ?? 0) > (inv.totalSoldQty ?? 0) || inv.type === 'Interest Account';
-
-        // existed by the end of the selected year?
-        const existedByYearEnd = (inv: Investment, year: number) => {
-          const p = parseISO(inv.purchaseDate);
-          // use UTC end-of-year to avoid TZ skews
-          const eoy = endOfYear(new Date(Date.UTC(year, 0, 1)));
-          return p.getTime() <= eoy.getTime();
-        };
-
-        let include: (inv: Investment) => boolean;
         switch (yearFilter.mode) {
-          case 'realized':
-            // only assets with sells in that year
-            include = (inv) => investmentsWithSellsInYear.has(inv.id);
-            break;
-
-          case 'holdings':
-            // open positions that already existed by year end
-            include = (inv) => isActiveToday(inv) && existedByYearEnd(inv, yearFilter.year);
-            break;
-
-          case 'combined':
-          default:
-            // union of realized for that year + holdings that existed by year end
-            include = (inv) =>
-              investmentsWithSellsInYear.has(inv.id) ||
-              (isActiveToday(inv) && existedByYearEnd(inv, yearFilter.year));
-            break;
+            case 'realized':
+                includedInvestments = investments.filter(inv => hasSellsInYear(transactionsMap[inv.id] ?? [], yearFilter.year));
+                break;
+            case 'holdings':
+                includedInvestments = investments.filter(inv => isActiveToday(inv) && existedByYearEnd(inv, yearFilter.year));
+                break;
+            case 'combined':
+            default:
+                includedInvestments = investments.filter(inv => 
+                    hasSellsInYear(transactionsMap[inv.id] ?? [], yearFilter.year) || 
+                    (isActiveToday(inv) && existedByYearEnd(inv, yearFilter.year))
+                );
+                break;
         }
-
-        metricsPerInvestment = investments
-            .filter(include)
-            .map(inv => calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], yearFilter, rateSchedulesMap[inv.id]));
-    } else {
-        metricsPerInvestment = investments
-            .map(inv => calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], yearFilter, rateSchedulesMap[inv.id]))
-            .filter(p => p.purchaseValue > 0 || p.type === 'Interest Account');
+    } else { // kind is 'all'
+         switch (yearFilter.mode) {
+            case 'realized':
+                includedInvestments = investments.filter(inv => (inv.totalSoldQty ?? 0) > 0);
+                break;
+            case 'holdings':
+                includedInvestments = investments.filter(isActiveToday);
+                break;
+            case 'combined':
+            default:
+                includedInvestments = investments; // all investments
+                break;
+        }
     }
     
-    // Step 2: Aggregate financial metrics by type for manual investments
+    const metricsPerInvestment = includedInvestments.map(inv => 
+        calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], yearFilter, rateSchedulesMap[inv.id])
+    );
+    
+    // Aggregate financial metrics by type for manual investments
     const byType: Record<string, any> = {};
     metricsPerInvestment.forEach(p => {
         if (!byType[p.type]) {
@@ -453,10 +449,9 @@ export function aggregateByType(
         }
         const t = byType[p.type];
 
-        // ✅ Use Net Deposits for Interest Accounts; stock-like cost basis for the rest
         const lotCostBasis = p.type === 'Interest Account'
-          ? dec(p.purchaseValue)                                   // Net Deposits
-          : mul(dec(p.availableQty), dec(p.buyPrice));             // Remaining qty × buy price
+          ? dec(p.purchaseValue)
+          : mul(dec(p.availableQty), dec(p.buyPrice));
       
         t.costBasis    = add(t.costBasis, lotCostBasis);
         t.marketValue  = add(t.marketValue, dec(p.marketValue));
@@ -466,19 +461,31 @@ export function aggregateByType(
         t.purchaseValue= add(t.purchaseValue, dec(p.purchaseValue));
     });
 
-    const rows = Object.values(byType).map(t => ({
-        type: t.type,
-        costBasis: toNum(t.costBasis),
-        marketValue: toNum(t.marketValue),
-        realizedPL: toNum(t.realizedPL),
-        unrealizedPL: toNum(t.unrealizedPL),
-        totalPL: toNum(t.totalPL),
-        performancePct: toNum(t.purchaseValue.gt(0) ? div(t.totalPL, t.purchaseValue) : dec(0), 4),
-        economicValue: toNum(add(t.marketValue, t.realizedPL)),
-    }));
+    const rows = Object.values(byType).map(t => {
+      let costBasis = t.costBasis;
+      let marketValue = t.marketValue;
+      let unrealizedPL = t.unrealizedPL;
 
-    // Step 3: Add aggregated ETF data as a new row
-    if (etfSummaries.length > 0) {
+      if (yearFilter.mode === 'realized') {
+          costBasis = dec(0);
+          marketValue = dec(0);
+          unrealizedPL = dec(0);
+      }
+
+      return {
+        type: t.type,
+        costBasis: toNum(costBasis),
+        marketValue: toNum(marketValue),
+        realizedPL: toNum(yearFilter.mode === 'holdings' ? dec(0) : t.realizedPL),
+        unrealizedPL: toNum(unrealizedPL),
+        totalPL: toNum(add(unrealizedPL, yearFilter.mode === 'holdings' ? dec(0) : t.realizedPL)),
+        performancePct: toNum(t.purchaseValue.gt(0) ? div(add(unrealizedPL, t.realizedPL), t.purchaseValue) : dec(0), 4),
+        economicValue: toNum(add(marketValue, t.realizedPL)),
+      };
+    });
+
+    // Add aggregated ETF data as a new row (skip in realized mode)
+    if (etfSummaries.length > 0 && yearFilter.mode !== 'realized') {
       const etfMetrics = getEtfMetrics(etfSummaries, yearFilter);
       if (etfMetrics.costBasis > 0 || etfMetrics.marketValue > 0) {
         const totalPL = etfMetrics.realizedPL + etfMetrics.unrealizedPL;
@@ -495,7 +502,7 @@ export function aggregateByType(
       }
     }
     
-    // Step 4: Calculate final totals
+    // Calculate final totals
     const totals = rows.reduce((acc, row) => {
         acc.costBasis += row.costBasis;
         acc.marketValue += row.marketValue;
@@ -506,7 +513,6 @@ export function aggregateByType(
         if(typeSummary) {
           acc.purchaseValue = add(acc.purchaseValue, typeSummary.purchaseValue);
         } else if (row.type === 'ETF') {
-          // For ETFs, the "purchase value" for performance calculation is just the cost basis (total contributions)
           acc.purchaseValue = add(acc.purchaseValue, dec(row.costBasis));
         }
         return acc;
@@ -522,14 +528,9 @@ export function aggregateByType(
         economicValue: totals.marketValue + totals.realizedPL,
     };
     
-    // Step 5: Calculate tax summary if applicable
     let taxSummary: YearTaxSummary | null = null;
     if (yearFilter.kind === 'year' && taxSettings) {
-      // Normalize: accept either `churchTaxRate` (UI) or `churchRate` (calculators).
-      const churchRate =
-        (taxSettings as any).churchTaxRate ??
-        (taxSettings as any).churchRate ??
-        0;
+      const churchRate = (taxSettings as any).churchTaxRate ?? (taxSettings as any).churchRate ?? 0;
     
       const capitalIncome = metricsPerInvestment
         .reduce((sum, p) => sum + p.capitalGainsYear + p.dividendsYear + p.interestYear, 0);
@@ -540,14 +541,14 @@ export function aggregateByType(
       const capitalTaxResult = calcCapitalTax({
         year: yearFilter.year,
         filing: taxSettings.filingStatus,
-        churchRate,                // ✅ now defined
+        churchRate,
         capitalIncome,
       });
     
       const cryptoTaxResult = calcCryptoTax({
         year: yearFilter.year,
         marginalRate: taxSettings.cryptoMarginalRate,
-        churchRate,                // ✅ now defined
+        churchRate,
         shortTermGains: shortTermCryptoGains,
       });
     

@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
+import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary, ViewMode } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries, getAllRateSchedules, addTransaction } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
@@ -82,7 +82,7 @@ export default function DashboardPage() {
     cryptoMarginalRate: 0.42, // Default to a higher rate
   });
 
-  const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all' });
+  const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all', mode: 'holdings' });
   const [isRatesOpen, setIsRatesOpen] = React.useState(false);
   const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
   const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
@@ -142,7 +142,6 @@ export default function DashboardPage() {
 
   useAutoRefreshPrices({
     userId: user?.uid,
-    investments: investments,
     onComplete: () => {
       if(user?.uid) fetchAllData(user.uid);
     }

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
-import type { Investment, Transaction, YearFilter, TaxSettings, AggregatedSummary } from '@/lib/types';
+import type { Investment, Transaction, YearFilter, TaxSettings, AggregatedSummary, ViewMode } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
@@ -28,7 +28,6 @@ const CHART_COLORS = [
 ];
 
 type DonutMode = 'market' | 'economic';
-type YearViewMode = 'combined' | 'realized' | 'holdings';
 
 interface TaxEstimateDialogProps {
     isOpen: boolean;
@@ -163,17 +162,19 @@ function PortfolioSummaryImpl({
     }, [yearFilter.kind, isTaxView]);
     
     const handleYearChange = (value: string) => {
+        const currentMode = yearFilter.mode ?? 'combined';
         if (value === 'all') {
-            onYearFilterChange({ kind: 'all' });
+            onYearFilterChange({ kind: 'all', mode: currentMode });
         } else {
-            const currentMode = yearFilter.kind === 'year' ? yearFilter.mode : 'combined';
             onYearFilterChange({ kind: 'year', year: parseInt(value), mode: currentMode });
         }
     };
 
-    const handleModeChange = (mode: YearViewMode) => {
+    const handleModeChange = (mode: ViewMode) => {
         if (yearFilter.kind === 'year') {
             onYearFilterChange({ ...yearFilter, mode });
+        } else {
+            onYearFilterChange({ kind: 'all', mode });
         }
     };
 
@@ -211,6 +212,8 @@ function PortfolioSummaryImpl({
 
     const { title, description } = getSummaryContext(yearFilter);
     const isYearView = yearFilter.kind === 'year';
+    const isAllView = yearFilter.kind === 'all';
+
 
     return (
         <TooltipProvider>
@@ -306,13 +309,13 @@ function PortfolioSummaryImpl({
                         </Select>
                     </div>
                 </div>
-                {yearFilter.kind === 'year' && (
+                 {(isYearView || isAllView) && (
                     <div className="mt-4">
-                        <Tabs value={yearFilter.mode} onValueChange={(v) => handleModeChange(v as YearViewMode)}>
+                        <Tabs value={yearFilter.mode ?? 'combined'} onValueChange={(v) => handleModeChange(v as ViewMode)}>
                             <TabsList>
-                                <TabsTrigger value="combined">Combined</TabsTrigger>
-                                <TabsTrigger value="realized">Realized (Tax)</TabsTrigger>
                                 <TabsTrigger value="holdings">Holdings</TabsTrigger>
+                                <TabsTrigger value="realized">Realized (Tax)</TabsTrigger>
+                                <TabsTrigger value="combined">Combined</TabsTrigger>
                             </TabsList>
                         </Tabs>
                     </div>
