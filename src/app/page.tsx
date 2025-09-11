@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React from 'react';
@@ -223,7 +224,10 @@ export default function DashboardPage() {
     if (typeFilter !== 'All') {
       filtered = filtered.filter(inv => inv.type === typeFilter);
     }
-    if (statusFilter !== 'All') {
+    
+    if (isTaxView) {
+      filtered = filtered.filter(inv => inv.status === 'Sold');
+    } else if (statusFilter !== 'All') {
       filtered = filtered.filter(inv => inv.status === statusFilter);
     }
 
@@ -246,7 +250,7 @@ export default function DashboardPage() {
         }
       }
     });
-  }, [investmentsYearScoped, typeFilter, statusFilter, sortKey]);
+  }, [investmentsYearScoped, typeFilter, statusFilter, sortKey, isTaxView]);
 
   const investmentMetrics = React.useMemo(() => {
     const metricsMap = new Map<string, ReturnType<typeof calculatePositionMetrics>>();
@@ -513,16 +517,33 @@ export default function DashboardPage() {
               </div>
               <div className="flex-grow" />
               <div className="flex items-center gap-4 w-full sm:w-auto">
-                <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as InvestmentStatus | 'All')}>
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="All">All Statuses</SelectItem>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Sold">Sold</SelectItem>
-                  </SelectContent>
-                </Select>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="w-full sm:w-[180px]">
+                          <Select 
+                              value={isTaxView ? 'Sold' : statusFilter}
+                              onValueChange={(value) => setStatusFilter(value as InvestmentStatus | 'All')}
+                              disabled={isTaxView}
+                          >
+                          <SelectTrigger>
+                              <SelectValue placeholder="Filter by status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                              <SelectItem value="All">All Statuses</SelectItem>
+                              <SelectItem value="Active">Active</SelectItem>
+                              <SelectItem value="Sold">Sold</SelectItem>
+                          </SelectContent>
+                          </Select>
+                      </div>
+                    </TooltipTrigger>
+                    {isTaxView && (
+                      <TooltipContent>
+                        <p>Status is locked to "Sold" in Tax Report view.</p>
+                      </TooltipContent>
+                    )}
+                  </Tooltip>
+                </TooltipProvider>
                 <Select value={sortKey} onValueChange={(value) => setSortKey(value as SortKey)}>
                   <SelectTrigger className="w-full sm:w-[180px]">
                     <SelectValue placeholder="Sort by" />
@@ -592,7 +613,9 @@ export default function DashboardPage() {
           ) : (
             <div className="text-center py-16">
               <h3 className="text-xl font-semibold text-foreground">No Investments Found</h3>
-              <p className="text-muted-foreground mt-2">Add a new investment to get started.</p>
+              <p className="text-muted-foreground mt-2">
+                 {isTaxView ? "No sold positions match the current filters." : "Add a new investment to get started."}
+              </p>
               <div className="mt-4 flex items-center justify-center gap-3">
                 <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
@@ -652,3 +675,4 @@ export default function DashboardPage() {
     </>
   );
 }
+
