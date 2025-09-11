@@ -146,6 +146,11 @@ function PortfolioSummaryImpl({
     const [donutMode, setDonutMode] = useState<DonutMode>('market');
     const [isEstimateOpen, setIsEstimateOpen] = useState(false);
 
+    useEffect(() => {
+        if (yearFilter.mode === 'holdings') setDonutMode('market');
+        else setDonutMode('economic'); // realized or combined
+    }, [yearFilter.mode]);
+
     const openEstimate = useCallback(() => setIsEstimateOpen(true), []);
     useImperativeHandle(ref, () => ({ openEstimate }), [openEstimate]);
 
@@ -348,7 +353,7 @@ function PortfolioSummaryImpl({
                                     </TableHead>
                                     <TableHead className="text-right">Total P/L</TableHead>
                                     <TableHead className="text-right">Performance</TableHead>
-                                    <TableHead className="text-right">% of Portfolio</TableHead>
+                                    <TableHead className="text-right">% of Portfolio {donutMode === 'market' ? '(Market)' : '(Economic)'}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
