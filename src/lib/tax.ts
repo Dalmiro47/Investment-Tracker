@@ -9,6 +9,15 @@ export const TAX = {
   soliRate: 0.055,            // applied on the tax
 };
 
+export function defaultCapitalAllowance(year: number, filing: 'single' | 'married'): number {
+  // If law changes later, adjust here (kept simple for now)
+  return filing === 'married' ? 2000 : 1000;
+}
+
+export function defaultCryptoThreshold(year: number): number {
+  return year >= 2024 ? 1000 : 600;
+}
+
 
 export interface CapitalTaxInput {
   year: number;

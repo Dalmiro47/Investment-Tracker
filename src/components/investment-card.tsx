@@ -42,6 +42,7 @@ interface InvestmentCardProps {
   interestYear: number;
   currentRatePct?: number | null;
   onManageRates?: () => void;
+  soldOn?: string | null;
 }
 
 const typeIcons: Record<Investment['type'], React.ReactNode> = {
@@ -68,6 +69,7 @@ export default function InvestmentCard({
   interestYear,
   currentRatePct,
   onManageRates,
+  soldOn,
 }: InvestmentCardProps) {
   const { name, type, status, ticker, purchaseDate, realizedPnL } = investment;
   
@@ -435,6 +437,11 @@ export default function InvestmentCard({
           {purchaseDate && (
             <div>
                 {isIA ? 'Started on ' : 'Purchased on '}{format(parseISO(purchaseDate), 'dd MMM yyyy')}
+            </div>
+          )}
+          {status === 'Sold' && soldOn && (
+            <div className="mt-1">
+              Sold on {format(parseISO(soldOn), 'dd MMM yyyy')}
             </div>
           )}
           {isCrypto && cryptoTax?.taxFreeDate && (

@@ -602,6 +602,12 @@ export default function DashboardPage() {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {filteredAndSortedInvestments.map(investment => {
                 const metrics = investmentMetrics.get(investment.id);
+                const txs = transactionsMap[investment.id] ?? [];
+                const lastSoldOn = txs
+                  .filter(t => t.type === 'Sell')
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                  .at(-1)?.date ?? null;
+
                 return (
                   <InvestmentCard 
                     key={investment.id} 
@@ -619,6 +625,7 @@ export default function DashboardPage() {
                     currentRatePct={getCurrentRate(rateSchedulesMap[investment.id])}
                     onManageRates={() => handleManageRates(investment)}
                     taxSummary={summaryData.taxSummary}
+                    soldOn={lastSoldOn}
                   />
                 )
               })}
