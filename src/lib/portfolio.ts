@@ -462,17 +462,19 @@ export function aggregateByType(
     });
 
     const rows = Object.values(byType).map(t => {
+      let costBasis = t.costBasis;
       let marketValue = t.marketValue;
       let unrealizedPL = t.unrealizedPL;
 
       if (yearFilter.mode === 'realized') {
+          costBasis = dec(0);
           marketValue = dec(0);
           unrealizedPL = dec(0);
       }
 
       return {
         type: t.type,
-        costBasis: toNum(t.costBasis),
+        costBasis: toNum(costBasis),
         marketValue: toNum(marketValue),
         realizedPL: toNum(yearFilter.mode === 'holdings' ? dec(0) : t.realizedPL),
         unrealizedPL: toNum(unrealizedPL),
@@ -482,8 +484,8 @@ export function aggregateByType(
       };
     });
 
-    // Add aggregated ETF data as a new row
-    if (etfSummaries.length > 0) {
+    // Add aggregated ETF data as a new row (skip in realized mode)
+    if (etfSummaries.length > 0 && yearFilter.mode !== 'realized') {
       const etfMetrics = getEtfMetrics(etfSummaries, yearFilter);
       if (etfMetrics.costBasis > 0 || etfMetrics.marketValue > 0) {
         const totalPL = etfMetrics.realizedPL + etfMetrics.unrealizedPL;

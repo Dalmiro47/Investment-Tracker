@@ -313,9 +313,9 @@ function PortfolioSummaryImpl({
                     <div className="mt-4">
                         <Tabs value={yearFilter.mode ?? 'combined'} onValueChange={(v) => handleModeChange(v as ViewMode)}>
                             <TabsList>
-                                <TabsTrigger value="combined">Combined</TabsTrigger>
-                                <TabsTrigger value="realized">Realized (Tax)</TabsTrigger>
                                 <TabsTrigger value="holdings">Holdings</TabsTrigger>
+                                <TabsTrigger value="realized">Realized (Tax)</TabsTrigger>
+                                <TabsTrigger value="combined">Combined</TabsTrigger>
                             </TabsList>
                         </Tabs>
                     </div>
