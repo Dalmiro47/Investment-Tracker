@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import PortfolioStackedChart from '@/components/etf/PortfolioStackedChart';
 
 export const runtime = 'nodejs';
 
@@ -307,6 +308,13 @@ export default function PlanDetailPage() {
                         <Card><CardHeader><CardTitle className={kpis.performance >= 0 ? "text-green-500" : "text-destructive"}>{formatPercent(kpis.performance)}</CardTitle><CardDescription>Performance ({yearFilter === 'all' ? 'All Time' : yearFilter})</CardDescription></CardHeader></Card>
                     </div>
                 )}
+
+                {simData && plan && effectiveDriftRows.length > 0 && (
+                    <PortfolioStackedChart
+                        rows={effectiveDriftRows}
+                        components={plan.components}
+                    />
+                )}
                 
                  {simData && plan && (
                     <Tabs defaultValue="performance" className="mt-6">
@@ -369,7 +377,3 @@ export default function PlanDetailPage() {
         </div>
     )
 }
-
-    
-
-    
