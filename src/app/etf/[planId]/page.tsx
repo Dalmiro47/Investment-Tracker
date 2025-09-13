@@ -323,7 +323,13 @@ export default function PlanDetailPage() {
                             <TabsTrigger value="drift">Drift</TabsTrigger>
                         </TabsList>
                         <TabsContent value="performance">
-                            <PerformanceTable rows={simData.performance} components={plan.components} />
+                            <PerformanceTable
+                                rows={simData.performance}
+                                components={plan.components}
+                                availableYears={availableYears}
+                                yearFilter={yearFilter}
+                                onYearFilterChange={setYearFilter}
+                             />
                         </TabsContent>
                         <TabsContent value="drift">
                             <DriftTable rows={effectiveDriftRows} components={plan.components} availableYears={availableYears} yearFilter={yearFilter} onYearFilterChange={setYearFilter} />

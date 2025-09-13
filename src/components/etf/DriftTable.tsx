@@ -1,6 +1,6 @@
 
 'use client';
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -20,6 +20,8 @@ type DriftTableProps = {
 };
 
 export default function DriftTable({ rows, components, availableYears, yearFilter, onYearFilterChange }: DriftTableProps) {
+  const [etfFilter, setEtfFilter] = useState<string>('ALL');
+
   if (rows.length === 0) {
     return (
         <div className="text-center py-16 text-muted-foreground">
@@ -28,6 +30,12 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
         </div>
     );
   }
+
+  const visibleComponents = useMemo(() => {
+    if (etfFilter === 'ALL') return components;
+    return components.filter(c => c.id === etfFilter);
+  }, [components, etfFilter]);
+
 
   return (
     <Card>
@@ -57,7 +65,7 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
             </div>
             <div className="flex items-center gap-4">
                 <Select value={yearFilter} onValueChange={onYearFilterChange}>
-                    <SelectTrigger className="w-[180px]">
+                    <SelectTrigger className="w-[140px]">
                         <SelectValue placeholder="Filter by year" />
                     </SelectTrigger>
                     <SelectContent>
@@ -65,6 +73,13 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
                         {availableYears.map(year => (
                             <SelectItem key={year} value={String(year)}>{year}</SelectItem>
                         ))}
+                    </SelectContent>
+                </Select>
+                 <Select value={etfFilter} onValueChange={setEtfFilter}>
+                    <SelectTrigger className="w-[220px]"><SelectValue placeholder="All ETFs" /></SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="ALL">All ETFs</SelectItem>
+                        {components.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
                 <Button variant="outline" size="sm" disabled><ArrowDownToLine className="mr-2 h-4 w-4" />Export CSV</Button>
@@ -77,8 +92,8 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
                         <TableHead>Date</TableHead>
                         <TableHead className="text-right">Contribution</TableHead>
                         <TableHead className="text-right">Value</TableHead>
-                        {components.map(c => <TableHead key={c.id} className="text-right">{c.name} Value</TableHead>)}
-                        {components.map(c => <TableHead key={c.id} className="text-right">{c.name} Drift</TableHead>)}
+                        {visibleComponents.map(c => <TableHead key={`v-${c.id}`} className="text-right">{c.name} Value</TableHead>)}
+                        {visibleComponents.map(c => <TableHead key={`d-${c.id}`} className="text-right">{c.name} Drift</TableHead>)}
                     </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -87,14 +102,14 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
                             <TableCell>{format(parseISO(row.date), 'MMM yyyy')}</TableCell>
                             <TableCell className="text-right font-mono">{formatCurrency(row.contribution)}</TableCell>
                             <TableCell className="text-right font-mono font-bold">{formatCurrency(row.portfolioValue)}</TableCell>
-                            {components.map(comp => {
+                            {visibleComponents.map(comp => {
                                 const pos = row.positions.find(p => p.symbol === comp.ticker);
-                                return <TableCell key={comp.id} className="text-right font-mono">{formatCurrency(pos?.valueEUR ?? 0)}</TableCell>
+                                return <TableCell key={`rv-${row.date}-${comp.id}`} className="text-right font-mono">{formatCurrency(pos?.valueEUR ?? 0)}</TableCell>
                             })}
-                            {components.map(comp => {
+                            {visibleComponents.map(comp => {
                                 const pos = row.positions.find(p => p.symbol === comp.ticker);
                                 const drift = pos?.driftPct ?? 0;
-                                return <TableCell key={comp.id} className={`text-right font-mono ${drift > 0.01 ? 'text-green-500' : drift < -0.01 ? 'text-destructive' : ''}`}>{formatPercent(drift)}</TableCell>
+                                return <TableCell key={`rd-${row.date}-${comp.id}`} className={`text-right font-mono ${drift > 0.01 ? 'text-green-500' : drift < -0.01 ? 'text-destructive' : ''}`}>{formatPercent(drift)}</TableCell>
                             })}
                         </TableRow>
                     ))}
