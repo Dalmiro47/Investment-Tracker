@@ -30,6 +30,11 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
   
   const rowsForCsv = rowsDesc;
 
+  const visibleComponents = useMemo(() => {
+    if (etfFilter === 'ALL') return components;
+    return components.filter(c => c.id === etfFilter);
+  }, [components, etfFilter]);
+
   const handleExportCsv = React.useCallback(() => {
     const headers = [
       'Date','Contribution(EUR)','PortfolioValue(EUR)',
@@ -67,12 +72,6 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
         </div>
     );
   }
-
-  const visibleComponents = useMemo(() => {
-    if (etfFilter === 'ALL') return components;
-    return components.filter(c => c.id === etfFilter);
-  }, [components, etfFilter]);
-
 
   return (
     <Card>
