@@ -100,3 +100,5 @@ export function PerformanceTable({ rows, components }: { rows: PlanRowPerformanc
     </Card>
   );
 }
+
+    
