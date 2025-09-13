@@ -6,10 +6,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Button } from '@/components/ui/button';
-import { Info, ArrowDownToLine } from 'lucide-react';
+import { Info, Download } from 'lucide-react';
 import { formatCurrency, formatPercent } from '@/lib/money';
 import { format, parseISO } from 'date-fns';
 import type { PlanRowDrift, ETFComponent } from '@/lib/types.etf';
+import { downloadCSV } from '@/lib/csv';
 
 type DriftTableProps = {
   rows: PlanRowDrift[];
@@ -26,6 +27,37 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
     () => [...rows].sort((a, b) => b.date.localeCompare(a.date)),
     [rows]
   );
+  
+  const rowsForCsv = rowsDesc;
+
+  const handleExportCsv = React.useCallback(() => {
+    const headers = [
+      'Date','Contribution(EUR)','PortfolioValue(EUR)',
+      ...visibleComponents.map(c => `${c.name} Value(EUR)`),
+      ...visibleComponents.map(c => `${c.name} Drift(%)`),
+    ];
+  
+    const rowsOut: (string|number)[][] = rowsForCsv.map(row => {
+      const vals: (string|number)[] = [
+        row.date.slice(0,10),
+        row.contribution.toFixed(2),
+        row.portfolioValue.toFixed(2),
+      ];
+      visibleComponents.forEach(c => {
+        const pos = row.positions.find(p => p.symbol === c.ticker);
+        vals.push((pos?.valueEUR ?? 0).toFixed(2));
+      });
+      visibleComponents.forEach(c => {
+        const pos = row.positions.find(p => p.symbol === c.ticker);
+        // convert to percentage points for the CSV
+        const driftPct = (pos?.driftPct ?? 0) * 100;
+        vals.push(driftPct.toFixed(4));
+      });
+      return vals;
+    });
+  
+    downloadCSV('drift.csv', headers, rowsOut);
+  }, [rowsForCsv, visibleComponents]);
 
   if (rows.length === 0) {
     return (
@@ -87,7 +119,7 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
                         {components.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
                     </SelectContent>
                 </Select>
-                <Button variant="outline" size="sm" disabled><ArrowDownToLine className="mr-2 h-4 w-4" />Export CSV</Button>
+                <Button variant="outline" size="sm" onClick={handleExportCsv}><Download className="mr-2 h-4 w-4" />Export CSV</Button>
             </div>
         </CardHeader>
         <CardContent>

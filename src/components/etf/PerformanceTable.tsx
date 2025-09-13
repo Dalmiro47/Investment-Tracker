@@ -7,7 +7,8 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Info } from 'lucide-react';
+import { Info, Download } from 'lucide-react';
+import { downloadCSV } from '@/lib/csv';
 
 type Props = {
   rows: PlanRowPerformance[];
@@ -37,6 +38,33 @@ export function PerformanceTable({ rows, components, availableYears, yearFilter,
       .map(row => ({ ...row, perEtf: row.perEtf.filter(e => e.etfId === etfFilter) }))
       .filter(row => row.perEtf.length > 0);
   }, [filteredByYear, etfFilter]);
+  
+  const handleExportCsv = React.useCallback(() => {
+    const headers = [
+      'Date','ETF','UnitsStart','UnitsEnd','Price(EUR)','Contribution(EUR)',
+      'Value(EUR)','MonthlyReturn(%)','MonthlyPnL(EUR)','CumPnL(EUR)',
+    ];
+  
+    const rowsOut: (string|number)[][] = [];
+    filteredRows.forEach(r => {
+      r.perEtf.forEach(e => {
+        rowsOut.push([
+          r.dateKey,
+          e.name ?? e.etfId,
+          Number(e.unitsStart ?? 0).toFixed(6),
+          Number(e.unitsEnd ?? 0).toFixed(6),
+          Number(e.priceNow).toFixed(6),
+          Number(e.contribThisMonth).toFixed(2),
+          Number(e.valueNow).toFixed(2),
+          e.monthlyReturnPct ? (Number(e.monthlyReturnPct) * 100).toFixed(4) : '',
+          e.monthlyPnL ? Number(e.monthlyPnL).toFixed(2) : '',
+          Number(e.cumulativePnL).toFixed(2),
+        ]);
+      });
+    });
+  
+    downloadCSV('performance.csv', headers, rowsOut);
+  }, [filteredRows]);
 
   if (rows.length === 0) {
     return (
@@ -99,6 +127,9 @@ export function PerformanceTable({ rows, components, availableYears, yearFilter,
               </SelectContent>
             </Select>
           </div>
+          <Button variant="outline" size="sm" onClick={handleExportCsv}>
+            <Download className="mr-2 h-4 w-4" /> Export CSV
+          </Button>
         </div>
       </CardHeader>
 
