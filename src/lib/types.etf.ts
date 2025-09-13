@@ -1,4 +1,3 @@
-
 // src/lib/types.etf.ts
 import type { Timestamp } from 'firebase/firestore';
 
@@ -15,7 +14,7 @@ export interface ETFComponent {
   ticker: string;             // e.g. SWDA.L or EUNL.DE (user-provided from Yahoo Finance)
   isin?: string;              // Optional, for user reference
   preferredExchange?: 'XETRA'|'LSE'|'MIL'|'AMS'; // Optional
-  currency?: 'EUR'|'USD'|'GBP'|'CHF'|string;
+  currency?: string;
   targetWeight: number;       // 0..1
 }
 
@@ -49,3 +48,49 @@ export interface FXRatePoint {
   base: 'EUR';
   rates: Record<string, number>; // e.g. { USD: 1.073, GBP: 0.855, ... } → EUR→CCY
 }
+
+export type EtfPerfSnapshot = {
+  etfId: string;
+  symbol?: string;
+  name?: string;
+  unitsStart: string;
+  unitsEnd: string;
+  pricePrev?: string;
+  priceNow: string;
+  valueNow: string;
+  contribThisMonth: string;
+  cumulativeContrib: string;
+  monthlyReturnPct?: string;
+  monthlyPnL?: string;
+  cumulativePnL: string;
+};
+
+export type PlanRowPerformance = {
+  dateKey: string;
+  totalValue: string;
+  totalContributionToDate: string;
+  perEtf: EtfPerfSnapshot[];
+};
+
+export type PlanRowDrift = {
+  date: string;
+  contribution: number;
+  fees: number;
+  portfolioValue: number;
+  positions: {
+    symbol: string;
+    units: number;
+    priceCCY: number;
+    ccy: string;
+    fxEURtoCCY?: number;
+    priceEUR: number;
+    valueEUR: number;
+    targetWeight: number;
+    driftPct: number;
+  }[];
+};
+
+export type SimulationRows = {
+  performance: PlanRowPerformance[];
+  drift: PlanRowDrift[];
+};

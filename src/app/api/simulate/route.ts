@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import { getPricePointsServer, getFXRatesServer } from '@/lib/firestore.etf.server';
 import { simulatePlan } from '@/lib/etf/engine';
-import type { PlanRow } from '@/lib/etf/engine';
+import type { SimulationRows } from '@/lib/types.etf';
 import { getStartMonth } from '@/lib/date-helpers';
 import { adminDb } from '@/lib/firebase-admin';
 import { buildSimSummary } from '@/lib/etf/sim-summary';
@@ -114,24 +114,24 @@ export async function POST(req: Request) {
     const needsFx = currencies.size > 1 || (currencies.size === 1 && !currencies.has('EUR'));
     const fx = needsFx ? await getFXRatesServer(uid, startISO, endISO) : {};
 
-    const simulationResult: PlanRow[] = simulatePlan(plan, components, perSymbol, fx, { endMonth: lastCommonMonth });
+    const simulationResult: SimulationRows = simulatePlan(plan, components, perSymbol, fx, { endMonth: lastCommonMonth });
 
     const simStartMonth = startMonth;
-    const wire = simulationResult
+    const wireDrift = simulationResult.drift
       .filter(row => row.date.slice(0, 7) >= simStartMonth)
       .map(row => JSON.parse(JSON.stringify(row)));
 
-    if (wire.length && wire[0].date.slice(0,7) !== startMonth) {
+    if (wireDrift.length && wireDrift[0].date.slice(0,7) !== startMonth) {
       console.warn('Invariant violation: first simulation row month does not match plan start month.', { 
           planStartDate: plan.startDate,
           planStartMonth: getStartMonth(plan),
           derivedStartMonth: startMonth, 
-          firstRowMonth: wire[0].date.slice(0,7) 
+          firstRowMonth: wireDrift[0].date.slice(0,7) 
       });
     }
 
     try {
-        const summary = buildSimSummary(wire, startMonth, { planId: plan.id, title: plan.title, baseCurrency: plan.baseCurrency });
+        const summary = buildSimSummary(wireDrift, startMonth, { planId: plan.id, title: plan.title, baseCurrency: plan.baseCurrency });
         const ref = adminDb.doc(`users/${uid}/etfPlans/${plan.id}/latest_sim_summary/latest`);
         await ref.set(summary, { merge: true });
     } catch (e) {
@@ -141,7 +141,7 @@ export async function POST(req: Request) {
     return NextResponse.json({
         ok: true,
         meta: { startMonth, endMonth: lastCommonMonth },
-        rows: wire
+        rows: simulationResult
     });
   } catch (e: any) {
     console.error('simulate API error:', e);
