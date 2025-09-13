@@ -372,31 +372,41 @@ export default function PlanDetailPage() {
                 
                  {simData && plan && (
                     <Tabs defaultValue="performance" className="mt-6">
-                        <div className="mb-2 flex items-center justify-between">
-                            <TabsList>
-                                <TabsTrigger value="performance">Performance</TabsTrigger>
-                                <TabsTrigger value="drift">Drift</TabsTrigger>
-                            </TabsList>
-
-                            <div className="flex overflow-hidden rounded-md border bg-muted p-0.5">
-                                <Button
-                                    size="sm"
-                                    variant={perfView === 'flat' ? 'secondary' : 'ghost'}
-                                    className="rounded-sm"
-                                    onClick={() => setPerfView('flat')}
-                                >
-                                    Flat
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    variant={perfView === 'aggregated' ? 'secondary' : 'ghost'}
-                                    className="rounded-sm"
-                                    onClick={() => setPerfView('aggregated')}
-                                >
-                                    Aggregated
-                                </Button>
-                            </div>
+                      <div className="mb-2 flex items-center gap-2">
+                        <TabsList>
+                          <TabsTrigger value="performance">Performance</TabsTrigger>
+                          <TabsTrigger value="drift">Drift</TabsTrigger>
+                        </TabsList>
+                
+                        <div className="inline-flex items-center rounded-md bg-muted p-1">
+                          <button
+                            type="button"
+                            onClick={() => setPerfView('flat')}
+                            data-active={perfView === 'flat'}
+                            className={[
+                              'h-8 px-3 text-sm font-medium rounded-sm',
+                              'text-muted-foreground transition-colors',
+                              'hover:text-foreground',
+                              'data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-sm',
+                            ].join(' ')}
+                          >
+                            Flat
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPerfView('aggregated')}
+                            data-active={perfView === 'aggregated'}
+                            className={[
+                              'h-8 px-3 text-sm font-medium rounded-sm',
+                              'text-muted-foreground transition-colors',
+                              'hover:text-foreground',
+                              'data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-sm',
+                            ].join(' ')}
+                          >
+                            Aggregated
+                          </button>
                         </div>
+                      </div>
 
                         <TabsContent value="performance">
                             <PerformanceSummary
