@@ -12,6 +12,7 @@ import { format, parseISO, getYear } from 'date-fns';
 import { formatCurrency, formatPercent } from '@/lib/money';
 import { getStartMonth } from '@/lib/date-helpers';
 import { useAutoRefreshEtfHistory } from '@/hooks/use-auto-refresh-etf';
+import { xirr } from '@/lib/xirr';
 
 import DashboardHeader from '@/components/dashboard-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -19,12 +20,14 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DriftTable from '@/components/etf/DriftTable';
 import { PerformanceTable } from '@/components/etf/PerformanceTable';
-import { ArrowLeft, RefreshCw, Play, Loader2, ArrowDownToLine, AlertTriangle } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { ArrowLeft, RefreshCw, Play, Loader2, ArrowDownToLine, AlertTriangle, Info } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import PortfolioStackedChart from '@/components/etf/PortfolioStackedChart';
+import PerformanceSummary from '@/components/etf/PerformanceSummary';
+import AggregatedPerformanceTable from '@/components/etf/AggregatedPerformanceTable';
 
 export const runtime = 'nodejs';
 
@@ -111,6 +114,7 @@ export default function PlanDetailPage() {
     const [yearFilter, setYearFilter] = useState<string>('all');
     const [missingPrices, setMissingPrices] = useState<MissingPrice[]>([]);
     const [isMissingPricesDialogOpen, setIsMissingPricesDialogOpen] = useState(false);
+    const [perfView, setPerfView] = useState<'flat' | 'aggregated'>('flat');
 
     useAutoRefreshEtfHistory({ userId: user?.uid });
 
@@ -232,24 +236,49 @@ export default function PlanDetailPage() {
         return baseRows.filter(row => getYear(parseISO(row.date)) === parseInt(yearFilter));
     }, [simData, yearFilter]);
 
-    const kpis = useMemo(() => {
-        if (effectiveDriftRows.length === 0 || !simData) return null;
-        
-        const firstRowInPeriod = effectiveDriftRows[0];
-        const allSimDataBeforePeriod = simData.drift.filter(row => row.date < firstRowInPeriod.date);
-        const valueBeforePeriod = allSimDataBeforePeriod[allSimDataBeforePeriod.length - 1]?.portfolioValue ?? 0;
-        
-        const lastRow = effectiveDriftRows[effectiveDriftRows.length - 1];
-        const totalContributions = effectiveDriftRows.reduce((sum, row) => sum + row.contribution, 0);
-        const totalFees = effectiveDriftRows.reduce((sum, row) => sum + row.fees, 0);
-        const currentValue = lastRow.portfolioValue;
+    const perfRowsPeriod = useMemo(() => {
+      if (!simData?.performance) return [];
+      return yearFilter === 'all'
+        ? simData.performance
+        : simData.performance.filter(r => r.dateKey.slice(0,4) === yearFilter);
+    }, [simData, yearFilter]);
 
-        const gainLoss = currentValue - valueBeforePeriod - totalContributions;
-        const basis = valueBeforePeriod + totalContributions;
-        const performance = basis > 0 ? gainLoss / basis : 0;
-        
-        return { totalContributions, totalFees, currentValue, gainLoss, performance };
-    }, [effectiveDriftRows, simData]);
+    const kpis = useMemo(() => {
+      if (effectiveDriftRows.length === 0 || !simData || perfRowsPeriod.length === 0) return null;
+
+      // Simple % (your existing logic)
+      const firstRowInPeriod = effectiveDriftRows[0];
+      const before = simData.drift.filter(row => row.date < firstRowInPeriod.date);
+      const valueBeforePeriod = before[before.length - 1]?.portfolioValue ?? 0;
+
+      const lastRow = effectiveDriftRows[effectiveDriftRows.length - 1];
+      const totalContributions = effectiveDriftRows.reduce((sum, row) => sum + row.contribution, 0);
+      const totalFees = effectiveDriftRows.reduce((sum, row) => sum + row.fees, 0);
+      const currentValue = lastRow.portfolioValue;
+
+      const gainLoss = currentValue - valueBeforePeriod - totalContributions;
+      const basis = valueBeforePeriod + totalContributions;
+      const performance = basis > 0 ? gainLoss / basis : 0;
+
+      // XIRR (money-weighted, annualized)
+      const feesByMonth = new Map<string, number>();
+      effectiveDriftRows.forEach(dr => {
+        const m = dr.date.slice(0,7);
+        feesByMonth.set(m, (feesByMonth.get(m) ?? 0) + (dr.fees ?? 0));
+      });
+
+      const cf = perfRowsPeriod.map(r => {
+        const contrib = r.perEtf.reduce((s, e) => s + Number(e.contribThisMonth), 0);
+        const fees = feesByMonth.get(r.dateKey) ?? 0;
+        return { date: new Date(`${r.dateKey}-28`), amount: -(contrib + fees) };
+      });
+      // terminal inflow at period end
+      if (currentValue > 0) cf.push({ date: new Date(`${lastRow.date.slice(0,10)}`), amount: currentValue });
+      const xirrValue =
+        (cf.some(c => c.amount < 0) && cf.some(c => c.amount > 0)) ? xirr(cf) : null;
+
+      return { totalContributions, totalFees, currentValue, gainLoss, performance, xirrValue };
+    }, [effectiveDriftRows, simData, perfRowsPeriod]);
 
 
     const availableYears = useMemo(() => {
@@ -305,7 +334,32 @@ export default function PlanDetailPage() {
                         <Card><CardHeader><CardTitle>{formatCurrency(kpis.totalFees)}</CardTitle><CardDescription>Total Fees Paid ({yearFilter === 'all' ? 'All Time' : yearFilter})</CardDescription></CardHeader></Card>
                         <Card><CardHeader><CardTitle>{formatCurrency(kpis.currentValue)}</CardTitle><CardDescription>End of Period Value</CardDescription></CardHeader></Card>
                         <Card><CardHeader><CardTitle className={kpis.gainLoss >= 0 ? "text-green-500" : "text-destructive"}>{formatCurrency(kpis.gainLoss)}</CardTitle><CardDescription>Gain / Loss ({yearFilter === 'all' ? 'All Time' : yearFilter})</CardDescription></CardHeader></Card>
-                        <Card><CardHeader><CardTitle className={kpis.performance >= 0 ? "text-green-500" : "text-destructive"}>{formatPercent(kpis.performance)}</CardTitle><CardDescription>Performance ({yearFilter === 'all' ? 'All Time' : yearFilter})</CardDescription></CardHeader></Card>
+                        <Card>
+                          <CardHeader className="flex flex-row items-center justify-between">
+                            <div>
+                              <CardTitle className={kpis.performance >= 0 ? "text-green-500" : "text-destructive"}>
+                                {formatPercent(kpis.performance)}{kpis.xirrValue != null ? ` / ${formatPercent(kpis.xirrValue)}` : ''}
+                              </CardTitle>
+                              <CardDescription>Simple % / XIRR ({yearFilter === 'all' ? 'All Time' : yearFilter})</CardDescription>
+                            </div>
+                            <Dialog>
+                              <DialogTrigger asChild>
+                                <Button variant="ghost" size="icon"><Info className="h-4 w-4" /></Button>
+                              </DialogTrigger>
+                              <DialogContent>
+                                <DialogHeader>
+                                  <DialogTitle>Simple % vs XIRR — what’s the difference?</DialogTitle>
+                                </DialogHeader>
+                                <div className="space-y-3 text-sm">
+                                  <p><b>Simple %</b> = (End Value − (Contributions + Fees)) ÷ (Contributions + Fees) for the selected period.</p>
+                                  <p><b>XIRR</b> is the money-weighted, annualized return that accounts for <i>when</i> each contribution/fee happened. We build monthly cash flows
+                                     as outflows (contribution + fee) and a final inflow equal to the end value.</p>
+                                  <p>They differ whenever contributions are spread over time (i.e., regular investing). XIRR captures compounding with cash-flow timing; Simple % is a quick ratio.</p>
+                                </div>
+                              </DialogContent>
+                            </Dialog>
+                          </CardHeader>
+                        </Card>
                     </div>
                 )}
 
@@ -318,18 +372,69 @@ export default function PlanDetailPage() {
                 
                  {simData && plan && (
                     <Tabs defaultValue="performance" className="mt-6">
+                      <div className="mb-2 flex items-center gap-2">
                         <TabsList>
-                            <TabsTrigger value="performance">Performance</TabsTrigger>
-                            <TabsTrigger value="drift">Drift</TabsTrigger>
+                          <TabsTrigger value="performance">Performance</TabsTrigger>
+                          <TabsTrigger value="drift">Drift</TabsTrigger>
                         </TabsList>
+                
+                        <div className="inline-flex items-center rounded-md bg-muted p-1">
+                          <button
+                            type="button"
+                            onClick={() => setPerfView('flat')}
+                            data-active={perfView === 'flat'}
+                            className={[
+                              'h-8 px-3 text-sm font-medium rounded-sm',
+                              'text-muted-foreground transition-colors',
+                              'hover:text-foreground',
+                              'data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-sm',
+                            ].join(' ')}
+                          >
+                            Flat
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setPerfView('aggregated')}
+                            data-active={perfView === 'aggregated'}
+                            className={[
+                              'h-8 px-3 text-sm font-medium rounded-sm',
+                              'text-muted-foreground transition-colors',
+                              'hover:text-foreground',
+                              'data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-sm',
+                            ].join(' ')}
+                          >
+                            Aggregated
+                          </button>
+                        </div>
+                      </div>
+
                         <TabsContent value="performance">
-                            <PerformanceTable
-                                rows={simData.performance}
+                            <PerformanceSummary
+                                perfRows={perfRowsPeriod}
+                                driftRows={effectiveDriftRows}
                                 components={plan.components}
-                                availableYears={availableYears}
-                                yearFilter={yearFilter}
-                                onYearFilterChange={setYearFilter}
-                             />
+                                showPerEtf={false}
+                                showPortfolioCards={false}
+                                showGrowthBar={false}
+                            />
+                            {perfView === 'flat' ? (
+                                <PerformanceTable
+                                    rows={simData.performance}
+                                    components={plan.components}
+                                    availableYears={availableYears}
+                                    yearFilter={yearFilter}
+                                    onYearFilterChange={setYearFilter}
+                                    sticky
+                                />
+                            ) : (
+                                <AggregatedPerformanceTable
+                                    rows={simData.performance}
+                                    components={plan.components}
+                                    availableYears={availableYears}
+                                    yearFilter={yearFilter}
+                                    onYearFilterChange={setYearFilter}
+                                />
+                            )}
                         </TabsContent>
                         <TabsContent value="drift">
                             <DriftTable rows={effectiveDriftRows} components={plan.components} availableYears={availableYears} yearFilter={yearFilter} onYearFilterChange={setYearFilter} />

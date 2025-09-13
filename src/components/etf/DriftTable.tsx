@@ -1,6 +1,6 @@
 
 'use client';
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
@@ -35,7 +35,7 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
     return components.filter(c => c.id === etfFilter);
   }, [components, etfFilter]);
 
-  const handleExportCsv = React.useCallback(() => {
+  const handleExportCsv = useCallback(() => {
     const headers = [
       'Date','Contribution(EUR)','PortfolioValue(EUR)',
       ...visibleComponents.map(c => `${c.name} Value(EUR)`),
@@ -122,35 +122,37 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
             </div>
         </CardHeader>
         <CardContent>
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead className="text-right">Contribution</TableHead>
-                        <TableHead className="text-right">Value</TableHead>
-                        {visibleComponents.map(c => <TableHead key={`v-${c.id}`} className="text-right">{c.name} Value</TableHead>)}
-                        {visibleComponents.map(c => <TableHead key={`d-${c.id}`} className="text-right">{c.name} Drift</TableHead>)}
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {rowsDesc.map(row => (
-                        <TableRow key={row.date}>
-                            <TableCell>{format(parseISO(row.date), 'MMM yyyy')}</TableCell>
-                            <TableCell className="text-right font-mono">{formatCurrency(row.contribution)}</TableCell>
-                            <TableCell className="text-right font-mono font-bold">{formatCurrency(row.portfolioValue)}</TableCell>
-                            {visibleComponents.map(comp => {
-                                const pos = row.positions.find(p => p.symbol === comp.ticker);
-                                return <TableCell key={`rv-${row.date}-${comp.id}`} className="text-right font-mono">{formatCurrency(pos?.valueEUR ?? 0)}</TableCell>
-                            })}
-                            {visibleComponents.map(comp => {
-                                const pos = row.positions.find(p => p.symbol === comp.ticker);
-                                const drift = pos?.driftPct ?? 0;
-                                return <TableCell key={`rd-${row.date}-${comp.id}`} className={`text-right font-mono ${drift > 0.01 ? 'text-green-500' : drift < -0.01 ? 'text-destructive' : ''}`}>{formatPercent(drift)}</TableCell>
-                            })}
+            <div className="scroll-area max-h-[60vh] overflow-auto rounded-md border">
+                <Table>
+                    <TableHeader className="sticky top-0 z-10 bg-card">
+                        <TableRow>
+                            <TableHead>Date</TableHead>
+                            <TableHead className="text-right">Contribution</TableHead>
+                            <TableHead className="text-right">Value</TableHead>
+                            {visibleComponents.map(c => <TableHead key={`v-${c.id}`} className="text-right">{c.name} Value</TableHead>)}
+                            {visibleComponents.map(c => <TableHead key={`d-${c.id}`} className="text-right">{c.name} Drift</TableHead>)}
                         </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
+                    </TableHeader>
+                    <TableBody>
+                        {rowsDesc.map(row => (
+                            <TableRow key={row.date}>
+                                <TableCell>{format(parseISO(row.date), 'MMM yyyy')}</TableCell>
+                                <TableCell className="text-right font-mono">{formatCurrency(row.contribution)}</TableCell>
+                                <TableCell className="text-right font-mono font-bold">{formatCurrency(row.portfolioValue)}</TableCell>
+                                {visibleComponents.map(comp => {
+                                    const pos = row.positions.find(p => p.symbol === comp.ticker);
+                                    return <TableCell key={`rv-${row.date}-${comp.id}`} className="text-right font-mono">{formatCurrency(pos?.valueEUR ?? 0)}</TableCell>
+                                })}
+                                {visibleComponents.map(comp => {
+                                    const pos = row.positions.find(p => p.symbol === comp.ticker);
+                                    const drift = pos?.driftPct ?? 0;
+                                    return <TableCell key={`rd-${row.date}-${comp.id}`} className={`text-right font-mono ${drift > 0.01 ? 'text-green-500' : drift < -0.01 ? 'text-destructive' : ''}`}>{formatPercent(drift)}</TableCell>
+                                })}
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
         </CardContent>
     </Card>
   );
