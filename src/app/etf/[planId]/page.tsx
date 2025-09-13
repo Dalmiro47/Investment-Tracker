@@ -7,9 +7,8 @@ import { useParams } from 'next/navigation';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
 import { getEtfPlan } from '@/lib/firestore.etfPlan';
-import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
-import type { PlanRow } from '@/lib/etf/engine';
-import { format, parseISO, getYear, startOfMonth } from 'date-fns';
+import type { ETFPlan, ETFComponent, SimulationRows, PlanRowDrift } from '@/lib/types.etf';
+import { format, parseISO, getYear } from 'date-fns';
 import { formatCurrency, formatPercent } from '@/lib/money';
 import { getStartMonth } from '@/lib/date-helpers';
 import { useAutoRefreshEtfHistory } from '@/hooks/use-auto-refresh-etf';
@@ -17,18 +16,17 @@ import { useAutoRefreshEtfHistory } from '@/hooks/use-auto-refresh-etf';
 import DashboardHeader from '@/components/dashboard-header';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
-import { AreaChart, Area, XAxis, YAxis, Tooltip as RechartsTooltip, CartesianGrid, Legend } from 'recharts';
-import { ArrowLeft, RefreshCw, Play, Loader2, ArrowDownToLine, Info, AlertTriangle } from 'lucide-react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import DriftTable from '@/components/etf/DriftTable';
+import { PerformanceTable } from '@/components/etf/PerformanceTable';
+import { ArrowLeft, RefreshCw, Play, Loader2, ArrowDownToLine, AlertTriangle } from 'lucide-react';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import PortfolioStackedChart from '@/components/etf/PortfolioStackedChart';
 
 export const runtime = 'nodejs';
-
-const CHART_COLORS = ['hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))', 'hsl(var(--chart-4))', 'hsl(var(--chart-5))'];
 
 interface MissingPrice {
     month: string;
@@ -106,7 +104,7 @@ export default function PlanDetailPage() {
     const { user } = useAuth();
     const { toast } = useToast();
     const [plan, setPlan] = useState<(ETFPlan & { components: ETFComponent[] }) | null>(null);
-    const [simData, setSimData] = useState<PlanRow[]>([]);
+    const [simData, setSimData] = useState<SimulationRows | null>(null);
     const [loading, setLoading] = useState(true);
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [isRunning, setIsRunning] = useState(false);
@@ -159,7 +157,7 @@ export default function PlanDetailPage() {
     const handleRun = async () => {
         if (!user || !plan) return;
         setIsRunning(true);
-        setSimData([]); // Clear previous results
+        setSimData(null); // Clear previous results
         toast({ title: 'Running simulation...' });
         try {
             const plainPlan = {
@@ -222,11 +220,11 @@ export default function PlanDetailPage() {
     };
 
 
-    const effectiveRows = useMemo(() => {
-        if (!simData || simData.length === 0) return [];
-        let end = simData.length - 1;
-        while (end >= 0 && (simData[end]?.portfolioValue ?? 0) === 0) end--;
-        const baseRows = simData.slice(0, end + 1);
+    const effectiveDriftRows = useMemo(() => {
+        if (!simData?.drift || simData.drift.length === 0) return [];
+        let end = simData.drift.length - 1;
+        while (end >= 0 && (simData.drift[end]?.portfolioValue ?? 0) === 0) end--;
+        const baseRows = simData.drift.slice(0, end + 1);
 
         if (yearFilter === 'all') {
             return baseRows;
@@ -235,15 +233,15 @@ export default function PlanDetailPage() {
     }, [simData, yearFilter]);
 
     const kpis = useMemo(() => {
-        if (effectiveRows.length === 0) return null;
+        if (effectiveDriftRows.length === 0 || !simData) return null;
         
-        const firstRowInPeriod = effectiveRows[0];
-        const allSimDataBeforePeriod = simData.filter(row => row.date < firstRowInPeriod.date);
+        const firstRowInPeriod = effectiveDriftRows[0];
+        const allSimDataBeforePeriod = simData.drift.filter(row => row.date < firstRowInPeriod.date);
         const valueBeforePeriod = allSimDataBeforePeriod[allSimDataBeforePeriod.length - 1]?.portfolioValue ?? 0;
         
-        const lastRow = effectiveRows[effectiveRows.length - 1];
-        const totalContributions = effectiveRows.reduce((sum, row) => sum + row.contribution, 0);
-        const totalFees = effectiveRows.reduce((sum, row) => sum + row.fees, 0);
+        const lastRow = effectiveDriftRows[effectiveDriftRows.length - 1];
+        const totalContributions = effectiveDriftRows.reduce((sum, row) => sum + row.contribution, 0);
+        const totalFees = effectiveDriftRows.reduce((sum, row) => sum + row.fees, 0);
         const currentValue = lastRow.portfolioValue;
 
         const gainLoss = currentValue - valueBeforePeriod - totalContributions;
@@ -251,26 +249,13 @@ export default function PlanDetailPage() {
         const performance = basis > 0 ? gainLoss / basis : 0;
         
         return { totalContributions, totalFees, currentValue, gainLoss, performance };
-    }, [effectiveRows, simData]);
+    }, [effectiveDriftRows, simData]);
 
-    const chartData = useMemo(() => {
-        return effectiveRows.map(row => {
-            const chartRow: any = {
-                date: format(parseISO(row.date), 'MMM yy'),
-                'Portfolio Value': row.portfolioValue,
-            };
-            plan?.components.forEach(comp => {
-                const pos = row.positions.find(p => p.symbol === comp.ticker);
-                chartRow[comp.name] = pos?.valueEUR ?? 0;
-            });
-            return chartRow;
-        });
-    }, [effectiveRows, plan]);
 
     const availableYears = useMemo(() => {
-        if (simData.length === 0) return [];
+        if (!simData?.drift || simData.drift.length === 0) return [];
         const years = new Set<number>();
-        simData.forEach(row => years.add(getYear(parseISO(row.date))));
+        simData.drift.forEach(row => years.add(getYear(parseISO(row.date))));
         return Array.from(years).sort((a, b) => b - a);
     }, [simData]);
 
@@ -324,102 +309,35 @@ export default function PlanDetailPage() {
                     </div>
                 )}
 
-                {effectiveRows.length > 0 && (
-                    <Card className="mb-6">
-                        <CardHeader>
-                            <CardTitle>Portfolio Value Over Time</CardTitle>
-                        </CardHeader>
-                        <CardContent className="h-[400px]">
-                            <ChartContainer config={{}} className="w-full h-full">
-                                <AreaChart data={chartData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" />
-                                    <XAxis dataKey="date" />
-                                    <YAxis tickFormatter={(value) => formatCurrency(value as number)} />
-                                    <RechartsTooltip content={<ChartTooltipContent formatter={(value, name) => <div>{name}: {formatCurrency(value as number)}</div>} />} />
-                                    <Legend />
-                                    {plan.components.map((comp, i) => (
-                                        <Area key={comp.id} type="monotone" dataKey={comp.name} stackId="1" stroke={CHART_COLORS[i % CHART_COLORS.length]} fill={CHART_COLORS[i % CHART_COLORS.length]} fillOpacity={0.6} />
-                                    ))}
-                                </AreaChart>
-                            </ChartContainer>
-                        </CardContent>
-                    </Card>
+                {simData && plan && effectiveDriftRows.length > 0 && (
+                    <PortfolioStackedChart
+                        rows={effectiveDriftRows}
+                        components={plan.components}
+                    />
+                )}
+                
+                 {simData && plan && (
+                    <Tabs defaultValue="performance" className="mt-6">
+                        <TabsList>
+                            <TabsTrigger value="performance">Performance</TabsTrigger>
+                            <TabsTrigger value="drift">Drift</TabsTrigger>
+                        </TabsList>
+                        <TabsContent value="performance">
+                            <PerformanceTable
+                                rows={simData.performance}
+                                components={plan.components}
+                                availableYears={availableYears}
+                                yearFilter={yearFilter}
+                                onYearFilterChange={setYearFilter}
+                             />
+                        </TabsContent>
+                        <TabsContent value="drift">
+                            <DriftTable rows={effectiveDriftRows} components={plan.components} availableYears={availableYears} yearFilter={yearFilter} onYearFilterChange={setYearFilter} />
+                        </TabsContent>
+                    </Tabs>
                 )}
 
-                {effectiveRows.length > 0 && (
-                    <Card>
-                        <CardHeader className="flex flex-row justify-between items-center">
-                            <div className="flex items-center gap-2">
-                                <div>
-                                    <CardTitle>Monthly Simulation Details</CardTitle>
-                                    <CardDescription>Breakdown of portfolio evolution month by month.</CardDescription>
-                                </div>
-                                <Dialog>
-                                    <DialogTrigger asChild>
-                                        <Button variant="ghost" size="icon"><Info className="h-4 w-4" /></Button>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                        <DialogHeader>
-                                            <DialogTitle>Simulation Column Explanations</DialogTitle>
-                                        </DialogHeader>
-                                        <div className="text-sm space-y-3 py-4">
-                                            <div><h4 className="font-semibold">Date</h4><p className="text-muted-foreground">The end of each month in the simulation period.</p></div>
-                                            <div><h4 className="font-semibold">Contribution</h4><p className="text-muted-foreground">The fixed amount invested that month before any fees.</p></div>
-                                            <div><h4 className="font-semibold">Value</h4><p className="text-muted-foreground">The total market value of your entire portfolio at the end of the month.</p></div>
-                                            <div><h4 className="font-semibold">[ETF] Value</h4><p className="text-muted-foreground">The portion of your total portfolio value held in that specific ETF.</p></div>
-                                            <div><h4 className="font-semibold">[ETF] Drift</h4><p className="text-muted-foreground">How far the ETF's actual weight is from its target weight. A positive (green) drift means it's overweight; a negative (red) drift means it's underweight.</p></div>
-                                        </div>
-                                    </DialogContent>
-                                </Dialog>
-                            </div>
-                            <div className="flex items-center gap-4">
-                                <Select value={yearFilter} onValueChange={setYearFilter}>
-                                    <SelectTrigger className="w-[180px]">
-                                        <SelectValue placeholder="Filter by year" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="all">All Years</SelectItem>
-                                        {availableYears.map(year => (
-                                            <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                                <Button variant="outline" size="sm" disabled><ArrowDownToLine className="mr-2 h-4 w-4" />Export CSV</Button>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>Date</TableHead>
-                                        <TableHead className="text-right">Contribution</TableHead>
-                                        <TableHead className="text-right">Value</TableHead>
-                                        {plan.components.map(c => <TableHead key={c.id} className="text-right">{c.name} Value</TableHead>)}
-                                        {plan.components.map(c => <TableHead key={c.id} className="text-right">{c.name} Drift</TableHead>)}
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {effectiveRows.map(row => (
-                                        <TableRow key={row.date}>
-                                            <TableCell>{format(parseISO(row.date), 'MMM yyyy')}</TableCell>
-                                            <TableCell className="text-right font-mono">{formatCurrency(row.contribution)}</TableCell>
-                                            <TableCell className="text-right font-mono font-bold">{formatCurrency(row.portfolioValue)}</TableCell>
-                                            {plan.components.map(comp => {
-                                                const pos = row.positions.find(p => p.symbol === comp.ticker);
-                                                return <TableCell key={comp.id} className="text-right font-mono">{formatCurrency(pos?.valueEUR ?? 0)}</TableCell>
-                                            })}
-                                            {plan.components.map(comp => {
-                                                const pos = row.positions.find(p => p.symbol === comp.ticker);
-                                                const drift = pos?.driftPct ?? 0;
-                                                return <TableCell key={comp.id} className={`text-right font-mono ${drift > 0.01 ? 'text-green-500' : drift < -0.01 ? 'text-destructive' : ''}`}>{formatPercent(drift)}</TableCell>
-                                            })}
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
-                        </CardContent>
-                    </Card>
-                )}
+
             </main>
 
             <Dialog open={isMissingPricesDialogOpen} onOpenChange={setIsMissingPricesDialogOpen}>
