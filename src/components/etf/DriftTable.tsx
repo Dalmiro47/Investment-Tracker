@@ -22,6 +22,11 @@ type DriftTableProps = {
 export default function DriftTable({ rows, components, availableYears, yearFilter, onYearFilterChange }: DriftTableProps) {
   const [etfFilter, setEtfFilter] = useState<string>('ALL');
 
+  const rowsDesc = useMemo(
+    () => [...rows].sort((a, b) => b.date.localeCompare(a.date)),
+    [rows]
+  );
+
   if (rows.length === 0) {
     return (
         <div className="text-center py-16 text-muted-foreground">
@@ -97,7 +102,7 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {rows.map(row => (
+                    {rowsDesc.map(row => (
                         <TableRow key={row.date}>
                             <TableCell>{format(parseISO(row.date), 'MMM yyyy')}</TableCell>
                             <TableCell className="text-right font-mono">{formatCurrency(row.contribution)}</TableCell>

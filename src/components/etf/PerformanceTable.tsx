@@ -1,4 +1,3 @@
-
 'use client';
 import React from 'react';
 import { PlanRowPerformance, ETFComponent } from '@/lib/types.etf';
@@ -22,10 +21,15 @@ type Props = {
 export function PerformanceTable({ rows, components, availableYears, yearFilter, onYearFilterChange }: Props) {
   const [etfFilter, setEtfFilter] = React.useState<string>('ALL');
 
+  const rowsDesc = React.useMemo(
+    () => [...rows].sort((a, b) => b.dateKey.localeCompare(a.dateKey)),
+    [rows]
+  );
+
   const filteredByYear = React.useMemo(() => {
-    if (yearFilter === 'all') return rows;
-    return rows.filter(r => r.dateKey.slice(0, 4) === yearFilter);
-  }, [rows, yearFilter]);
+    if (yearFilter === 'all') return rowsDesc;
+    return rowsDesc.filter(r => r.dateKey.slice(0, 4) === yearFilter);
+  }, [rowsDesc, yearFilter]);
 
   const filteredRows = React.useMemo(() => {
     if (etfFilter === 'ALL' || filteredByYear.length === 0) return filteredByYear;
