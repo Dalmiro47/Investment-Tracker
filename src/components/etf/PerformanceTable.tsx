@@ -1,3 +1,4 @@
+
 'use client';
 import React from 'react';
 import { PlanRowPerformance, ETFComponent } from '@/lib/types.etf';
@@ -17,9 +18,10 @@ type Props = {
   availableYears: number[];
   yearFilter: string; // "all" | "2023" | "2024" ...
   onYearFilterChange: (year: string) => void;
+  sticky?: boolean;
 };
 
-export function PerformanceTable({ rows, components, availableYears, yearFilter, onYearFilterChange }: Props) {
+export function PerformanceTable({ rows, components, availableYears, yearFilter, onYearFilterChange, sticky = false }: Props) {
   const [etfFilter, setEtfFilter] = React.useState<string>('ALL');
 
   const rowsDesc = React.useMemo(
@@ -134,9 +136,9 @@ export function PerformanceTable({ rows, components, availableYears, yearFilter,
       </CardHeader>
 
       <CardContent>
-        <div className="overflow-x-auto">
+        <div className="max-h-[60vh] overflow-auto rounded-md border">
           <table className="w-full text-sm">
-            <thead className="text-muted-foreground">
+            <thead className={`${sticky ? 'sticky top-0 z-10 bg-card' : ''} text-muted-foreground`}>
               <tr className="border-b">
                 <th className="text-left p-2 font-medium">Date</th>
                 <th className="text-left p-2 font-medium">ETF</th>

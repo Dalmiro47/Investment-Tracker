@@ -27,6 +27,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import PortfolioStackedChart from '@/components/etf/PortfolioStackedChart';
 import PerformanceSummary from '@/components/etf/PerformanceSummary';
+import AggregatedPerformanceTable from '@/components/etf/AggregatedPerformanceTable';
 
 export const runtime = 'nodejs';
 
@@ -375,23 +376,41 @@ export default function PlanDetailPage() {
                             <TabsTrigger value="drift">Drift</TabsTrigger>
                         </TabsList>
                         <TabsContent value="performance">
-                            {simData && (
+                            <Tabs defaultValue="aggregated" className="mt-2">
+                                <TabsList>
+                                <TabsTrigger value="aggregated">Aggregated</TabsTrigger>
+                                <TabsTrigger value="flat">Flat</TabsTrigger>
+                                </TabsList>
+
+                                <TabsContent value="aggregated" className="mt-4">
                                 <PerformanceSummary
-                                  perfRows={perfRowsPeriod}
-                                  driftRows={effectiveDriftRows}
-                                  components={plan.components}
-                                  showPerEtf={true}
-                                  showPortfolioCards={false}
-                                  showGrowthBar={false}
+                                    perfRows={perfRowsPeriod}
+                                    driftRows={effectiveDriftRows}
+                                    components={plan.components}
+                                    showPerEtf={false}
+                                    showPortfolioCards={false}
+                                    showGrowthBar={false}
                                 />
-                            )}
-                            <PerformanceTable
-                                rows={simData.performance}
-                                components={plan.components}
-                                availableYears={availableYears}
-                                yearFilter={yearFilter}
-                                onYearFilterChange={setYearFilter}
-                             />
+                                <AggregatedPerformanceTable
+                                    rows={simData.performance}
+                                    components={plan.components}
+                                    availableYears={availableYears}
+                                    yearFilter={yearFilter}
+                                    onYearFilterChange={setYearFilter}
+                                />
+                                </TabsContent>
+
+                                <TabsContent value="flat" className="mt-4">
+                                <PerformanceTable
+                                    rows={simData.performance}
+                                    components={plan.components}
+                                    availableYears={availableYears}
+                                    yearFilter={yearFilter}
+                                    onYearFilterChange={setYearFilter}
+                                    sticky
+                                />
+                                </TabsContent>
+                            </Tabs>
                         </TabsContent>
                         <TabsContent value="drift">
                             <DriftTable rows={effectiveDriftRows} components={plan.components} availableYears={availableYears} yearFilter={yearFilter} onYearFilterChange={setYearFilter} />
