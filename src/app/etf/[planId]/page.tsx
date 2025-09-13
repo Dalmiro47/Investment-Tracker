@@ -114,6 +114,7 @@ export default function PlanDetailPage() {
     const [yearFilter, setYearFilter] = useState<string>('all');
     const [missingPrices, setMissingPrices] = useState<MissingPrice[]>([]);
     const [isMissingPricesDialogOpen, setIsMissingPricesDialogOpen] = useState(false);
+    const [perfView, setPerfView] = useState<'flat' | 'aggregated'>('flat');
 
     useAutoRefreshEtfHistory({ userId: user?.uid });
 
@@ -371,36 +372,42 @@ export default function PlanDetailPage() {
                 
                  {simData && plan && (
                     <Tabs defaultValue="performance" className="mt-6">
-                        <TabsList>
-                            <TabsTrigger value="performance">Performance</TabsTrigger>
-                            <TabsTrigger value="drift">Drift</TabsTrigger>
-                        </TabsList>
+                        <div className="mb-2 flex items-center justify-between">
+                            <TabsList>
+                                <TabsTrigger value="performance">Performance</TabsTrigger>
+                                <TabsTrigger value="drift">Drift</TabsTrigger>
+                            </TabsList>
+
+                            <div className="flex overflow-hidden rounded-md border bg-muted p-0.5">
+                                <Button
+                                    size="sm"
+                                    variant={perfView === 'flat' ? 'secondary' : 'ghost'}
+                                    className="rounded-sm"
+                                    onClick={() => setPerfView('flat')}
+                                >
+                                    Flat
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant={perfView === 'aggregated' ? 'secondary' : 'ghost'}
+                                    className="rounded-sm"
+                                    onClick={() => setPerfView('aggregated')}
+                                >
+                                    Aggregated
+                                </Button>
+                            </div>
+                        </div>
+
                         <TabsContent value="performance">
-                            <Tabs defaultValue="aggregated" className="mt-2">
-                                <TabsList>
-                                <TabsTrigger value="aggregated">Aggregated</TabsTrigger>
-                                <TabsTrigger value="flat">Flat</TabsTrigger>
-                                </TabsList>
-
-                                <TabsContent value="aggregated" className="mt-4">
-                                <PerformanceSummary
-                                    perfRows={perfRowsPeriod}
-                                    driftRows={effectiveDriftRows}
-                                    components={plan.components}
-                                    showPerEtf={false}
-                                    showPortfolioCards={false}
-                                    showGrowthBar={false}
-                                />
-                                <AggregatedPerformanceTable
-                                    rows={simData.performance}
-                                    components={plan.components}
-                                    availableYears={availableYears}
-                                    yearFilter={yearFilter}
-                                    onYearFilterChange={setYearFilter}
-                                />
-                                </TabsContent>
-
-                                <TabsContent value="flat" className="mt-4">
+                            <PerformanceSummary
+                                perfRows={perfRowsPeriod}
+                                driftRows={effectiveDriftRows}
+                                components={plan.components}
+                                showPerEtf={false}
+                                showPortfolioCards={false}
+                                showGrowthBar={false}
+                            />
+                            {perfView === 'flat' ? (
                                 <PerformanceTable
                                     rows={simData.performance}
                                     components={plan.components}
@@ -409,8 +416,15 @@ export default function PlanDetailPage() {
                                     onYearFilterChange={setYearFilter}
                                     sticky
                                 />
-                                </TabsContent>
-                            </Tabs>
+                            ) : (
+                                <AggregatedPerformanceTable
+                                    rows={simData.performance}
+                                    components={plan.components}
+                                    availableYears={availableYears}
+                                    yearFilter={yearFilter}
+                                    onYearFilterChange={setYearFilter}
+                                />
+                            )}
                         </TabsContent>
                         <TabsContent value="drift">
                             <DriftTable rows={effectiveDriftRows} components={plan.components} availableYears={availableYears} yearFilter={yearFilter} onYearFilterChange={setYearFilter} />

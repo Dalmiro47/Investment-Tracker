@@ -136,7 +136,7 @@ export function PerformanceTable({ rows, components, availableYears, yearFilter,
       </CardHeader>
 
       <CardContent>
-        <div className="max-h-[60vh] overflow-auto rounded-md border">
+        <div className="scroll-area max-h-[60vh] overflow-auto rounded-md border">
           <table className="w-full text-sm">
             <thead className={`${sticky ? 'sticky top-0 z-10 bg-card' : ''} text-muted-foreground`}>
               <tr className="border-b">

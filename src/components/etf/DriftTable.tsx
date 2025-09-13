@@ -122,7 +122,7 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
             </div>
         </CardHeader>
         <CardContent>
-            <div className="max-h-[60vh] overflow-auto rounded-md border">
+            <div className="scroll-area max-h-[60vh] overflow-auto rounded-md border">
                 <Table>
                     <TableHeader className="sticky top-0 z-10 bg-card">
                         <TableRow>
