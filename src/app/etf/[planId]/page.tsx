@@ -25,6 +25,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import PortfolioStackedChart from '@/components/etf/PortfolioStackedChart';
+import PerformanceSummary from '@/components/etf/PerformanceSummary';
 
 export const runtime = 'nodejs';
 
@@ -323,6 +324,18 @@ export default function PlanDetailPage() {
                             <TabsTrigger value="drift">Drift</TabsTrigger>
                         </TabsList>
                         <TabsContent value="performance">
+                            {simData && (
+                                <PerformanceSummary
+                                perfRows={
+                                    yearFilter === 'all'
+                                    ? simData.performance
+                                    : simData.performance.filter(r => r.dateKey.slice(0,4) === yearFilter)
+                                }
+                                driftRows={effectiveDriftRows}
+                                components={plan.components}
+                                showPerEtf={true}
+                                />
+                            )}
                             <PerformanceTable
                                 rows={simData.performance}
                                 components={plan.components}
