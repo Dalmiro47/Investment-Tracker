@@ -11,9 +11,16 @@ type Props = {
   driftRows: PlanRowDrift[];        // same period (already year-filtered in page)
   components: ETFComponent[];
   showPerEtf?: boolean;
+  showPortfolioCards?: boolean;   // NEW
+  showGrowthBar?: boolean;        // NEW
 };
 
-export default function PerformanceSummary({ perfRows, driftRows, components, showPerEtf = false }: Props) {
+export default function PerformanceSummary({
+  perfRows, driftRows, components,
+  showPerEtf = false,
+  showPortfolioCards = false,     // default off now
+  showGrowthBar = false           // default off now
+}: Props) {
   if (!perfRows.length) return null;
 
   // Ensure chronological order (old -> new) so cashflows are stable
@@ -88,30 +95,37 @@ export default function PerformanceSummary({ perfRows, driftRows, components, sh
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-4">
-      <Card><CardHeader><CardTitle>{formatCurrency(totalContrib)}</CardTitle><CardContent className="pt-0 text-muted-foreground">Contributions (period)</CardContent></CardHeader></Card>
-      <Card><CardHeader><CardTitle>{formatCurrency(totalFees)}</CardTitle><CardContent className="pt-0 text-muted-foreground">Fees (period)</CardContent></CardHeader></Card>
-      <Card><CardHeader><CardTitle>{formatCurrency(endValue)}</CardTitle><CardContent className="pt-0 text-muted-foreground">End Value</CardContent></CardHeader></Card>
-      <Card><CardHeader><CardTitle className={totalGain>=0?'text-green-500':'text-destructive'}>{formatCurrency(totalGain)}</CardTitle><CardContent className="pt-0 text-muted-foreground">Total {totalGain>=0?'Gain':'Loss'}</CardContent></CardHeader></Card>
-      <Card><CardHeader><CardTitle className={simpleRet>=0?'text-green-500':'text-destructive'}>
-        {formatPercent(simpleRet)}{irr!=null ? ` / ${formatPercent(irr)}` : ''}
-      </CardTitle><CardContent className="pt-0 text-muted-foreground">Simple % / XIRR</CardContent></CardHeader></Card>
+      {showPortfolioCards && (
+        <>
+          <Card><CardHeader><CardTitle>{formatCurrency(totalContrib)}</CardTitle><CardContent className="pt-0 text-muted-foreground">Contributions (period)</CardContent></CardHeader></Card>
+          <Card><CardHeader><CardTitle>{formatCurrency(totalFees)}</CardTitle><CardContent className="pt-0 text-muted-foreground">Fees (period)</CardContent></CardHeader></Card>
+          <Card><CardHeader><CardTitle>{formatCurrency(endValue)}</CardTitle><CardContent className="pt-0 text-muted-foreground">End Value</CardContent></CardHeader></Card>
+          <Card><CardHeader><CardTitle className={totalGain>=0?'text-green-500':'text-destructive'}>{formatCurrency(totalGain)}</CardTitle><CardContent className="pt-0 text-muted-foreground">Total {totalGain>=0?'Gain':'Loss'}</CardContent></CardHeader></Card>
+          <Card><CardHeader><CardTitle className={simpleRet>=0?'text-green-500':'text-destructive'}>
+            {formatPercent(simpleRet)}{irr!=null ? ` / ${formatPercent(irr)}` : ''}
+          </CardTitle><CardContent className="pt-0 text-muted-foreground">Simple % / XIRR</CardContent></CardHeader></Card>
+        </>
+      )}
 
-      {/* Value vs Net Invested bar */}
-      <div className="md:col-span-2 lg:col-span-5">
-        <div className="h-3 rounded bg-muted overflow-hidden">
-          <div
-            className={`h-3 ${endValue >= netInvested ? 'bg-green-500' : 'bg-destructive'}`}
-            style={{ width: `${investedVsValuePct}%` }}
-            title={`End Value / Net Invested: ${investedVsValuePct.toFixed(1)}%`}
-          />
+
+      {showGrowthBar && (
+        <div className="md:col-span-2 lg:col-span-5">
+            <div className="h-3 rounded bg-muted overflow-hidden">
+            <div
+                className={`h-3 ${endValue >= netInvested ? 'bg-green-500' : 'bg-destructive'}`}
+                style={{ width: `${investedVsValuePct}%` }}
+                title={`End Value / Net Invested: ${investedVsValuePct.toFixed(1)}%`}
+            />
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+            End Value vs Net Invested: <span className="font-medium">{investedVsValuePct.toFixed(1)}%</span>
+            {' · '}All-in multiple: <span className="font-medium">
+                {netInvested > 0 ? (endValue / netInvested).toFixed(2) + '×' : '—'}
+            </span>
+            </div>
         </div>
-        <div className="mt-1 text-xs text-muted-foreground">
-          End Value vs Net Invested: <span className="font-medium">{investedVsValuePct.toFixed(1)}%</span>
-          {' · '}All-in multiple: <span className="font-medium">
-            {netInvested > 0 ? (endValue / netInvested).toFixed(2) + '×' : '—'}
-          </span>
-        </div>
-      </div>
+      )}
+
 
       {showPerEtf && perEtfRows.length > 0 && (
         <div className="md:col-span-2 lg:col-span-5">
