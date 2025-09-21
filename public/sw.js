@@ -1,12 +1,12 @@
 /* DDS Investment Tracker SW - minimal offline support */
 
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 
 // Tweak these paths if needed:
 const SHELL_ASSETS = [
-  '/', // app shell entry
+  '/',                      // app shell entry
   '/manifest.webmanifest',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
@@ -79,5 +79,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   // Default: network-first for other requests (incl. API)
-  event.respondWith(fetch(req).catch(() => caches.match(req)));
+  event.respondWith(
+    fetch(req).catch(() => caches.match(req))
+  );
 });

@@ -72,6 +72,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const res = await fetch("/api/auth/session", {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+          keepalive: true,
         });
         if (!res.ok) throw new Error(`Session sync failed: ${res.status}`);
         setSessionReady(true);
@@ -111,7 +113,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signOut = async () => {
     try {
       // clear server cookie first
-      await fetch("/api/auth/session", { method: "DELETE" }).catch(() => {});
+      await fetch("/api/auth/session", { method: "DELETE", cache: 'no-store', keepalive: true }).catch(() => {});
       await firebaseSignOut(auth);
       setSessionReady(false);
       sessionSyncing.current = false;
