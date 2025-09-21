@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from "r
 import { useRouter, usePathname } from "next/navigation";
 import {
   onAuthStateChanged,
+  signInWithPopup,
   signInWithRedirect,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
@@ -44,6 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     getRedirectResult(auth).catch(() => {});
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
+      console.debug('[auth] onAuthStateChanged user?', !!fbUser);
       setUser(fbUser);
       setLoading(false);
       // reset session flag; will resync for the new user below
@@ -69,12 +71,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       try {
         const token = await user.getIdToken(/* forceRefresh */ true);
+        console.debug('[auth] got token?', !!token, token ? token.slice(0, 12) : '');
         const res = await fetch("/api/auth/session", {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
           keepalive: true,
         });
+        console.debug('[auth] POST /api/auth/session status', res.status);
         if (!res.ok) throw new Error(`Session sync failed: ${res.status}`);
         setSessionReady(true);
       } catch (e) {
@@ -104,9 +108,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithRedirect(auth, provider);
-    } catch (error) {
-      console.error("Error signing in with Google", error);
+      await signInWithPopup(auth, provider);        // stays on your page → easier to debug
+    } catch (e: any) {
+      if (e?.code?.includes('popup')) {
+        await signInWithRedirect(auth, provider);   // fallback if popup blocked
+      } else {
+        console.error('Google sign-in failed', e);
+      }
     }
   };
 
