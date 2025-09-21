@@ -1,7 +1,6 @@
 'use server';
 
 import {NextRequest, NextResponse} from 'next/server';
-import {cookies} from 'next/headers';
 
 // Set the session cookie
 export async function POST(req: NextRequest) {
@@ -11,8 +10,9 @@ export async function POST(req: NextRequest) {
   }
   const token = bearer.split(' ')[1];
 
-  const cookieStore = cookies();
-  cookieStore.set('x-firebase-session', token, {
+  const response = NextResponse.json({status: 'success'});
+
+  response.cookies.set('x-firebase-session', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     path: '/',
@@ -20,12 +20,12 @@ export async function POST(req: NextRequest) {
     sameSite: 'lax',
   });
 
-  return NextResponse.json({status: 'success'});
+  return response;
 }
 
 // Delete the session cookie
 export async function DELETE() {
-  const cookieStore = cookies();
-  cookieStore.delete('x-firebase-session');
-  return NextResponse.json({status: 'success'});
+  const response = NextResponse.json({status: 'success'});
+  response.cookies.delete('x-firebase-session');
+  return response;
 }
