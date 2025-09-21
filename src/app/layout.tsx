@@ -8,22 +8,26 @@ export const metadata: Metadata = {
   title: 'DDS Investment Tracker',
   description: 'Track your investments with ease and prepare for tax season.',
   manifest: '/manifest.webmanifest',
-  themeColor: '#0B1220',
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#0B1220" },
+    { media: "(prefers-color-scheme: dark)",  color: "#0B1220" },
+  ],
   icons: {
     icon: [
       { url: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
       { url: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' }
     ],
     apple: { url: '/icons/apple-touch-icon.png', sizes: '180x180', type: 'image/png' },
-  }
+  },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent" },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  userScalable: 0, // = user-scalable=no
-}
+  userScalable: false,
+};
 
 export default function RootLayout({
   children,
