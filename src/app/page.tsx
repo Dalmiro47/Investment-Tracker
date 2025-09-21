@@ -143,12 +143,14 @@ export default function DashboardPage() {
     }
   }, [user, fetchAllData]);
 
+  const handleAutoRefreshComplete = React.useCallback(() => {
+    if (user?.uid) fetchAllData(user.uid);
+  }, [user?.uid, fetchAllData]);
+
   useAutoRefreshPrices({
     userId: user?.uid,
     investments,
-    onComplete: () => {
-      if(user?.uid) fetchAllData(user.uid);
-    }
+    onComplete: handleAutoRefreshComplete
   });
 
 
@@ -806,4 +808,3 @@ export default function DashboardPage() {
     </>
   );
 }
-

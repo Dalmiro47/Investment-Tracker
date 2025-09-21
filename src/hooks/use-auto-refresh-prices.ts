@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useMemo } from 'react';
 import { useToast } from '@/hooks/use-toast';
 import { refreshInvestmentPrices } from '@/app/actions';
 import type { Investment } from '@/lib/types';
@@ -30,31 +30,36 @@ export function useAutoRefreshPrices({
   recheckOnFocus = true,
 }: UseAutoRefreshPricesOpts) {
   const { toast } = useToast();
-  const ranRef = useRef(false);
   const lastAttemptRef = useRef(0);
 
+  const invKey = useMemo(
+    () => (investments ?? []).map((i) => i.id).join("|"),
+    [investments]
+  );
+
   useEffect(() => {
-    if (!userId) { dbg('skip: no user'); return; }
-    if (!investments || investments.length === 0) { dbg('skip: no investments yet'); return; }
-    
-    const LAST_KEY = `prices:lastRefreshAt:${userId}`;
-    const RUN_KEY  = `prices:refresh:inflight:${userId}`;
+    let cancelled = false;
 
     const attempt = async (reason: 'mount' | 'focus') => {
+      // Early outs are inside the effect
+      if (!userId) { dbg('skip: no user'); return; }
+      if (!investments || investments.length === 0) { dbg('skip: no investments yet'); return; }
+
       const now = Date.now();
       if (reason === 'focus' && now - lastAttemptRef.current < FOCUS_DEBOUNCE_MS) {
         dbg('skip: focus debounce');
         return;
       }
       lastAttemptRef.current = now;
+      
+      const LAST_KEY = `prices:lastRefreshAt:${userId}`;
+      const RUN_KEY  = `prices:refresh:inflight:${userId}`;
 
       const last = Number(localStorage.getItem(LAST_KEY) || 0);
       const shouldLocalRefresh = now - last > localIntervalMs;
 
       if (!shouldLocalRefresh) { dbg(`skip: local throttle (${reason})`, { last, localIntervalMs }); return; }
       if (localStorage.getItem(RUN_KEY)) { dbg('skip: inflight lock present'); return; }
-
-      ranRef.current = true; // mark only when we actually start an attempt
 
       try {
         localStorage.setItem(RUN_KEY, String(now));
@@ -64,6 +69,8 @@ export function useAutoRefreshPrices({
         dbg('start refresh', { reason });
 
         const res = await refreshInvestmentPrices({ userId });
+        
+        if (cancelled) return;
 
         if (res?.skippedReason === 'rate_limited') {
           dbg('server rate-limited until', res.nextAllowedAt);
@@ -100,7 +107,7 @@ export function useAutoRefreshPrices({
         }
       } catch (err: any) {
         dbg('exception', err?.message);
-        if (!toastSilent) {
+        if (!toastSilent && !cancelled) {
           toast({ title: 'Price refresh failed', description: err?.message || 'Please try again later.', variant: 'destructive' });
         }
       } finally {
@@ -108,32 +115,32 @@ export function useAutoRefreshPrices({
       }
     };
 
-    // initial attempt on mount
-    if (!ranRef.current) {
-        attempt('mount');
-    }
+    attempt('mount');
 
-    if (!recheckOnFocus) return;
+    let onVis: (() => void) | undefined;
+    let onStorage: ((e: StorageEvent) => void) | undefined;
 
-    const onVis = () => {
-      if (document.visibilityState === 'visible') {
-        attempt('focus');
-      }
-    };
-
-    const onStorage = (e: StorageEvent) => {
-        if (e.key === RUN_KEY && e.newValue) {
-            dbg('saw inflight lock from another tab');
-            ranRef.current = true; // ensure this tab won’t try again this mount
+    if (recheckOnFocus) {
+      onVis = () => {
+        if (document.visibilityState === 'visible') {
+          attempt('focus');
         }
-    };
+      };
 
-    window.addEventListener('storage', onStorage);
-    document.addEventListener('visibilitychange', onVis);
+      onStorage = (e: StorageEvent) => {
+          if (e.key === `prices:refresh:inflight:${userId}` && e.newValue) {
+              dbg('saw inflight lock from another tab');
+          }
+      };
+
+      window.addEventListener('storage', onStorage);
+      document.addEventListener('visibilitychange', onVis);
+    }
     
     return () => {
-        document.removeEventListener('visibilitychange', onVis);
-        window.removeEventListener('storage', onStorage);
+      cancelled = true;
+      if (onVis) document.removeEventListener('visibilitychange', onVis);
+      if (onStorage) window.removeEventListener('storage', onStorage);
     }
-  }, [userId, investments, localIntervalMs, toastSilent, onComplete, recheckOnFocus, toast]);
+  }, [userId, invKey, localIntervalMs, toastSilent, onComplete, recheckOnFocus, toast]);
 }
