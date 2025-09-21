@@ -26,9 +26,8 @@ self.addEventListener('activate', (event) => {
           .filter((k) => ![SHELL_CACHE, STATIC_CACHE].includes(k))
           .map((k) => caches.delete(k))
       )
-    )
+    ).then(() => self.clients.claim())
   );
-  self.clients.claim();
 });
 
 const isPageRequest = (req) =>
