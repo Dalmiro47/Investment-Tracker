@@ -145,7 +145,7 @@ export default function DashboardPage() {
 
   useAutoRefreshPrices({
     userId: user?.uid,
-    investments: [],
+    investments,
     onComplete: () => {
       if(user?.uid) fetchAllData(user.uid);
     }
@@ -395,7 +395,7 @@ export default function DashboardPage() {
   }
 
   if (isMobile === undefined) {
-    return null; // Prevent flash of desktop view on mobile
+    return <div className="h-screen w-full bg-background" />; // Prevent flash of desktop view on mobile
   }
 
   const canToggleTaxReport = yearFilter.kind === 'year' && viewMode === 'grid';
