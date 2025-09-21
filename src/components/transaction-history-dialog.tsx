@@ -1,7 +1,7 @@
 
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useAuth } from "@/hooks/use-auth";
 import { useToast } from "@/hooks/use-toast";
 import { getTransactions, addTransaction, deleteTransaction, updateTransaction } from "@/lib/firestore";
@@ -254,13 +254,13 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
     const [editingTransaction, setEditingTransaction] = useState<Transaction | undefined>();
     const [deletingTransactionId, setDeletingTransactionId] = useState<string | null>(null);
 
-    const fetchTransactions = async () => {
-        if (!user) return;
+    const fetchTransactions = useCallback(async () => {
+        if (!user || !investment) return;
         setLoading(true);
         const fetchedTransactions = await getTransactions(user.uid, investment.id);
         setTransactions(fetchedTransactions);
         setLoading(false);
-    };
+    }, [user, investment]);
 
     useEffect(() => {
         if (isOpen) {
@@ -273,7 +273,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
         if (isOpen) {
             fetchTransactions();
         }
-    }, [isOpen, user, investment]); // Refetch when investment object changes
+    }, [isOpen, fetchTransactions]);
 
     const handleFormSubmit = () => {
         setView('list');
@@ -448,3 +448,5 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
         </>
     );
 }
+
+    

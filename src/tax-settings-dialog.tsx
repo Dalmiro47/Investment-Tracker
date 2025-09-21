@@ -108,7 +108,7 @@ export function TaxSettingsDialog({ isOpen, onOpenChange, currentSettings, onSav
                                 <li>Certain deductions (e.g. work expenses lump sum €1,230, special expenses lump sum €36)</li>
                                 <li>Allowances (e.g. basic tax-free allowance €11,604 in 2024 for singles)</li>
                             </ul>
-                            <p className="text-muted-foreground">💡 Your payroll slip or your last <code className="text-xs">Einkommensteuerbescheid</code> shows this number as <code className="text-xs">"zu versteuerndes Einkommen"</code>.</p>
+                            <p className="text-muted-foreground">💡 Your payroll slip or your last <code className="text-xs">Einkommensteuerbescheid</code> shows this number as <code className="text-xs">&quot;zu versteuerndes Einkommen&quot;</code>.</p>
                             
                             <h4 className="font-semibold">Step 2 — Find your marginal rate</h4>
                             <p className="text-muted-foreground">Germany’s income tax is progressive. Here are 2024 figures for single taxpayers (before solidarity surcharge):</p>
@@ -155,3 +155,5 @@ export function TaxSettingsDialog({ isOpen, onOpenChange, currentSettings, onSav
     </Dialog>
   );
 }
+
+    

@@ -53,6 +53,7 @@ function PercentInput({
     if (currentValue !== textAsNumber) {
        setText(value == null ? "" : (value * 100).toFixed(2));
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
   // allow: "", "7", "7.", "7.1", "7.12" (up to 2 decimals), max 100

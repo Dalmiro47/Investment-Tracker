@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React from 'react';
@@ -391,6 +392,13 @@ export default function DashboardPage() {
     setRatesInv(inv);
     setIsRatesOpen(true);
   };
+  const canToggleTaxReport = yearFilter.kind === 'year' && viewMode === 'grid';
+  
+  React.useEffect(() => {
+    if (!canToggleTaxReport && isTaxView) {
+      setIsTaxView(false);
+    }
+  }, [canToggleTaxReport, isTaxView]);
   
   if (!user) {
     return null; // AuthProvider handles redirects
@@ -399,8 +407,7 @@ export default function DashboardPage() {
   if (isMobile === undefined) {
     return <div className="h-screen w-full bg-background" />; // Prevent flash of desktop view on mobile
   }
-
-  const canToggleTaxReport = yearFilter.kind === 'year' && viewMode === 'grid';
+      
   const selectedYear = yearFilter.kind === 'year' ? yearFilter.year : null;
   const toggleDisabledReason =
     selectedYear == null
@@ -427,12 +434,6 @@ export default function DashboardPage() {
     }
     setViewMode(mode);
   };
-
-  React.useEffect(() => {
-    if (!canToggleTaxReport && isTaxView) {
-      setIsTaxView(false);
-    }
-  }, [canToggleTaxReport, isTaxView]);
 
   const advancedFilters = (
     <>
@@ -474,7 +475,7 @@ export default function DashboardPage() {
               </TooltipTrigger>
               {isTaxView && (
                 <TooltipContent>
-                  <p>Status is locked to "Sold" in Tax Report view.</p>
+                  <p>Status is locked to &quot;Sold&quot; in Tax Report view.</p>
                 </TooltipContent>
               )}
             </Tooltip>
@@ -808,3 +809,6 @@ export default function DashboardPage() {
     </>
   );
 }
+
+    
+    

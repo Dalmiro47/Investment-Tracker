@@ -21,77 +21,88 @@ export default function PerformanceSummary({
   showPortfolioCards = false,     // default off now
   showGrowthBar = false           // default off now
 }: Props) {
-  if (!perfRows.length) return null;
 
   // Ensure chronological order (old -> new) so cashflows are stable
   const rowsAsc = React.useMemo(
-    () => [...perfRows].sort((a, b) => a.dateKey.localeCompare(b.dateKey)),
+    () => perfRows ? [...perfRows].sort((a, b) => a.dateKey.localeCompare(b.dateKey)) : [],
     [perfRows]
   );
-  const last = rowsAsc[rowsAsc.length - 1]; // correct last month snapshot
+  
+  const {
+    last, contribByMonth, feesByMonth, totalContrib, totalFees, endValue,
+    netInvested, totalGain, simpleRet, irr, investedVsValuePct, perEtfRows
+  } = React.useMemo(() => {
+    if (!rowsAsc.length) {
+      return { last: null, contribByMonth: new Map(), feesByMonth: new Map(), totalContrib: 0, totalFees: 0, endValue: 0, netInvested: 0, totalGain: 0, simpleRet: 0, irr: null, investedVsValuePct: 0, perEtfRows: [] };
+    }
 
-  // Per-month contributions from perf rows (visible ETFs only)
-  const contribByMonth = new Map<string, number>();
-  rowsAsc.forEach(r => {
-    const c = r.perEtf.reduce((s, e) => s + Number(e.contribThisMonth), 0);
-    contribByMonth.set(r.dateKey, c);
-  });
+    const last = rowsAsc[rowsAsc.length - 1]; // correct last month snapshot
 
-  // Fees by month from drift rows (already filtered by year on the page)
-  const feesByMonth = new Map<string, number>();
-  driftRows.forEach(dr => {
-    const m = dr.date.slice(0, 7);
-    feesByMonth.set(m, (feesByMonth.get(m) ?? 0) + (dr.fees ?? 0));
-  });
-
-  const totalContrib = [...contribByMonth.values()].reduce((a, b) => a + b, 0);
-  const totalFees = [...feesByMonth.values()].reduce((a, b) => a + b, 0);
-
-  const endValue = Number(last.totalValue);
-  // All-in basis: cash that left your pocket = contributions into ETFs + fees
-  const netInvested = totalContrib + totalFees;
-  const totalGain = endValue - netInvested;
-  const simpleRet = netInvested > 0 ? totalGain / netInvested : 0;
-
-  // Build portfolio cashflows for XIRR:
-  //  - Each month: negative outflow (contrib + fee)
-  //  - Final: positive inflow = endValue at last month
-  const cf = rowsAsc.map(r => {
-    const month = r.dateKey;                                     // 'YYYY-MM'
-    const out = (contribByMonth.get(month) ?? 0) + (feesByMonth.get(month) ?? 0);
-    return { date: new Date(`${month}-28`), amount: -out };      // consistent day in month
-  });
-  // XIRR requires at least one positive and one negative flow
-  if (endValue > 0) {
-    cf.push({ date: new Date(`${last.dateKey}-28`), amount: endValue });
-  }
-  const irr = (cf.some(c => c.amount < 0) && cf.some(c => c.amount > 0)) ? xirr(cf) : null;
-
-  // Visual bar: compare End Value vs Net Invested (works even when underwater)
-  const investedVsValuePct = netInvested > 0 ? Math.min(100, (endValue / netInvested) * 100) : 0;
-
-  // Optional per-ETF mini table (no fees allocated here)
-  const perEtfRows = React.useMemo(() => {
-    if (!showPerEtf) return [];
-    const latest = rowsAsc[rowsAsc.length - 1];
-    return latest.perEtf.map(e => {
-      const invested = Number(e.cumulativeContrib);  // cash into ETF (excl. fees)
-      const value = Number(e.valueNow);
-      const gain = value - invested;
-      const ret = invested > 0 ? gain / invested : 0;
-
-      // ETF-level cashflows for XIRR (contrib only, no fee allocation)
-      const flows = rowsAsc.map(r => {
-        const x = r.perEtf.find(p => p.etfId === e.etfId);
-        return { date: new Date(`${r.dateKey}-28`), amount: - (x ? Number(x.contribThisMonth) : 0) };
-      });
-      if (value > 0) flows.push({ date: new Date(`${latest.dateKey}-28`), amount: value });
-
-      const etfIrr = (flows.some(f => f.amount < 0) && flows.some(f => f.amount > 0)) ? xirr(flows) : null;
-
-      return { name: e.name ?? e.etfId, invested, value, gain, ret, irr: etfIrr };
+    // Per-month contributions from perf rows (visible ETFs only)
+    const contribByMonth = new Map<string, number>();
+    rowsAsc.forEach(r => {
+      const c = r.perEtf.reduce((s, e) => s + Number(e.contribThisMonth), 0);
+      contribByMonth.set(r.dateKey, c);
     });
-  }, [rowsAsc, showPerEtf]);
+
+    // Fees by month from drift rows (already filtered by year on the page)
+    const feesByMonth = new Map<string, number>();
+    driftRows.forEach(dr => {
+      const m = dr.date.slice(0, 7);
+      feesByMonth.set(m, (feesByMonth.get(m) ?? 0) + (dr.fees ?? 0));
+    });
+
+    const totalContrib = [...contribByMonth.values()].reduce((a, b) => a + b, 0);
+    const totalFees = [...feesByMonth.values()].reduce((a, b) => a + b, 0);
+
+    const endValue = Number(last.totalValue);
+    // All-in basis: cash that left your pocket = contributions into ETFs + fees
+    const netInvested = totalContrib + totalFees;
+    const totalGain = endValue - netInvested;
+    const simpleRet = netInvested > 0 ? totalGain / netInvested : 0;
+
+    // Build portfolio cashflows for XIRR:
+    //  - Each month: negative outflow (contrib + fee)
+    //  - Final: positive inflow = endValue at last month
+    const cf = rowsAsc.map(r => {
+      const month = r.dateKey;                                     // 'YYYY-MM'
+      const out = (contribByMonth.get(month) ?? 0) + (feesByMonth.get(month) ?? 0);
+      return { date: new Date(`${month}-28`), amount: -out };      // consistent day in month
+    });
+    // XIRR requires at least one positive and one negative flow
+    if (endValue > 0) {
+      cf.push({ date: new Date(`${last.dateKey}-28`), amount: endValue });
+    }
+    const irr = (cf.some(c => c.amount < 0) && cf.some(c => c.amount > 0)) ? xirr(cf) : null;
+
+    // Visual bar: compare End Value vs Net Invested (works even when underwater)
+    const investedVsValuePct = netInvested > 0 ? Math.min(100, (endValue / netInvested) * 100) : 0;
+
+    // Optional per-ETF mini table (no fees allocated here)
+    const perEtfRows = showPerEtf ? latest.perEtf.map(e => {
+        const invested = Number(e.cumulativeContrib);  // cash into ETF (excl. fees)
+        const value = Number(e.valueNow);
+        const gain = value - invested;
+        const ret = invested > 0 ? gain / invested : 0;
+
+        // ETF-level cashflows for XIRR (contrib only, no fee allocation)
+        const flows = rowsAsc.map(r => {
+          const x = r.perEtf.find(p => p.etfId === e.etfId);
+          return { date: new Date(`${r.dateKey}-28`), amount: - (x ? Number(x.contribThisMonth) : 0) };
+        });
+        if (value > 0) flows.push({ date: new Date(`${latest.dateKey}-28`), amount: value });
+
+        const etfIrr = (flows.some(f => f.amount < 0) && flows.some(f => f.amount > 0)) ? xirr(flows) : null;
+
+        return { name: e.name ?? e.etfId, invested, value, gain, ret, irr: etfIrr };
+    }) : [];
+
+    return { last, contribByMonth, feesByMonth, totalContrib, totalFees, endValue, netInvested, totalGain, simpleRet, irr, investedVsValuePct, perEtfRows };
+
+  }, [rowsAsc, driftRows, showPerEtf]);
+
+  if (!perfRows || !perfRows.length) return null;
+
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5 mb-4">
@@ -160,3 +171,5 @@ export default function PerformanceSummary({
     </div>
   );
 }
+
+    

@@ -94,7 +94,7 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
                             <div><h4 className="font-semibold">Contribution</h4><p className="text-muted-foreground">The fixed amount invested that month before any fees.</p></div>
                             <div><h4 className="font-semibold">Value</h4><p className="text-muted-foreground">The total market value of your entire portfolio at the end of the month.</p></div>
                             <div><h4 className="font-semibold">[ETF] Value</h4><p className="text-muted-foreground">The portion of your total portfolio value held in that specific ETF.</p></div>
-                            <div><h4 className="font-semibold">[ETF] Drift</h4><p className="text-muted-foreground">How far the ETF's actual weight is from its target weight. A positive (green) drift means it's overweight; a negative (red) drift means it's underweight.</p></div>
+                            <div><h4 className="font-semibold">[ETF] Drift</h4><p className="text-muted-foreground">How far the ETF&apos;s actual weight is from its target weight. A positive (green) drift means it&apos;s overweight; a negative (red) drift means it&apos;s underweight.</p></div>
                         </div>
                     </DialogContent>
                 </Dialog>
@@ -157,3 +157,5 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
     </Card>
   );
 }
+
+    

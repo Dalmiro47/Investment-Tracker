@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from '@/hooks/use-toast';
@@ -28,7 +28,7 @@ export default function EtfPlansPage() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editingPlan, setEditingPlan] = useState<(ETFPlan & { components: ETFComponent[] }) | null>(null);
 
-    const fetchPlans = async (uid: string) => {
+    const fetchPlans = useCallback(async (uid: string) => {
         setLoading(true);
         try {
             const userPlans = await getEtfPlans(uid);
@@ -38,13 +38,13 @@ export default function EtfPlansPage() {
         } finally {
             setLoading(false);
         }
-    };
+    }, [toast]);
 
     useEffect(() => {
         if (user) {
             fetchPlans(user.uid);
         }
-    }, [user]);
+    }, [user, fetchPlans]);
     
     const handleAddNew = () => {
         setEditingPlan(null);
@@ -252,4 +252,5 @@ export default function EtfPlansPage() {
     );
 }
 
+    
     

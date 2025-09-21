@@ -1,8 +1,13 @@
+
 import type {Metadata, Viewport} from 'next';
 import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from '@/hooks/use-auth';
 import OfflineToast from '@/components/OfflineToast';
 import './globals.css';
+import { PT_Sans, Space_Grotesk } from 'next/font/google';
+
+const ptSans = PT_Sans({ subsets: ['latin'], weight: ['400','700'], style: ['normal','italic'], variable: '--font-pt-sans' });
+const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], weight: ['300','400','500','600','700'], variable: '--font-space-grotesk' });
 
 export const metadata: Metadata = {
   title: 'DDS Investment Tracker',
@@ -35,11 +40,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className={`${ptSans.variable} ${spaceGrotesk.variable} dark`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=PT+Sans:ital,wght@0,400;0,700;1,400;1,700&family=Space+Grotesk:wght@300..700&display=swap" rel="stylesheet" />
         {/* iOS PWA friendliness */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />
@@ -71,3 +73,5 @@ export default function RootLayout({
     </html>
   );
 }
+
+    
