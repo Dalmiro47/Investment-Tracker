@@ -33,12 +33,12 @@ import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
 import InvestmentListView from '@/components/investment-list';
 import type { SavingsRateChange } from '@/lib/types-savings';
 import RateScheduleDialog from "@/components/rate-schedule-dialog";
-import { parseISO } from 'date-fns';
 import EtfPlansButton from '@/components/etf/EtfPlansButton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
 import { MobileAppShell } from '@/components/shell/MobileAppShell';
 import { MobileFilters } from '@/components/filters/MobileFilters';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -88,6 +88,7 @@ export default function DashboardPage() {
   const [isRatesOpen, setIsRatesOpen] = React.useState(false);
   const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
   const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
+  const isMobile = useIsMobile();
 
 
   const fetchAllData = React.useCallback(async (userId: string) => {
@@ -144,6 +145,7 @@ export default function DashboardPage() {
 
   useAutoRefreshPrices({
     userId: user?.uid,
+    investments: [],
     onComplete: () => {
       if(user?.uid) fetchAllData(user.uid);
     }
@@ -486,8 +488,7 @@ export default function DashboardPage() {
     </>
   );
 
-  return (
-    <>
+  const mobileView = (
       <MobileAppShell>
         <PortfolioSummary 
             ref={summaryRef}
@@ -572,13 +573,16 @@ export default function DashboardPage() {
           )}
            <button
             onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}
-            className="md:hidden fixed bottom-20 right-4 z-40 rounded-full bg-primary text-primary-foreground
-                        shadow-lg px-5 py-3 font-medium">
+            className="md:hidden fixed right-4 z-50 rounded-full bg-primary text-primary-foreground shadow-lg px-5 py-3 font-medium"
+            style={{ bottom: "calc(72px + env(safe-area-inset-bottom) + 8px)" }}
+          >
             Add Investment
           </button>
       </MobileAppShell>
+  );
 
-      <div className="hidden md:block min-h-screen w-full bg-background">
+  const desktopView = (
+      <div className="min-h-screen w-full bg-background">
         <DashboardHeader 
             isTaxView={isTaxView} 
             onTaxViewChange={setIsTaxView}
@@ -745,6 +749,11 @@ export default function DashboardPage() {
           )}
         </main>
       </div>
+  );
+
+  return (
+    <>
+      {isMobile ? mobileView : desktopView}
       <InvestmentForm 
         isOpen={isFormOpen}
         onOpenChange={setIsFormOpen}
@@ -793,3 +802,4 @@ export default function DashboardPage() {
     </>
   );
 }
+
