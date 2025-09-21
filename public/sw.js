@@ -1,5 +1,5 @@
-/* DDS Investment Tracker SW - minimal offline support */
-const CACHE_VERSION = 'v4';
+/* DDS Investment Tracker SW - minimal offline support (stable) */
+const CACHE_VERSION = 'v5';
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 
@@ -12,14 +12,20 @@ const SHELL_ASSETS = [
 ];
 
 self.addEventListener('install', (event) => {
-  event.waitUntil(caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS)));
+  event.waitUntil(
+    caches.open(SHELL_CACHE).then((cache) => cache.addAll(SHELL_ASSETS))
+  );
   self.skipWaiting();
 });
 
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => ![SHELL_CACHE, STATIC_CACHE].includes(k)).map((k) => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter((k) => ![SHELL_CACHE, STATIC_CACHE].includes(k))
+          .map((k) => caches.delete(k))
+      )
     )
   );
   self.clients.claim();
@@ -38,14 +44,18 @@ self.addEventListener('fetch', (event) => {
 
   // 🚫 Never intercept API calls (auth/session, etc.)
   if (sameOrigin && url.pathname.startsWith('/api/')) {
-    return; // let the request hit the network normally
+    return; // let it hit the network normally
   }
 
   if (isPageRequest(req)) {
+    // Network-first for HTML (cache a clone using waitUntil to avoid double-reading)
     event.respondWith(
       fetch(req)
         .then((res) => {
-          caches.open(SHELL_CACHE).then((cache) => cache.put(req, res.clone()));
+          const clone = res.clone();
+          event.waitUntil(
+            caches.open(SHELL_CACHE).then((cache) => cache.put(req, clone))
+          );
           return res;
         })
         .catch(() => caches.match(req).then((res) => res || caches.match('/')))
@@ -54,11 +64,15 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (sameOrigin && isStaticAsset(url)) {
+    // Cache-first for static assets (clone once, cache via waitUntil)
     event.respondWith(
       caches.match(req).then((cached) => {
         if (cached) return cached;
         return fetch(req).then((res) => {
-          caches.open(STATIC_CACHE).then((cache) => cache.put(req, res.clone()));
+          const clone = res.clone();
+          event.waitUntil(
+            caches.open(STATIC_CACHE).then((cache) => cache.put(req, clone))
+          );
           return res;
         });
       })
@@ -66,5 +80,6 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Default: network-first with offline fallback
   event.respondWith(fetch(req).catch(() => caches.match(req)));
 });
