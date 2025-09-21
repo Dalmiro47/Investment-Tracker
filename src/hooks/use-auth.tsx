@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useRef, useState } from "r
 import { useRouter, usePathname } from "next/navigation";
 import {
   onAuthStateChanged,
+  onIdTokenChanged,
   signInWithPopup,
   signInWithRedirect,
   GoogleAuthProvider,
@@ -38,17 +39,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // 1) Initialize auth persistence + finalize redirect sign-in
   useEffect(() => {
-    // Ensure the session survives reloads
     setPersistence(auth, browserLocalPersistence).catch(() => {});
-
-    // Process the Google redirect result if present (safe no-op otherwise)
-    getRedirectResult(auth).catch(() => {});
+    getRedirectResult(auth).catch(() => {}); // no-op if not a redirect
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
-      console.debug('[auth] onAuthStateChanged user?', !!fbUser);
       setUser(fbUser);
       setLoading(false);
-      // reset session flag; will resync for the new user below
       setSessionReady(false);
       sessionSyncing.current = false;
     });
@@ -56,11 +52,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => unsubscribe();
   }, []);
 
-  // 2) When we have a client user, create/refresh the server session cookie once
+  // 1b) Refresh server cookie whenever Firebase rotates the ID token
+  useEffect(() => {
+    const unsub = onIdTokenChanged(auth, async (u) => {
+      if (!u) return;
+      try {
+        const token = await u.getIdToken(); // current token (no forced refresh)
+        await fetch("/api/auth/session", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          cache: "no-store",
+          keepalive: true,
+        });
+      } catch {
+        // ignore; will re-sync on next change or page load
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  // 2) When we have a client user, create/refresh the server session cookie once on mount
   useEffect(() => {
     if (loading) return;
     if (!user) {
-      // ensure session flags clear when logged out
       setSessionReady(false);
       sessionSyncing.current = false;
       return;
@@ -70,21 +84,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     sessionSyncing.current = true;
     (async () => {
       try {
-        const token = await user.getIdToken(/* forceRefresh */ true);
-        console.debug('[auth] got token?', !!token, token ? token.slice(0, 12) : '');
+        const token = await user.getIdToken(true);
         const res = await fetch("/api/auth/session", {
           method: "POST",
           headers: { Authorization: `Bearer ${token}` },
-          cache: 'no-store',
+          cache: "no-store",
           keepalive: true,
         });
-        console.debug('[auth] POST /api/auth/session status', res.status);
         if (!res.ok) throw new Error(`Session sync failed: ${res.status}`);
         setSessionReady(true);
-      } catch (e) {
-        console.error(e);
-        // allow retry if it fails
-        sessionSyncing.current = false;
+      } catch {
+        sessionSyncing.current = false; // allow retry
       }
     })();
   }, [user, loading, sessionReady]);
@@ -108,20 +118,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
     try {
-      await signInWithPopup(auth, provider);        // stays on your page → easier to debug
+      await signInWithPopup(auth, provider); // desktop-friendly
     } catch (e: any) {
-      if (e?.code?.includes('popup')) {
-        await signInWithRedirect(auth, provider);   // fallback if popup blocked
+      if (e?.code?.includes("popup")) {
+        await signInWithRedirect(auth, provider); // fallback if popup blocked
       } else {
-        console.error('Google sign-in failed', e);
+        // optional: surface toast or error UI
+        console.error("Google sign-in failed", e);
       }
     }
   };
 
   const signOut = async () => {
     try {
-      // clear server cookie first
-      await fetch("/api/auth/session", { method: "DELETE", cache: 'no-store', keepalive: true }).catch(() => {});
+      await fetch("/api/auth/session", { method: "DELETE", cache: "no-store", keepalive: true }).catch(() => {});
       await firebaseSignOut(auth);
       setSessionReady(false);
       sessionSyncing.current = false;
