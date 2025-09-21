@@ -394,6 +394,10 @@ export default function DashboardPage() {
     return null; // AuthProvider handles redirects
   }
 
+  if (isMobile === undefined) {
+    return null; // Prevent flash of desktop view on mobile
+  }
+
   const canToggleTaxReport = yearFilter.kind === 'year' && viewMode === 'grid';
   const selectedYear = yearFilter.kind === 'year' ? yearFilter.year : null;
   const toggleDisabledReason =
