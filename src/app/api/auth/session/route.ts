@@ -1,4 +1,4 @@
-import {NextRequest, NextResponse} from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';          // force Node runtime on Vercel
 export const dynamic = 'force-dynamic';   // disable static optimization
