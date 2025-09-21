@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TAX, defaultCapitalAllowance, defaultCryptoThreshold } from '@/lib/tax';
 import { Separator } from './ui/separator';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { Dialog as MiniDialog, DialogContent as MiniDialogContent, DialogHeader as MiniDialogHeader, DialogTitle as MiniDialogTitle } from '@/components/ui/dialog';
 
 
@@ -377,7 +377,7 @@ function PortfolioSummaryImpl({
                                         <div>
                                             <h4 className="font-semibold">Filter Explanation</h4>
                                              <ul className="list-disc pl-5 mt-2 space-y-2 text-muted-foreground">
-                                                <li><span className="font-semibold text-foreground">All Years View:</span> Shows a lifetime summary of all investments (active and sold). The 'Realized P/L' column displays total realized gains/losses across all time.</li>
+                                                <li><span className="font-semibold text-foreground">All Years View:</span> Shows a lifetime summary of all investments (active and sold). The &apos;Realized P/L&apos; column displays total realized gains/losses across all time.</li>
                                                 <li><span className="font-semibold text-foreground">Specific Year View:</span> Restricts calculations to a single year and enables different view modes.</li>
                                             </ul>
                                         </div>
@@ -400,11 +400,11 @@ function PortfolioSummaryImpl({
                                         </div>
                                         <div>
                                             <h4 className="font-semibold">Realized P/L (Profit/Loss)</h4>
-                                            <p className="text-muted-foreground">Your "locked-in" profit or loss from sales. This value is filtered by the selected "Tax Year" and "View Mode". <br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
+                                            <p className="text-muted-foreground">Your &quot;locked-in&quot; profit or loss from sales. This value is filtered by the selected &quot;Tax Year&quot; and &quot;View Mode&quot;. <br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
                                         </div>
                                         <div>
                                             <h4 className="font-semibold">Unrealized P/L (Profit/Loss)</h4>
-                                            <p className="text-muted-foreground">Your "paper" profit or loss on the assets you still hold. It's the difference between what they are worth now and what you paid for them.<br/><code className="text-xs">Formula: Market Value - Cost Basis of remaining shares</code></p>
+                                            <p className="text-muted-foreground">Your &quot;paper&quot; profit or loss on the assets you still hold. It&apos;s the difference between what they are worth now and what you paid for them.<br/><code className="text-xs">Formula: Market Value - Cost Basis of remaining shares</code></p>
                                         </div>
                                         <div>
                                             <h4 className="font-semibold">Total P/L (Profit/Loss)</h4>
@@ -417,7 +417,7 @@ function PortfolioSummaryImpl({
                                         </div>
                                         <div>
                                             <h4 className="font-semibold">% of Portfolio (Donut Chart)</h4>
-                                            <p className="text-muted-foreground">This shows the allocation of your portfolio's value. It has two modes:</p>
+                                            <p className="text-muted-foreground">This shows the allocation of your portfolio&apos;s value. It has two modes:</p>
                                             <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
                                                 <li><span className="font-semibold text-foreground">Market Value Mode:</span> Shows the percentage based on the current market value of what you own.</li>
                                                 <li><span className="font-semibold text-foreground">Economic Value Mode:</span> Shows a broader view, including your realized gains (note: this uses all-time realized gains, not the filtered year). The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>
@@ -425,7 +425,7 @@ function PortfolioSummaryImpl({
                                         </div>
                                         <div className="pt-2">
                                             <h4 className="font-semibold">Total Row</h4>
-                                            <p className="text-muted-foreground">The "Total" row sums the numeric columns from the rows above it. The "Performance" percentage is then re-calculated based on the grand totals to provide a true weighted-average performance for your entire portfolio.</p>
+                                            <p className="text-muted-foreground">The &quot;Total&quot; row sums the numeric columns from the rows above it. The &quot;Performance&quot; percentage is then re-calculated based on the grand totals to provide a true weighted-average performance for your entire portfolio.</p>
                                         </div>
                                     </div>
                                 </DialogContent>
@@ -642,5 +642,6 @@ function PortfolioSummaryImpl({
 
 export default forwardRef(PortfolioSummaryImpl);
 
+    
     
     

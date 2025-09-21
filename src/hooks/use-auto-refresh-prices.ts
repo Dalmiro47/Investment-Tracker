@@ -142,5 +142,8 @@ export function useAutoRefreshPrices({
       if (onVis) document.removeEventListener('visibilitychange', onVis);
       if (onStorage) window.removeEventListener('storage', onStorage);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userId, invKey, localIntervalMs, toastSilent, onComplete, recheckOnFocus, toast]);
 }
+
+    

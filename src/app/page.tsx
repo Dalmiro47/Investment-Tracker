@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React from 'react';
@@ -391,9 +392,8 @@ export default function DashboardPage() {
     setRatesInv(inv);
     setIsRatesOpen(true);
   };
-
-  // ✅ Hooks must be above early returns
   const canToggleTaxReport = yearFilter.kind === 'year' && viewMode === 'grid';
+  
   React.useEffect(() => {
     if (!canToggleTaxReport && isTaxView) {
       setIsTaxView(false);
@@ -475,7 +475,7 @@ export default function DashboardPage() {
               </TooltipTrigger>
               {isTaxView && (
                 <TooltipContent>
-                  <p>Status is locked to "Sold" in Tax Report view.</p>
+                  <p>Status is locked to &quot;Sold&quot; in Tax Report view.</p>
                 </TooltipContent>
               )}
             </Tooltip>
@@ -810,4 +810,5 @@ export default function DashboardPage() {
   );
 }
 
+    
     

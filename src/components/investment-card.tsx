@@ -188,7 +188,7 @@ export default function InvestmentCard({
                 <DialogContent className="max-w-2xl">
                     <DialogHeader>
                         <DialogTitle>Field Explanations</DialogTitle>
-                        <DialogDescription>Here's how each value on the card is calculated for this investment type.</DialogDescription>
+                        <DialogDescription>Here&apos;s how each value on the card is calculated for this investment type.</DialogDescription>
                     </DialogHeader>
                     {isIA ? (
                         <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4 py-4">
@@ -202,7 +202,7 @@ export default function InvestmentCard({
                             </div>
                             <div>
                                 <h4 className="font-semibold">Accrued Interest</h4>
-                                <p className="text-muted-foreground">The total interest earned to date, calculated based on the account's rate schedule and daily balances. This is your "unrealized" gain.<br/><code className="text-xs">Formula: Calculated daily via savings engine</code></p>
+                                <p className="text-muted-foreground">The total interest earned to date, calculated based on the account&apos;s rate schedule and daily balances. This is your &quot;unrealized&quot; gain.<br/><code className="text-xs">Formula: Calculated daily via savings engine</code></p>
                             </div>
                             <div>
                                 <h4 className="font-semibold">Performance</h4>
@@ -213,7 +213,7 @@ export default function InvestmentCard({
                         <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4 py-4">
                             <div>
                                 <h4 className="font-semibold">Cost Basis</h4>
-                                <p className="text-muted-foreground">The original purchase price of the assets you currently still own. It ignores the cost of shares you've already sold. <br/><code className="text-xs">Formula: Available Quantity × Original Purchase Price per Unit</code></p>
+                                <p className="text-muted-foreground">The original purchase price of the assets you currently still own. It ignores the cost of shares you&apos;ve already sold. <br/><code className="text-xs">Formula: Available Quantity × Original Purchase Price per Unit</code></p>
                             </div>
                             <div>
                                 <h4 className="font-semibold">Market Value</h4>
@@ -229,11 +229,11 @@ export default function InvestmentCard({
                             </div>
                             <div>
                                 <h4 className="font-semibold">Unrealized P/L</h4>
-                                <p className="text-muted-foreground">Your "paper" profit or loss on the assets you still hold. <br/><code className="text-xs">Formula: (Current Price - Buy Price) × Available Quantity</code></p>
+                                <p className="text-muted-foreground">Your &quot;paper&quot; profit or loss on the assets you still hold. <br/><code className="text-xs">Formula: (Current Price - Buy Price) × Available Quantity</code></p>
                             </div>
                             <div>
                                 <h4 className="font-semibold">Realized P/L</h4>
-                                <p className="text-muted-foreground">Your "locked-in" profit or loss from all completed sales. This value is filtered by the year you select in the summary. <br/><code className="text-xs">Formula: (Avg. Sell Price - Buy Price) × Sold Quantity</code></p>
+                                <p className="text-muted-foreground">Your &quot;locked-in&quot; profit or loss from all completed sales. This value is filtered by the year you select in the summary. <br/><code className="text-xs">Formula: (Avg. Sell Price - Buy Price) × Sold Quantity</code></p>
                             </div>
                             <div>
                                 <h4 className="font-semibold">Total P/L (Performance)</h4>
@@ -464,3 +464,5 @@ export default function InvestmentCard({
     </Card>
   );
 }
+
+    
