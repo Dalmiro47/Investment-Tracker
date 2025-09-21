@@ -86,6 +86,7 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+  input, select, textarea { font-size: 16px; }
 }
 
 /* Scope to table scroll only */

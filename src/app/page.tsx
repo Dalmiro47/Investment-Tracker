@@ -2,7 +2,7 @@
 "use client";
 
 import React from 'react';
-import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary, ViewMode } from '@/lib/types';
+import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries, getAllRateSchedules, addTransaction } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
@@ -33,10 +33,12 @@ import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
 import InvestmentListView from '@/components/investment-list';
 import type { SavingsRateChange } from '@/lib/types-savings';
 import RateScheduleDialog from "@/components/rate-schedule-dialog";
-import { parseISO } from 'date-fns';
 import EtfPlansButton from '@/components/etf/EtfPlansButton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
+import { MobileAppShell } from '@/components/shell/MobileAppShell';
+import { MobileFilters } from '@/components/filters/MobileFilters';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -86,6 +88,7 @@ export default function DashboardPage() {
   const [isRatesOpen, setIsRatesOpen] = React.useState(false);
   const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
   const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
+  const isMobile = useIsMobile();
 
 
   const fetchAllData = React.useCallback(async (userId: string) => {
@@ -142,6 +145,7 @@ export default function DashboardPage() {
 
   useAutoRefreshPrices({
     userId: user?.uid,
+    investments: [],
     onComplete: () => {
       if(user?.uid) fetchAllData(user.uid);
     }
@@ -390,6 +394,10 @@ export default function DashboardPage() {
     return null; // AuthProvider handles redirects
   }
 
+  if (isMobile === undefined) {
+    return null; // Prevent flash of desktop view on mobile
+  }
+
   const canToggleTaxReport = yearFilter.kind === 'year' && viewMode === 'grid';
   const selectedYear = yearFilter.kind === 'year' ? yearFilter.year : null;
   const toggleDisabledReason =
@@ -424,8 +432,160 @@ export default function DashboardPage() {
     }
   }, [canToggleTaxReport, isTaxView]);
 
-  return (
+  const advancedFilters = (
     <>
+      <div className="flex flex-col sm:flex-row items-center gap-4 mt-4">
+        <div className="w-full sm:w-auto">
+          <Tabs value={typeFilter} onValueChange={(value) => setTypeFilter(value as InvestmentType | 'All')}>
+            <TabsList className="flex-wrap h-auto">
+              <TabsTrigger value="All">All Types ({typeCounts.All})</TabsTrigger>
+              <TabsTrigger value="Stock">Stocks ({typeCounts.Stock})</TabsTrigger>
+              <TabsTrigger value="Crypto">Crypto ({typeCounts.Crypto})</TabsTrigger>
+              <TabsTrigger value="ETF">ETFs ({typeCounts.ETF})</TabsTrigger>
+              <TabsTrigger value="Interest Account">Interest Accounts ({typeCounts['Interest Account']})</TabsTrigger>
+              <TabsTrigger value="Bond">Bonds ({typeCounts.Bond})</TabsTrigger>
+              <TabsTrigger value="Real Estate">Real Estate ({typeCounts['Real Estate']})</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+        <div className="flex-grow" />
+        <div className="flex items-center gap-4 w-full sm:w-auto">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-full sm:w-[180px]">
+                    <Select 
+                        value={isTaxView ? 'Sold' : statusFilter}
+                        onValueChange={(value) => setStatusFilter(value as InvestmentStatus | 'All')}
+                        disabled={isTaxView}
+                    >
+                    <SelectTrigger>
+                        <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="All">All Statuses</SelectItem>
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="Sold">Sold</SelectItem>
+                    </SelectContent>
+                    </Select>
+                </div>
+              </TooltipTrigger>
+              {isTaxView && (
+                <TooltipContent>
+                  <p>Status is locked to "Sold" in Tax Report view.</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+          <Select value={sortKey} onValueChange={(value) => setSortKey(value as SortKey)}>
+            <SelectTrigger className="w-full sm:w-[180px]">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="purchaseDate">Sort by Date</SelectItem>
+              <SelectItem value="performance">Sort by Performance</SelectItem>
+              <SelectItem value="totalAmount">Sort by Total Amount</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+    </>
+  );
+
+  const mobileView = (
+      <MobileAppShell>
+        <PortfolioSummary 
+            ref={summaryRef}
+            summaryData={summaryData}
+            sellYears={sellYears} 
+            isTaxView={isTaxView}
+            taxSettings={taxSettings}
+            yearFilter={yearFilter}
+            onYearFilterChange={setYearFilter}
+          />
+        <MobileFilters view={viewMode} setView={setViewMode} mode={listMode} setMode={setListMode}>
+          {advancedFilters}
+        </MobileFilters>
+        
+        {loading ? (
+            <div className="flex justify-center items-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
+            </div>
+          ) : viewMode === 'list' ? (
+              <Card>
+                <CardContent>
+                  <InvestmentListView
+                    investments={filteredAndSortedInvestments}
+                    transactionsMap={transactionsMap}
+                    rateSchedulesMap={rateSchedulesMap}
+                    yearFilter={yearFilter}
+                    showTypeColumn={typeFilter === 'All'}
+                    mode={listMode}
+                    sortKey={sortKey}
+                    statusFilter={statusFilter}
+                    activeTypeFilter={typeFilter}
+                    onViewHistory={(id) => {
+                      const inv = investments.find((i) => i.id === id);
+                      if (inv) handleHistoryClick(inv);
+                    }}
+                    onAddTransaction={(id) => {
+                      const inv = investments.find((i) => i.id === id);
+                      if (inv) handleAddTransactionClick(inv);
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            ) : filteredAndSortedInvestments.length > 0 ? (
+            <div className="space-y-4">
+              {filteredAndSortedInvestments.map(investment => {
+                const metrics = investmentMetrics.get(investment.id);
+                const txs = transactionsMap[investment.id] ?? [];
+                const lastSoldOn = txs
+                  .filter(t => t.type === 'Sell')
+                  .sort((a, b) => a.date.localeCompare(b.date))
+                  .at(-1)?.date ?? null;
+
+                return (
+                  <InvestmentCard 
+                    key={investment.id} 
+                    investment={investment} 
+                    metrics={metrics}
+                    isTaxView={isTaxView}
+                    onEdit={() => handleEditClick(investment)}
+                    onDelete={() => handleDeleteClick(investment.id)}
+                    onViewHistory={() => handleHistoryClick(investment)}
+                    onAddTransaction={() => handleAddTransactionClick(investment)}
+                    taxSettings={taxSettings}
+                    realizedPLYear={metrics?.realizedPLYear ?? 0}
+                    dividendsYear={metrics?.dividendsYear ?? 0}
+                    interestYear={metrics?.interestYear ?? 0}
+                    currentRatePct={getCurrentRate(rateSchedulesMap[investment.id])}
+                    onManageRates={() => handleManageRates(investment)}
+                    taxSummary={summaryData.taxSummary}
+                    soldOn={lastSoldOn}
+                  />
+                )
+              })}
+            </div>
+          ) : (
+            <div className="text-center py-16">
+              <h3 className="text-xl font-semibold text-foreground">No Investments Found</h3>
+              <p className="text-muted-foreground mt-2">
+                 {isTaxView ? "No sold positions match the current filters." : "Add a new investment to get started."}
+              </p>
+            </div>
+          )}
+           <button
+            onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}
+            className="md:hidden fixed right-4 z-50 rounded-full bg-primary text-primary-foreground shadow-lg px-5 py-3 font-medium"
+            style={{ bottom: "calc(72px + env(safe-area-inset-bottom) + 8px)" }}
+          >
+            Add Investment
+          </button>
+      </MobileAppShell>
+  );
+
+  const desktopView = (
       <div className="min-h-screen w-full bg-background">
         <DashboardHeader 
             isTaxView={isTaxView} 
@@ -513,61 +673,7 @@ export default function DashboardPage() {
                 </Button>
               </div>
             </div>
-            <div className="flex flex-col sm:flex-row items-center gap-4 mt-4">
-              <div className="w-full sm:w-auto">
-                <Tabs value={typeFilter} onValueChange={(value) => setTypeFilter(value as InvestmentType | 'All')}>
-                  <TabsList className="flex-wrap h-auto">
-                    <TabsTrigger value="All">All Types ({typeCounts.All})</TabsTrigger>
-                    <TabsTrigger value="Stock">Stocks ({typeCounts.Stock})</TabsTrigger>
-                    <TabsTrigger value="Crypto">Crypto ({typeCounts.Crypto})</TabsTrigger>
-                    <TabsTrigger value="ETF">ETFs ({typeCounts.ETF})</TabsTrigger>
-                    <TabsTrigger value="Interest Account">Interest Accounts ({typeCounts['Interest Account']})</TabsTrigger>
-                    <TabsTrigger value="Bond">Bonds ({typeCounts.Bond})</TabsTrigger>
-                    <TabsTrigger value="Real Estate">Real Estate ({typeCounts['Real Estate']})</TabsTrigger>
-                  </TabsList>
-                </Tabs>
-              </div>
-              <div className="flex-grow" />
-              <div className="flex items-center gap-4 w-full sm:w-auto">
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <div className="w-full sm:w-[180px]">
-                          <Select 
-                              value={isTaxView ? 'Sold' : statusFilter}
-                              onValueChange={(value) => setStatusFilter(value as InvestmentStatus | 'All')}
-                              disabled={isTaxView}
-                          >
-                          <SelectTrigger>
-                              <SelectValue placeholder="Filter by status" />
-                          </SelectTrigger>
-                          <SelectContent>
-                              <SelectItem value="All">All Statuses</SelectItem>
-                              <SelectItem value="Active">Active</SelectItem>
-                              <SelectItem value="Sold">Sold</SelectItem>
-                          </SelectContent>
-                          </Select>
-                      </div>
-                    </TooltipTrigger>
-                    {isTaxView && (
-                      <TooltipContent>
-                        <p>Status is locked to "Sold" in Tax Report view.</p>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                </TooltipProvider>
-                <Select value={sortKey} onValueChange={(value) => setSortKey(value as SortKey)}>
-                  <SelectTrigger className="w-full sm:w-[180px]">
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="purchaseDate">Sort by Date</SelectItem>
-                    <SelectItem value="performance">Sort by Performance</SelectItem>
-                    <SelectItem value="totalAmount">Sort by Total Amount</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
+            {advancedFilters}
           </div>
           
           {loading ? (
@@ -647,6 +753,11 @@ export default function DashboardPage() {
           )}
         </main>
       </div>
+  );
+
+  return (
+    <>
+      {isMobile ? mobileView : desktopView}
       <InvestmentForm 
         isOpen={isFormOpen}
         onOpenChange={setIsFormOpen}
@@ -695,3 +806,4 @@ export default function DashboardPage() {
     </>
   );
 }
+
