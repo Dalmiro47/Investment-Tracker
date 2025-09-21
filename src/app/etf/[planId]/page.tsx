@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -28,6 +29,7 @@ import { Label } from '@/components/ui/label';
 import PortfolioStackedChart from '@/components/etf/PortfolioStackedChart';
 import PerformanceSummary from '@/components/etf/PerformanceSummary';
 import AggregatedPerformanceTable from '@/components/etf/AggregatedPerformanceTable';
+import { cn } from '@/lib/utils';
 
 export const runtime = 'nodejs';
 
@@ -383,12 +385,12 @@ export default function PlanDetailPage() {
                             type="button"
                             onClick={() => setPerfView('flat')}
                             data-active={perfView === 'flat'}
-                            className={[
+                            className={cn(
                               'h-8 px-3 text-sm font-medium rounded-sm',
                               'text-muted-foreground transition-colors',
                               'hover:text-foreground',
-                              'data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-sm',
-                            ].join(' ')}
+                              'data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-sm'
+                            )}
                           >
                             Flat
                           </button>
@@ -396,12 +398,12 @@ export default function PlanDetailPage() {
                             type="button"
                             onClick={() => setPerfView('aggregated')}
                             data-active={perfView === 'aggregated'}
-                            className={[
+                            className={cn(
                               'h-8 px-3 text-sm font-medium rounded-sm',
                               'text-muted-foreground transition-colors',
                               'hover:text-foreground',
-                              'data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-sm',
-                            ].join(' ')}
+                              'data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-sm'
+                            )}
                           >
                             Aggregated
                           </button>

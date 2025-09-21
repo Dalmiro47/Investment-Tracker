@@ -19,6 +19,11 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  experimental: {
+    // This is required to allow requests from the Studio preview environment
+    // which has a different origin.
+    allowedDevOrigins: ['https://*.cloudworkstations.dev'],
+  },
 };
 
 export default nextConfig;
