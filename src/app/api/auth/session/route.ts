@@ -1,19 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-export const runtime = 'nodejs';          // force Node runtime on Vercel
-export const dynamic = 'force-dynamic';   // disable static optimization
-export const revalidate = 0;              // no ISR caching for this route
-
-// Set the session cookie
+// Create session cookie
 export async function POST(req: NextRequest) {
-  const bearer = req.headers.get('authorization') ?? '';
-  const token = bearer.startsWith('Bearer ') ? bearer.slice(7) : '';
-
-  if (!token) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  const auth = req.headers.get('authorization') ?? '';
+  if (!auth.startsWith('Bearer ')) {
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401, headers: { 'Cache-Control': 'no-store' } });
   }
+  const token = auth.slice(7);
 
-  const res = NextResponse.json({ status: 'success' });
+  const res = NextResponse.json({ status: 'success' }, { headers: { 'Cache-Control': 'no-store' } });
   res.cookies.set('x-firebase-session', token, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -24,9 +19,9 @@ export async function POST(req: NextRequest) {
   return res;
 }
 
-// Delete the session cookie
+// Delete session cookie
 export async function DELETE() {
-  const res = NextResponse.json({ status: 'success' });
+  const res = NextResponse.json({ status: 'success' }, { headers: { 'Cache-Control': 'no-store' } });
   res.cookies.delete('x-firebase-session');
   return res;
 }
