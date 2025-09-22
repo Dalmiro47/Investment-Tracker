@@ -410,6 +410,7 @@ function DashboardPageContent() {
 
   const handleOpenTaxEstimate = React.useCallback(() => {
     ensureTaxPreconditions();
+    setIsTaxView(true);
     setSection("summary");
     setTimeout(() => summaryRef.current?.openEstimate(), 0);
   }, [ensureTaxPreconditions]);
@@ -519,10 +520,12 @@ function DashboardPageContent() {
 
   const mobileDashboard = (
     <>
-      <MobileFilters view={viewMode} setView={setViewMode} mode={listMode} setMode={setListMode}>
-        {advancedFilters}
-      </MobileFilters>
+      <MobileFilters view={viewMode} setView={setViewMode} mode={listMode} setMode={setListMode} />
       
+      <div className="mt-2">
+        {advancedFilters}
+      </div>
+
       {loading ? (
           <div className="flex justify-center items-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
