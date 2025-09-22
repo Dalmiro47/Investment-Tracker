@@ -40,6 +40,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MobileAppShell } from '@/components/shell/MobileAppShell';
 import { MobileFilters } from '@/components/filters/MobileFilters';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { useSearchParams } from 'next/navigation';
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -50,7 +51,7 @@ const getCurrentRate = (rates?: SavingsRateChange[]) => {
   return eligible.length ? eligible[eligible.length-1].annualRatePct : rates[0].annualRatePct;
 };
 
-export default function DashboardPage() {
+function DashboardPageContent() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [investments, setInvestments] = React.useState<Investment[]>([]);
@@ -90,6 +91,8 @@ export default function DashboardPage() {
   const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
   const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
   const isMobile = useIsMobile();
+  const searchParams = useSearchParams();
+  const mobileSection = searchParams.get('section') || 'dashboard';
 
 
   const fetchAllData = React.useCallback(async (userId: string) => {
@@ -392,6 +395,7 @@ export default function DashboardPage() {
     setRatesInv(inv);
     setIsRatesOpen(true);
   };
+
   const canToggleTaxReport = yearFilter.kind === 'year' && viewMode === 'grid';
   
   React.useEffect(() => {
@@ -400,10 +404,6 @@ export default function DashboardPage() {
     }
   }, [canToggleTaxReport, isTaxView]);
   
-  if (!user) {
-    return null; // AuthProvider handles redirects
-  }
-
   if (isMobile === undefined) {
     return <div className="h-screen w-full bg-background" />; // Prevent flash of desktop view on mobile
   }
@@ -495,9 +495,94 @@ export default function DashboardPage() {
     </>
   );
 
+  const mobileDashboard = (
+    <>
+      <MobileFilters view={viewMode} setView={setViewMode} mode={listMode} setMode={setListMode}>
+        {advancedFilters}
+      </MobileFilters>
+      
+      {loading ? (
+          <div className="flex justify-center items-center py-16">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : viewMode === 'list' ? (
+            <Card>
+              <CardContent>
+                <InvestmentListView
+                  investments={filteredAndSortedInvestments}
+                  transactionsMap={transactionsMap}
+                  rateSchedulesMap={rateSchedulesMap}
+                  yearFilter={yearFilter}
+                  showTypeColumn={typeFilter === 'All'}
+                  mode={listMode}
+                  sortKey={sortKey}
+                  statusFilter={statusFilter}
+                  activeTypeFilter={typeFilter}
+                  onViewHistory={(id) => {
+                    const inv = investments.find((i) => i.id === id);
+                    if (inv) handleHistoryClick(inv);
+                  }}
+                  onAddTransaction={(id) => {
+                    const inv = investments.find((i) => i.id === id);
+                    if (inv) handleAddTransactionClick(inv);
+                  }}
+                />
+              </CardContent>
+            </Card>
+          ) : filteredAndSortedInvestments.length > 0 ? (
+          <div className="space-y-4">
+            {filteredAndSortedInvestments.map(investment => {
+              const metrics = investmentMetrics.get(investment.id);
+              const txs = transactionsMap[investment.id] ?? [];
+              const lastSoldOn = txs
+                .filter(t => t.type === 'Sell')
+                .sort((a, b) => a.date.localeCompare(b.date))
+                .at(-1)?.date ?? null;
+
+              return (
+                <InvestmentCard 
+                  key={investment.id} 
+                  investment={investment} 
+                  metrics={metrics}
+                  isTaxView={isTaxView}
+                  onEdit={() => handleEditClick(investment)}
+                  onDelete={() => handleDeleteClick(investment.id)}
+                  onViewHistory={() => handleHistoryClick(investment)}
+                  onAddTransaction={() => handleAddTransactionClick(investment)}
+                  taxSettings={taxSettings}
+                  realizedPLYear={metrics?.realizedPLYear ?? 0}
+                  dividendsYear={metrics?.dividendsYear ?? 0}
+                  interestYear={metrics?.interestYear ?? 0}
+                  currentRatePct={getCurrentRate(rateSchedulesMap[investment.id])}
+                  onManageRates={() => handleManageRates(investment)}
+                  taxSummary={summaryData.taxSummary}
+                  soldOn={lastSoldOn}
+                />
+              )
+            })}
+          </div>
+        ) : (
+          <div className="text-center py-16">
+            <h3 className="text-xl font-semibold text-foreground">No Investments Found</h3>
+            <p className="text-muted-foreground mt-2">
+               {isTaxView ? "No sold positions match the current filters." : "Add a new investment to get started."}
+            </p>
+          </div>
+        )}
+         <button
+          onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}
+          className="md:hidden fixed right-4 z-50 rounded-full bg-primary text-primary-foreground shadow-lg px-5 py-3 font-medium"
+          style={{ bottom: "calc(72px + env(safe-area-inset-bottom) + 8px)" }}
+        >
+          Add Investment
+        </button>
+    </>
+  );
+
   const mobileView = (
       <MobileAppShell>
-        <PortfolioSummary 
+        {mobileSection === 'summary' ? (
+          <PortfolioSummary 
             ref={summaryRef}
             summaryData={summaryData}
             sellYears={sellYears} 
@@ -506,85 +591,29 @@ export default function DashboardPage() {
             yearFilter={yearFilter}
             onYearFilterChange={setYearFilter}
           />
-        <MobileFilters view={viewMode} setView={setViewMode} mode={listMode} setMode={setListMode}>
-          {advancedFilters}
-        </MobileFilters>
-        
-        {loading ? (
-            <div className="flex justify-center items-center py-16">
-              <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            </div>
-          ) : viewMode === 'list' ? (
-              <Card>
-                <CardContent>
-                  <InvestmentListView
-                    investments={filteredAndSortedInvestments}
-                    transactionsMap={transactionsMap}
-                    rateSchedulesMap={rateSchedulesMap}
-                    yearFilter={yearFilter}
-                    showTypeColumn={typeFilter === 'All'}
-                    mode={listMode}
-                    sortKey={sortKey}
-                    statusFilter={statusFilter}
-                    activeTypeFilter={typeFilter}
-                    onViewHistory={(id) => {
-                      const inv = investments.find((i) => i.id === id);
-                      if (inv) handleHistoryClick(inv);
-                    }}
-                    onAddTransaction={(id) => {
-                      const inv = investments.find((i) => i.id === id);
-                      if (inv) handleAddTransactionClick(inv);
-                    }}
-                  />
-                </CardContent>
-              </Card>
-            ) : filteredAndSortedInvestments.length > 0 ? (
-            <div className="space-y-4">
-              {filteredAndSortedInvestments.map(investment => {
-                const metrics = investmentMetrics.get(investment.id);
-                const txs = transactionsMap[investment.id] ?? [];
-                const lastSoldOn = txs
-                  .filter(t => t.type === 'Sell')
-                  .sort((a, b) => a.date.localeCompare(b.date))
-                  .at(-1)?.date ?? null;
-
-                return (
-                  <InvestmentCard 
-                    key={investment.id} 
-                    investment={investment} 
-                    metrics={metrics}
-                    isTaxView={isTaxView}
-                    onEdit={() => handleEditClick(investment)}
-                    onDelete={() => handleDeleteClick(investment.id)}
-                    onViewHistory={() => handleHistoryClick(investment)}
-                    onAddTransaction={() => handleAddTransactionClick(investment)}
-                    taxSettings={taxSettings}
-                    realizedPLYear={metrics?.realizedPLYear ?? 0}
-                    dividendsYear={metrics?.dividendsYear ?? 0}
-                    interestYear={metrics?.interestYear ?? 0}
-                    currentRatePct={getCurrentRate(rateSchedulesMap[investment.id])}
-                    onManageRates={() => handleManageRates(investment)}
-                    taxSummary={summaryData.taxSummary}
-                    soldOn={lastSoldOn}
-                  />
-                )
-              })}
-            </div>
-          ) : (
-            <div className="text-center py-16">
-              <h3 className="text-xl font-semibold text-foreground">No Investments Found</h3>
-              <p className="text-muted-foreground mt-2">
-                 {isTaxView ? "No sold positions match the current filters." : "Add a new investment to get started."}
-              </p>
-            </div>
-          )}
-           <button
-            onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}
-            className="md:hidden fixed right-4 z-50 rounded-full bg-primary text-primary-foreground shadow-lg px-5 py-3 font-medium"
-            style={{ bottom: "calc(72px + env(safe-area-inset-bottom) + 8px)" }}
-          >
-            Add Investment
-          </button>
+        ) : mobileSection === 'list' ? (
+           <InvestmentListView
+              investments={filteredAndSortedInvestments}
+              transactionsMap={transactionsMap}
+              rateSchedulesMap={rateSchedulesMap}
+              yearFilter={yearFilter}
+              showTypeColumn={typeFilter === 'All'}
+              mode={'flat'}
+              sortKey={sortKey}
+              statusFilter={statusFilter}
+              activeTypeFilter={typeFilter}
+              onViewHistory={(id) => {
+                const inv = investments.find((i) => i.id === id);
+                if (inv) handleHistoryClick(inv);
+              }}
+              onAddTransaction={(id) => {
+                const inv = investments.find((i) => i.id === id);
+                if (inv) handleAddTransactionClick(inv);
+              }}
+            />
+        ) : (
+          mobileDashboard
+        )}
       </MobileAppShell>
   );
 
@@ -810,5 +839,13 @@ export default function DashboardPage() {
   );
 }
 
-    
-    
+export default function DashboardPage() {
+  // The Suspense boundary is necessary because useSearchParams() might suspend.
+  // By wrapping the page content, we allow the rest of the layout to render
+  // while Next.js fetches the initial search parameters.
+  return (
+    <React.Suspense fallback={<div className="h-screen w-full bg-background" />}>
+      <DashboardPageContent />
+    </React.Suspense>
+  );
+}
