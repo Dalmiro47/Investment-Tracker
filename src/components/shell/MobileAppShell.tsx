@@ -5,10 +5,16 @@ import { BottomTabs } from "@/components/shell/BottomTabs";
 
 type Props = {
   children: React.ReactNode;
-} & TopBarProps;
+  onTaxSettingsClick?: () => void;
+  onViewTaxEstimate?: () => void;
+};
 
 
-export function MobileAppShell({ children, onTaxSettingsClick, onViewTaxEstimate }: Props) {
+export function MobileAppShell({
+  children,
+  onTaxSettingsClick = () => {},
+  onViewTaxEstimate = () => {},
+}: Props) {
   // Max 430px typical app width, padded and safe-area aware
   return (
     <div className="md:hidden bg-background text-foreground">
