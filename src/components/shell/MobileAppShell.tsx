@@ -5,11 +5,13 @@ import BottomTabs from "./BottomTabs";
 
 type Section = "dashboard" | "list" | "summary";
 
-type Props = React.PropsWithChildren<{
+export type MobileAppShellProps = React.PropsWithChildren<{
   section: Section;
   onSectionChange: (s: Section) => void;
   onTaxSettingsClick?: () => void;
   onViewTaxEstimate?: () => void;
+  isTaxView?: boolean;
+  onToggleTaxView?: () => void;
 }>;
 
 export function MobileAppShell({
@@ -18,14 +20,18 @@ export function MobileAppShell({
   onSectionChange,
   onTaxSettingsClick = () => {},
   onViewTaxEstimate = () => {},
-}: Props) {
+  isTaxView = false,
+  onToggleTaxView = () => {},
+}: MobileAppShellProps) {
   return (
     <div className="relative min-h-screen md:hidden bg-background text-foreground">
       <TopBar
         onTaxSettingsClick={onTaxSettingsClick}
         onViewTaxEstimate={onViewTaxEstimate}
+        isTaxView={isTaxView}
+        onToggleTaxView={onToggleTaxView}
       />
-      <main className="mx-auto w-full max-w-[430px] px-4 pb-20 pt-[56px]"
+      <main className="pb-20 pt-[56px]"
             style={{
               paddingTop: "calc(56px + env(safe-area-inset-top))",
             }}>

@@ -92,7 +92,7 @@ function DashboardPageContent() {
   const [section, setSection] = React.useState<"dashboard" | "list" | "summary">("dashboard");
   const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
   const [pendingOpenEstimate, setPendingOpenEstimate] = React.useState(false);
-
+  const isMobile = useIsMobile();
 
   const fetchAllData = React.useCallback(async (userId: string) => {
     setLoading(true);
@@ -212,8 +212,8 @@ function DashboardPageContent() {
   const typeCounts = React.useMemo(() => {
     // 1) Start with the year-scoped pool.
     // 2) Apply the SAME status logic used for the cards:
-    //    - Tax view ⇒ only Sold
-    //    - Otherwise ⇒ honor the statusFilter (or All)
+    //    - Tax view ? only Sold
+    //    - Otherwise ? honor the statusFilter (or All)
     const base = investmentsYearScoped.filter(inv =>
       isTaxView
         ? inv.status === 'Sold'
@@ -395,8 +395,6 @@ function DashboardPageContent() {
     setIsRatesOpen(true);
   };
   
-  const isMobile = useIsMobile();
-  
   const canToggleTaxReport = yearFilter.kind === 'year' && (isMobile ? viewMode === 'grid' : true);
   
   React.useEffect(() => {
@@ -405,16 +403,32 @@ function DashboardPageContent() {
     }
   }, [canToggleTaxReport, isTaxView]);
 
+  const ensureTaxPreconditions = React.useCallback(() => {
+    const defaultYear = sellYears[0] ?? new Date().getFullYear();
+
+    if (yearFilter.kind !== 'year') {
+      setYearFilter({ kind: 'year', year: defaultYear, mode: yearFilter.mode });
+    }
+    if (isMobile && viewMode !== 'grid') {
+      setViewMode('grid');
+    }
+  }, [sellYears, yearFilter, isMobile, viewMode]);
+
   const handleOpenTaxEstimate = React.useCallback(() => {
-    // put the user on Summary
-    setSection("summary");
-
-    // Ensure preconditions if you want (optional):
-    // setIsTaxView(true);
-
-    // then open once Summary (and ref) is definitely mounted
+    ensureTaxPreconditions();
+    setIsTaxView(true);
+    setSection('summary');
     setPendingOpenEstimate(true);
-  }, []);
+  }, [ensureTaxPreconditions]);
+
+  const handleToggleTaxView = React.useCallback(() => {
+    const next = !isTaxView;
+    if (next) {
+      ensureTaxPreconditions();
+    }
+    setIsTaxView(next);
+  }, [isTaxView, ensureTaxPreconditions]);
+
 
   React.useEffect(() => {
     if (pendingOpenEstimate && section === "summary" && summaryRef.current) {
@@ -604,42 +618,45 @@ function DashboardPageContent() {
         onSectionChange={setSection}
         onTaxSettingsClick={() => setIsTaxSettingsOpen(true)}
         onViewTaxEstimate={handleOpenTaxEstimate}
+        isTaxView={isTaxView}
+        onToggleTaxView={handleToggleTaxView}
       >
-        {section === "summary" && (
-          <PortfolioSummary 
-            ref={summaryRef}
-            summaryData={summaryData}
-            sellYears={sellYears} 
-            isTaxView={isTaxView}
-            taxSettings={taxSettings}
-            yearFilter={yearFilter}
-            onYearFilterChange={setYearFilter}
-          />
-        )}
-
-        {section === "list" && (
-           <InvestmentListView
-              investments={filteredAndSortedInvestments}
-              transactionsMap={transactionsMap}
-              rateSchedulesMap={rateSchedulesMap}
+        <div className="mx-auto w-full max-w-[430px] px-4">
+          {section === "summary" && (
+            <PortfolioSummary 
+              ref={summaryRef}
+              summaryData={summaryData}
+              sellYears={sellYears} 
+              isTaxView={isTaxView}
+              taxSettings={taxSettings}
               yearFilter={yearFilter}
-              showTypeColumn={typeFilter === 'All'}
-              mode={'flat'}
-              sortKey={sortKey}
-              statusFilter={statusFilter}
-              activeTypeFilter={typeFilter}
-              onViewHistory={(id) => {
-                const inv = investments.find((i) => i.id === id);
-                if (inv) handleHistoryClick(inv);
-              }}
-              onAddTransaction={(id) => {
-                const inv = investments.find((i) => i.id === id);
-                if (inv) handleAddTransactionClick(inv);
-              }}
+              onYearFilterChange={setYearFilter}
             />
-        )}
+          )}
 
-        {section === "dashboard" && mobileDashboard}
+          {section === "list" && (
+             <InvestmentListView
+                investments={filteredAndSortedInvestments}
+                transactionsMap={transactionsMap}
+                rateSchedulesMap={rateSchedulesMap}
+                yearFilter={yearFilter}
+                showTypeColumn={typeFilter === 'All'}
+                mode={'flat'}
+                sortKey={sortKey}
+                statusFilter={statusFilter}
+                activeTypeFilter={typeFilter}
+                onViewHistory={(id) => {
+                  const inv = investments.find((i) => i.id === id);
+                  if (inv) handleHistoryClick(inv);
+                }}
+                onAddTransaction={(id) => {
+                  const inv = investments.find((i) => i.id === id);
+                  if (inv) handleAddTransactionClick(inv);
+                }}
+              />
+          )}
+          {section === "dashboard" && mobileDashboard}
+        </div>
       </MobileAppShell>
   );
 
