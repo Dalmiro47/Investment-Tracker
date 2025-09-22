@@ -89,7 +89,7 @@ function DashboardPageContent() {
   const [isRatesOpen, setIsRatesOpen] = React.useState(false);
   const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
   
-  const [section, setSection] = React.useState<"dashboard" | "list" | "summary">("dashboard");
+  const [section, setSection] = React.useState<"summary" | "investments">("summary");
   const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
   const [pendingOpenEstimate, setPendingOpenEstimate] = React.useState(false);
   const isMobile = useIsMobile();
@@ -397,12 +397,6 @@ function DashboardPageContent() {
   
   const canToggleTaxReport = yearFilter.kind === 'year' && (isMobile ? viewMode === 'grid' : true);
   
-  React.useEffect(() => {
-    if (!canToggleTaxReport && isTaxView) {
-      setIsTaxView(false);
-    }
-  }, [canToggleTaxReport, isTaxView]);
-
   const ensureTaxPreconditions = React.useCallback(() => {
     const defaultYear = sellYears[0] ?? new Date().getFullYear();
 
@@ -416,9 +410,8 @@ function DashboardPageContent() {
 
   const handleOpenTaxEstimate = React.useCallback(() => {
     ensureTaxPreconditions();
-    setIsTaxView(true);
-    setSection('summary');
-    setPendingOpenEstimate(true);
+    setSection("summary");
+    setTimeout(() => summaryRef.current?.openEstimate(), 0);
   }, [ensureTaxPreconditions]);
 
   const handleToggleTaxView = React.useCallback(() => {
@@ -608,6 +601,12 @@ function DashboardPageContent() {
     </>
   );
 
+  React.useEffect(() => {
+    if (!canToggleTaxReport && isTaxView) {
+      setIsTaxView(false);
+    }
+  }, [canToggleTaxReport, isTaxView]);
+
   if (isMobile === undefined) {
     return <div className="h-screen w-full bg-background" />; // Prevent flash of desktop view on mobile
   }
@@ -622,7 +621,7 @@ function DashboardPageContent() {
         onToggleTaxView={handleToggleTaxView}
       >
         <div className="mx-auto w-full max-w-[430px] px-4">
-          {section === "summary" && (
+          {section === "summary" ? (
             <PortfolioSummary 
               ref={summaryRef}
               summaryData={summaryData}
@@ -632,30 +631,9 @@ function DashboardPageContent() {
               yearFilter={yearFilter}
               onYearFilterChange={setYearFilter}
             />
+          ) : (
+            mobileDashboard
           )}
-
-          {section === "list" && (
-             <InvestmentListView
-                investments={filteredAndSortedInvestments}
-                transactionsMap={transactionsMap}
-                rateSchedulesMap={rateSchedulesMap}
-                yearFilter={yearFilter}
-                showTypeColumn={typeFilter === 'All'}
-                mode={'flat'}
-                sortKey={sortKey}
-                statusFilter={statusFilter}
-                activeTypeFilter={typeFilter}
-                onViewHistory={(id) => {
-                  const inv = investments.find((i) => i.id === id);
-                  if (inv) handleHistoryClick(inv);
-                }}
-                onAddTransaction={(id) => {
-                  const inv = investments.find((i) => i.id === id);
-                  if (inv) handleAddTransactionClick(inv);
-                }}
-              />
-          )}
-          {section === "dashboard" && mobileDashboard}
         </div>
       </MobileAppShell>
   );

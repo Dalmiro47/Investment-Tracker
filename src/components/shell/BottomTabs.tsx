@@ -1,51 +1,48 @@
 "use client";
+import { Home, BarChart3 } from "lucide-react";
 
-import * as React from "react";
-import { Home, List, Clock } from "lucide-react";
+export type Section = "summary" | "investments";
 
-type Section = "dashboard" | "list" | "summary";
-
-type Props = {
+export default function BottomTabs({
+  section,
+  onChange,
+}: {
   section: Section;
   onChange: (s: Section) => void;
-};
-
-export default function BottomTabs({ section, onChange }: Props) {
-  const makeBtn = (
-    key: Section,
-    label: string,
-    Icon: React.ComponentType<any>
-  ) => {
-    const selected = section === key;
-    return (
-      <button
-        key={key}
-        type="button"
-        role="tab"
-        aria-selected={selected}
-        aria-label={label}
-        className={`flex flex-col items-center justify-center flex-1 py-2
-          ${selected ? "text-primary" : "text-muted-foreground"}
-        `}
-        onClick={() => onChange(key)}
-      >
-        <Icon className="h-5 w-5" />
-        <span className="text-xs mt-1">{label}</span>
-      </button>
-    );
-  };
-
+}) {
   return (
     <nav
+      className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/70"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      aria-label="Primary"
       role="tablist"
-      aria-label="Main sections"
-      className="fixed bottom-0 left-0 right-0 z-40 border-t bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60"
-      style={{ paddingBottom: "calc(env(safe-area-inset-bottom))" }}
     >
-      <div className="mx-auto max-w-screen-sm grid grid-cols-3">
-        {makeBtn("dashboard", "Dashboard", Home)}
-        {makeBtn("list", "List", List)}
-        {makeBtn("summary", "Summary", Clock)}
+      <div className="mx-auto flex max-w-[430px] items-stretch justify-around py-2">
+        <button
+          role="tab"
+          aria-selected={section === "summary"}
+          aria-label="Summary"
+          className={`flex flex-col items-center gap-1 px-6 py-1 rounded-md ${
+            section === "summary" ? "text-primary" : "text-muted-foreground"
+          }`}
+          onClick={() => onChange("summary")}
+        >
+          <BarChart3 className="h-5 w-5" />
+          <span className="text-xs">Summary</span>
+        </button>
+
+        <button
+          role="tab"
+          aria-selected={section === "investments"}
+          aria-label="Investments"
+          className={`flex flex-col items-center gap-1 px-6 py-1 rounded-md ${
+            section === "investments" ? "text-primary" : "text-muted-foreground"
+          }`}
+          onClick={() => onChange("investments")}
+        >
+          <Home className="h-5 w-5" />
+          <span className="text-xs">Investments</span>
+        </button>
       </div>
     </nav>
   );
