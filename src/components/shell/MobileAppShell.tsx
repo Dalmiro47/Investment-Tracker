@@ -1,9 +1,7 @@
 "use client";
 import * as React from "react";
 import TopBar from "./TopBar";
-import BottomTabs from "./BottomTabs";
-
-type Section = "dashboard" | "list" | "summary";
+import BottomTabs, { type Section } from "./BottomTabs";
 
 export type MobileAppShellProps = React.PropsWithChildren<{
   section: Section;
@@ -31,10 +29,10 @@ export function MobileAppShell({
         isTaxView={isTaxView}
         onToggleTaxView={onToggleTaxView}
       />
-      <main className="pb-20 pt-[56px]"
-            style={{
-              paddingTop: "calc(56px + env(safe-area-inset-top))",
-            }}>
+      <main
+        className="pb-20 pt-[56px]"
+        style={{ paddingTop: "calc(56px + env(safe-area-inset-top))" }}
+      >
         {children}
       </main>
       <BottomTabs section={section} onChange={onSectionChange} />
