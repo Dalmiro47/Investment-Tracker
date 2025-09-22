@@ -86,11 +86,11 @@ function DashboardPageContent() {
     cryptoMarginalRate: 0.42, // Default to a higher rate
   });
 
-  const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all', mode: 'holdings' });
+  const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all', mode: 'combined' });
   const [isRatesOpen, setIsRatesOpen] = React.useState(false);
   const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
   const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
-  const isMobile = useIsMobile();
+  
   const searchParams = useSearchParams();
   const mobileSection = searchParams.get('section') || 'dashboard';
 
@@ -395,24 +395,21 @@ function DashboardPageContent() {
     setRatesInv(inv);
     setIsRatesOpen(true);
   };
-
-  const canToggleTaxReport = yearFilter.kind === 'year' && viewMode === 'grid';
+  
+  const isMobile = useIsMobile();
+  const canToggleTaxReport = yearFilter.kind === 'year' && (isMobile ? viewMode === 'grid' : true);
   
   React.useEffect(() => {
     if (!canToggleTaxReport && isTaxView) {
       setIsTaxView(false);
     }
   }, [canToggleTaxReport, isTaxView]);
-  
-  if (isMobile === undefined) {
-    return <div className="h-screen w-full bg-background" />; // Prevent flash of desktop view on mobile
-  }
-      
+
   const selectedYear = yearFilter.kind === 'year' ? yearFilter.year : null;
   const toggleDisabledReason =
     selectedYear == null
       ? 'Select a year to build the German Tax Report.'
-      : viewMode !== 'grid'
+      : viewMode !== 'grid' && isMobile
       ? 'Switch to Cards view to see per-asset estimates.'
       : undefined;
       
@@ -579,8 +576,15 @@ function DashboardPageContent() {
     </>
   );
 
+  if (isMobile === undefined) {
+    return <div className="h-screen w-full bg-background" />; // Prevent flash of desktop view on mobile
+  }
+
   const mobileView = (
-      <MobileAppShell>
+      <MobileAppShell
+        onTaxSettingsClick={() => setIsTaxSettingsOpen(true)}
+        onViewTaxEstimate={() => summaryRef.current?.openEstimate()}
+      >
         {mobileSection === 'summary' ? (
           <PortfolioSummary 
             ref={summaryRef}

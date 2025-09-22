@@ -1,13 +1,18 @@
 "use client";
 import React from "react";
-import { TopBar } from "@/components/shell/TopBar";
+import { TopBar, TopBarProps } from "@/components/shell/TopBar";
 import { BottomTabs } from "@/components/shell/BottomTabs";
 
-export function MobileAppShell({ children }: { children: React.ReactNode }) {
+type Props = {
+  children: React.ReactNode;
+} & TopBarProps;
+
+
+export function MobileAppShell({ children, onTaxSettingsClick, onViewTaxEstimate }: Props) {
   // Max 430px typical app width, padded and safe-area aware
   return (
     <div className="md:hidden bg-background text-foreground">
-      <TopBar />
+      <TopBar onTaxSettingsClick={onTaxSettingsClick} onViewTaxEstimate={onViewTaxEstimate} />
       <main className="mx-auto w-full max-w-[430px] px-4 pb-[72px] pt-[56px]"
             style={{
               paddingTop: "calc(56px + env(safe-area-inset-top))",
