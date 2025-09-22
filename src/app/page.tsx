@@ -40,7 +40,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MobileAppShell } from '@/components/shell/MobileAppShell';
 import { MobileFilters } from '@/components/filters/MobileFilters';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useSearchParams } from 'next/navigation';
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -89,11 +88,11 @@ function DashboardPageContent() {
   const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all', mode: 'combined' });
   const [isRatesOpen, setIsRatesOpen] = React.useState(false);
   const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
-  const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
   
-  const searchParams = useSearchParams();
-  const mobileSection = searchParams.get('section') || 'dashboard';
-
+  const [section, setSection] = React.useState<"dashboard" | "list" | "summary">("dashboard");
+  const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
+  const [pendingOpenEstimate, setPendingOpenEstimate] = React.useState(false);
+  const isMobile = useIsMobile();
 
   const fetchAllData = React.useCallback(async (userId: string) => {
     setLoading(true);
@@ -213,8 +212,8 @@ function DashboardPageContent() {
   const typeCounts = React.useMemo(() => {
     // 1) Start with the year-scoped pool.
     // 2) Apply the SAME status logic used for the cards:
-    //    - Tax view ⇒ only Sold
-    //    - Otherwise ⇒ honor the statusFilter (or All)
+    //    - Tax view ? only Sold
+    //    - Otherwise ? honor the statusFilter (or All)
     const base = investmentsYearScoped.filter(inv =>
       isTaxView
         ? inv.status === 'Sold'
@@ -396,7 +395,6 @@ function DashboardPageContent() {
     setIsRatesOpen(true);
   };
   
-  const isMobile = useIsMobile();
   const canToggleTaxReport = yearFilter.kind === 'year' && (isMobile ? viewMode === 'grid' : true);
   
   React.useEffect(() => {
@@ -404,6 +402,40 @@ function DashboardPageContent() {
       setIsTaxView(false);
     }
   }, [canToggleTaxReport, isTaxView]);
+
+  const ensureTaxPreconditions = React.useCallback(() => {
+    const defaultYear = sellYears[0] ?? new Date().getFullYear();
+
+    if (yearFilter.kind !== 'year') {
+      setYearFilter({ kind: 'year', year: defaultYear, mode: yearFilter.mode });
+    }
+    if (isMobile && viewMode !== 'grid') {
+      setViewMode('grid');
+    }
+  }, [sellYears, yearFilter, isMobile, viewMode]);
+
+  const handleOpenTaxEstimate = React.useCallback(() => {
+    ensureTaxPreconditions();
+    setIsTaxView(true);
+    setSection('summary');
+    setPendingOpenEstimate(true);
+  }, [ensureTaxPreconditions]);
+
+  const handleToggleTaxView = React.useCallback(() => {
+    const next = !isTaxView;
+    if (next) {
+      ensureTaxPreconditions();
+    }
+    setIsTaxView(next);
+  }, [isTaxView, ensureTaxPreconditions]);
+
+
+  React.useEffect(() => {
+    if (pendingOpenEstimate && section === "summary" && summaryRef.current) {
+      summaryRef.current.openEstimate();
+      setPendingOpenEstimate(false);
+    }
+  }, [pendingOpenEstimate, section]);
 
   const selectedYear = yearFilter.kind === 'year' ? yearFilter.year : null;
   const toggleDisabledReason =
@@ -582,42 +614,49 @@ function DashboardPageContent() {
 
   const mobileView = (
       <MobileAppShell
+        section={section}
+        onSectionChange={setSection}
         onTaxSettingsClick={() => setIsTaxSettingsOpen(true)}
-        onViewTaxEstimate={() => summaryRef.current?.openEstimate()}
+        onViewTaxEstimate={handleOpenTaxEstimate}
+        isTaxView={isTaxView}
+        onToggleTaxView={handleToggleTaxView}
       >
-        {mobileSection === 'summary' ? (
-          <PortfolioSummary 
-            ref={summaryRef}
-            summaryData={summaryData}
-            sellYears={sellYears} 
-            isTaxView={isTaxView}
-            taxSettings={taxSettings}
-            yearFilter={yearFilter}
-            onYearFilterChange={setYearFilter}
-          />
-        ) : mobileSection === 'list' ? (
-           <InvestmentListView
-              investments={filteredAndSortedInvestments}
-              transactionsMap={transactionsMap}
-              rateSchedulesMap={rateSchedulesMap}
+        <div className="mx-auto w-full max-w-[430px] px-4">
+          {section === "summary" && (
+            <PortfolioSummary 
+              ref={summaryRef}
+              summaryData={summaryData}
+              sellYears={sellYears} 
+              isTaxView={isTaxView}
+              taxSettings={taxSettings}
               yearFilter={yearFilter}
-              showTypeColumn={typeFilter === 'All'}
-              mode={'flat'}
-              sortKey={sortKey}
-              statusFilter={statusFilter}
-              activeTypeFilter={typeFilter}
-              onViewHistory={(id) => {
-                const inv = investments.find((i) => i.id === id);
-                if (inv) handleHistoryClick(inv);
-              }}
-              onAddTransaction={(id) => {
-                const inv = investments.find((i) => i.id === id);
-                if (inv) handleAddTransactionClick(inv);
-              }}
+              onYearFilterChange={setYearFilter}
             />
-        ) : (
-          mobileDashboard
-        )}
+          )}
+
+          {section === "list" && (
+             <InvestmentListView
+                investments={filteredAndSortedInvestments}
+                transactionsMap={transactionsMap}
+                rateSchedulesMap={rateSchedulesMap}
+                yearFilter={yearFilter}
+                showTypeColumn={typeFilter === 'All'}
+                mode={'flat'}
+                sortKey={sortKey}
+                statusFilter={statusFilter}
+                activeTypeFilter={typeFilter}
+                onViewHistory={(id) => {
+                  const inv = investments.find((i) => i.id === id);
+                  if (inv) handleHistoryClick(inv);
+                }}
+                onAddTransaction={(id) => {
+                  const inv = investments.find((i) => i.id === id);
+                  if (inv) handleAddTransactionClick(inv);
+                }}
+              />
+          )}
+          {section === "dashboard" && mobileDashboard}
+        </div>
       </MobileAppShell>
   );
 
