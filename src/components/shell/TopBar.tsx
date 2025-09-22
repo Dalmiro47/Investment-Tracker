@@ -9,7 +9,7 @@ export type TopBarProps = {
 };
 
 
-export function TopBar({ onTaxSettingsClick, onViewTaxEstimate }: TopBarProps) {
+export default function TopBar({ onTaxSettingsClick, onViewTaxEstimate }: TopBarProps) {
   return (
     <header className="fixed inset-x-0 top-0 z-40 md:hidden
       bg-muted/40 backdrop-blur supports-[backdrop-filter]:bg-background/70

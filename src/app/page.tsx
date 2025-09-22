@@ -40,7 +40,6 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MobileAppShell } from '@/components/shell/MobileAppShell';
 import { MobileFilters } from '@/components/filters/MobileFilters';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { useSearchParams } from 'next/navigation';
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -89,10 +88,10 @@ function DashboardPageContent() {
   const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all', mode: 'combined' });
   const [isRatesOpen, setIsRatesOpen] = React.useState(false);
   const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
-  const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
   
-  const searchParams = useSearchParams();
-  const mobileSection = searchParams.get('section') || 'dashboard';
+  const [section, setSection] = React.useState<"dashboard" | "list" | "summary">("dashboard");
+  const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
+  const [pendingOpenEstimate, setPendingOpenEstimate] = React.useState(false);
 
 
   const fetchAllData = React.useCallback(async (userId: string) => {
@@ -397,6 +396,7 @@ function DashboardPageContent() {
   };
   
   const isMobile = useIsMobile();
+  
   const canToggleTaxReport = yearFilter.kind === 'year' && (isMobile ? viewMode === 'grid' : true);
   
   React.useEffect(() => {
@@ -404,6 +404,24 @@ function DashboardPageContent() {
       setIsTaxView(false);
     }
   }, [canToggleTaxReport, isTaxView]);
+
+  const handleOpenTaxEstimate = React.useCallback(() => {
+    // put the user on Summary
+    setSection("summary");
+
+    // Ensure preconditions if you want (optional):
+    // setIsTaxView(true);
+
+    // then open once Summary (and ref) is definitely mounted
+    setPendingOpenEstimate(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (pendingOpenEstimate && section === "summary" && summaryRef.current) {
+      summaryRef.current.openEstimate();
+      setPendingOpenEstimate(false);
+    }
+  }, [pendingOpenEstimate, section]);
 
   const selectedYear = yearFilter.kind === 'year' ? yearFilter.year : null;
   const toggleDisabledReason =
@@ -582,10 +600,12 @@ function DashboardPageContent() {
 
   const mobileView = (
       <MobileAppShell
+        section={section}
+        onSectionChange={setSection}
         onTaxSettingsClick={() => setIsTaxSettingsOpen(true)}
-        onViewTaxEstimate={() => summaryRef.current?.openEstimate()}
+        onViewTaxEstimate={handleOpenTaxEstimate}
       >
-        {mobileSection === 'summary' ? (
+        {section === "summary" && (
           <PortfolioSummary 
             ref={summaryRef}
             summaryData={summaryData}
@@ -595,7 +615,9 @@ function DashboardPageContent() {
             yearFilter={yearFilter}
             onYearFilterChange={setYearFilter}
           />
-        ) : mobileSection === 'list' ? (
+        )}
+
+        {section === "list" && (
            <InvestmentListView
               investments={filteredAndSortedInvestments}
               transactionsMap={transactionsMap}
@@ -615,9 +637,9 @@ function DashboardPageContent() {
                 if (inv) handleAddTransactionClick(inv);
               }}
             />
-        ) : (
-          mobileDashboard
         )}
+
+        {section === "dashboard" && mobileDashboard}
       </MobileAppShell>
   );
 

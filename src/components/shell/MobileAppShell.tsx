@@ -1,32 +1,37 @@
 "use client";
-import React from "react";
-import { TopBar, TopBarProps } from "@/components/shell/TopBar";
-import { BottomTabs } from "@/components/shell/BottomTabs";
+import * as React from "react";
+import TopBar from "./TopBar";
+import BottomTabs from "./BottomTabs";
 
-type Props = {
-  children: React.ReactNode;
+type Section = "dashboard" | "list" | "summary";
+
+type Props = React.PropsWithChildren<{
+  section: Section;
+  onSectionChange: (s: Section) => void;
   onTaxSettingsClick?: () => void;
   onViewTaxEstimate?: () => void;
-};
-
+}>;
 
 export function MobileAppShell({
   children,
+  section,
+  onSectionChange,
   onTaxSettingsClick = () => {},
   onViewTaxEstimate = () => {},
 }: Props) {
-  // Max 430px typical app width, padded and safe-area aware
   return (
-    <div className="md:hidden bg-background text-foreground">
-      <TopBar onTaxSettingsClick={onTaxSettingsClick} onViewTaxEstimate={onViewTaxEstimate} />
-      <main className="mx-auto w-full max-w-[430px] px-4 pb-[72px] pt-[56px]"
+    <div className="relative min-h-screen md:hidden bg-background text-foreground">
+      <TopBar
+        onTaxSettingsClick={onTaxSettingsClick}
+        onViewTaxEstimate={onViewTaxEstimate}
+      />
+      <main className="mx-auto w-full max-w-[430px] px-4 pb-20 pt-[56px]"
             style={{
               paddingTop: "calc(56px + env(safe-area-inset-top))",
-              paddingBottom: "calc(72px + env(safe-area-inset-bottom))"
             }}>
         {children}
       </main>
-      <BottomTabs />
+      <BottomTabs section={section} onChange={onSectionChange} />
     </div>
   );
 }
