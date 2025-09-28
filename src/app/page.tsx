@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React from 'react';
@@ -522,7 +521,7 @@ function DashboardPageContent() {
     <>
       <MobileFilters view={viewMode} setView={setViewMode} mode={listMode} setMode={setListMode} />
       
-      <div className="mt-2">
+      <div className="mt-2 -mx-4 px-4">
         {advancedFilters}
       </div>
 
@@ -873,3 +872,5 @@ export default function DashboardPage() {
     </React.Suspense>
   );
 }
+
+    
