@@ -19,9 +19,6 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  experimental: {
-    // No longer contains allowedDevOrigins
-  },
   // This is required to allow requests from the Studio preview environment
   // which has a different origin.
   allowedDevOrigins: ['https://*.cloudworkstations.dev'],

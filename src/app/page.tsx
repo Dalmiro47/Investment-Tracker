@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React from 'react';
@@ -14,7 +13,7 @@ import { TaxSettingsDialog } from '@/components/tax-settings-dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, SlidersHorizontal, Loader2, RefreshCw } from 'lucide-react';
+import { PlusCircle, SlidersHorizontal, Loader2, RefreshCw, ReceiptPercent } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAutoRefreshPrices } from '@/hooks/use-auto-refresh-prices';
@@ -406,7 +405,7 @@ function DashboardPageContent() {
     if (isMobile && viewMode !== 'grid') {
       setViewMode('grid');
     }
-  }, [sellYears, yearFilter, isMobile, viewMode]);
+  }, [sellYears, yearFilter, isMobile, viewMode, setYearFilter, setViewMode]);
 
   const handleOpenTaxEstimate = React.useCallback(() => {
     ensureTaxPreconditions();
@@ -518,11 +517,11 @@ function DashboardPageContent() {
     </>
   );
 
-  const mobileDashboard = (
+  const investmentsView = (
     <>
       <MobileFilters view={viewMode} setView={setViewMode} mode={listMode} setMode={setListMode} />
       
-      <div className="mt-2">
+      <div className="mt-2 -mx-4 px-4">
         {advancedFilters}
       </div>
 
@@ -635,7 +634,7 @@ function DashboardPageContent() {
               onYearFilterChange={setYearFilter}
             />
           ) : (
-            mobileDashboard
+            investmentsView
           )}
         </div>
       </MobileAppShell>
@@ -873,3 +872,5 @@ export default function DashboardPage() {
     </React.Suspense>
   );
 }
+
+    
