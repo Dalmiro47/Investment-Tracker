@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -26,84 +25,34 @@ import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import { PlusCircle, Trash2 } from "lucide-react";
-import type { ETFPlan, ETFComponent } from "@/lib/types.etf";
+import type { ETFPlan, ETFComponent, AdminFee, FrontloadFee } from "@/lib/types.etf";
 import React, { useEffect, useMemo } from "react";
 import AppDatePicker from "../ui/app-date-picker";
 import { parseISO } from 'date-fns';
 import { NumericInput } from "../ui/numeric-input";
-
-function PercentInput({
-  value,            // 0..1 | null
-  onChange,         // (unit: number|null) => void
-  placeholder,
-  className,
-}: {
-  value: number | null | undefined;
-  onChange: (unit: number | null) => void;
-  placeholder?: string;
-  className?: string;
-}) {
-  const [text, setText] = React.useState<string>(value == null ? "" : (value * 100).toFixed(2));
-
-  // keep local text in sync when RHF resets/loads from external source, but not on own changes
-  useEffect(() => {
-    const currentValue = value == null ? null : (value * 100);
-    const textAsNumber = text === "" ? null : Number(text.replace(",", "."));
-
-    if (currentValue !== textAsNumber) {
-       setText(value == null ? "" : (value * 100).toFixed(2));
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
-  // allow: "", "7", "7.", "7.1", "7.12" (up to 2 decimals), max 100
-  const re = /^\d{0,3}(\.\d{0,2})?$/;
-
-  return (
-    <Input
-      inputMode="decimal"
-      className={className}
-      placeholder={placeholder}
-      value={text}
-      onChange={(e) => {
-        const raw = e.target.value.replace(",", ".");
-        if (raw === "") {
-          setText("");
-          onChange(null);
-          return;
-        }
-        if (!re.test(raw)) return;                // refuse invalid keystrokes
-        // show the raw text while typing
-        setText(raw);
-        const n = Number(raw);
-        if (!Number.isFinite(n)) return;
-        const clamped = Math.max(0, Math.min(100, n));
-        onChange(clamped / 100);
-      }}
-      onBlur={() => {
-        // normalize to two decimals on blur
-        if (text === "") return;
-        const n = Number(text);
-        const clamped = Math.max(0, Math.min(100, n));
-        const norm = clamped.toFixed(2);
-        setText(norm);
-        onChange(clamped / 100);
-      }}
-    />
-  );
-}
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 
 const planSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters."),
   startDate: z.date(),
   monthContribution: z.coerce.number().positive("Contribution must be positive."),
-  feePct: z.coerce.number().min(0).max(1).optional(),
+  feePct: z.coerce.number().min(0).max(1).optional().nullable(),
   rebalanceOnContribution: z.boolean().default(false),
   contributionSteps: z.array(z.object({
       month: z.string().regex(/^\d{4}-\d{2}$/, "Format must be YYYY-MM"),
       amount: z.coerce.number().positive("Amount must be positive.")
   })).optional(),
+  frontloadFee: z.object({
+    percentOfContribution: z.coerce.number().min(0).max(1).optional().nullable(),
+    fixedPerMonthEUR: z.coerce.number().min(0).optional().nullable(),
+    durationMonths: z.coerce.number().int().min(0).optional().nullable(),
+  }).optional().nullable(),
+  adminFee: z.object({
+    annualPercent: z.coerce.number().min(0).max(1).optional().nullable(),
+    fixedPerMonthEUR: z.coerce.number().min(0).optional().nullable(),
+    applyProRataMonthly: z.boolean().optional(),
+  }).optional().nullable(),
   components: z.array(z.object({
     id: z.string().optional(),
     name: z.string().min(2, "Name is required."),
@@ -114,7 +63,6 @@ const planSchema = z.object({
   })).min(1, "At least one component is required.")
     .refine(components => {
         const totalWeight = components.reduce((sum, c) => sum + (c.targetWeight || 0), 0);
-        // Use a small tolerance for floating point comparisons
         return Math.abs(totalWeight - 1) < 0.001;
     }, {
         message: "Total target weight must be exactly 100%.",
@@ -133,9 +81,18 @@ interface PlanFormProps {
   onSubmit: (values: PlanFormValues) => void;
   onCancel: () => void;
   isSubmitting?: boolean;
+  formId?: string;
+  useExternalFooter?: boolean;
 }
 
-export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormProps) {
+export function PlanForm({
+  plan,
+  onSubmit,
+  onCancel,
+  isSubmitting,
+  formId = "etf-plan-form",
+  useExternalFooter = false,
+}: PlanFormProps) {
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planSchema),
     defaultValues: {
@@ -145,6 +102,8 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
       feePct: undefined,
       rebalanceOnContribution: false,
       contributionSteps: [],
+      frontloadFee: { percentOfContribution: null, fixedPerMonthEUR: null, durationMonths: null },
+      adminFee: { annualPercent: null, fixedPerMonthEUR: null, applyProRataMonthly: true },
       components: [
         { name: "", isin: "", ticker: "", preferredExchange: "XETRA", targetWeight: null },
       ],
@@ -176,6 +135,8 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
         ...plan,
         startDate: parseISO(plan.startDate),
         feePct: plan.feePct ?? undefined,
+        frontloadFee: plan.frontloadFee ?? { percentOfContribution: null, fixedPerMonthEUR: null, durationMonths: null },
+        adminFee: plan.adminFee ?? { annualPercent: null, fixedPerMonthEUR: null, applyProRataMonthly: true },
         components: plan.components.map(c => ({...c, targetWeight: c.targetWeight ?? null}))
       });
     } else {
@@ -186,6 +147,8 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
             feePct: undefined,
             rebalanceOnContribution: false,
             contributionSteps: [],
+            frontloadFee: { percentOfContribution: null, fixedPerMonthEUR: null, durationMonths: null },
+            adminFee: { annualPercent: null, fixedPerMonthEUR: null, applyProRataMonthly: true },
             components: [
                 { name: "", isin: "", ticker: "", preferredExchange: "XETRA", targetWeight: null },
             ],
@@ -196,7 +159,7 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+      <form id={formId} onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
@@ -239,24 +202,6 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                     />
                 </FormControl>
                  <FormDescription>The starting amount. You can add step-ups below.</FormDescription>
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-          <FormField
-            control={form.control}
-            name="feePct"
-            render={({ field }) => (
-              <FormItem>
-                <FormLabel>Fee per Contribution (%)</FormLabel>
-                <FormControl>
-                  <NumericInput
-                    value={field.value == null ? null : field.value * 100}
-                    onCommit={(n) => field.onChange(n != null ? n / 100 : undefined)}
-                    placeholder="e.g., 0.1 for 0.1%"
-                  />
-                </FormControl>
-                <FormDescription>e.g., 0.1 for 0.1%</FormDescription>
                 <FormMessage />
               </FormItem>
             )}
@@ -325,6 +270,60 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                 <PlusCircle className="mr-2 h-4 w-4" /> Add Step-up
             </Button>
         </div>
+        
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button variant="link" className="p-0">Advanced Fees</Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="space-y-4">
+              <div className="p-4 border rounded-lg">
+                <h4 className="font-medium mb-2">Legacy Fee (%)</h4>
+                <FormField
+                  control={form.control}
+                  name="feePct"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Fee per Contribution (%)</FormLabel>
+                      <FormControl>
+                        <NumericInput
+                          value={field.value == null ? null : field.value * 100}
+                          onCommit={(n) => field.onChange(n != null ? n / 100 : undefined)}
+                          placeholder="e.g., 0.1 for 0.1%"
+                        />
+                      </FormControl>
+                      <FormDescription>e.g., 0.1 for 0.1%</FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
+              <div className="p-4 border rounded-lg space-y-4">
+                <h4 className="font-medium">Front-load Fee (Agio)</h4>
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField control={form.control} name="frontloadFee.percentOfContribution" render={({ field }) => (
+                    <FormItem><FormLabel>% of Contribution</FormLabel><FormControl><NumericInput value={field.value == null ? null : field.value * 100} onCommit={n => field.onChange(n != null ? n/100 : null)} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="frontloadFee.fixedPerMonthEUR" render={({ field }) => (
+                    <FormItem><FormLabel>Fixed per Month (€)</FormLabel><FormControl><NumericInput value={field.value} onCommit={n => field.onChange(n)} /></FormControl></FormItem>
+                  )} />
+                  <FormField control={form.control} name="frontloadFee.durationMonths" render={({ field }) => (
+                    <FormItem><FormLabel>Duration (months)</FormLabel><FormControl><NumericInput value={field.value} onCommit={n => field.onChange(n)} allowDecimal={false} /></FormControl></FormItem>
+                  )} />
+                </div>
+              </div>
+               <div className="p-4 border rounded-lg space-y-4">
+                <h4 className="font-medium">Admin Fee</h4>
+                <div className="grid grid-cols-2 gap-4">
+                   <FormField control={form.control} name="adminFee.annualPercent" render={({ field }) => (
+                    <FormItem><FormLabel>Annual % of NAV</FormLabel><FormControl><NumericInput value={field.value == null ? null : field.value * 100} onCommit={n => field.onChange(n != null ? n/100 : null)} /></FormControl></FormItem>
+                  )} />
+                   <FormField control={form.control} name="adminFee.fixedPerMonthEUR" render={({ field }) => (
+                    <FormItem><FormLabel>Fixed per Month (€)</FormLabel><FormControl><NumericInput value={field.value} onCommit={n => field.onChange(n)} /></FormControl></FormItem>
+                  )} />
+                </div>
+              </div>
+          </CollapsibleContent>
+        </Collapsible>
 
 
         <div>
@@ -390,9 +389,9 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
                         control={form.control}
                         name={`components.${index}.targetWeight`}
                         render={({ field }) => (
-                          <PercentInput
-                            value={field.value}
-                            onChange={(unit) => field.onChange(unit)}
+                          <NumericInput
+                            value={field.value === null ? null : (field.value ?? 0) * 100}
+                            onCommit={(n) => field.onChange(n === null ? null : (n/100))}
                             placeholder="Weight"
                             className="text-right"
                           />
@@ -431,10 +430,12 @@ export function PlanForm({ plan, onSubmit, onCancel, isSubmitting }: PlanFormPro
             )}
         </div>
 
-        <div className="flex justify-end gap-2">
-          <Button type="button" variant="ghost" onClick={onCancel}>Cancel</Button>
-          <Button type="submit" disabled={isSaveDisabled}>{isSubmitting ? "Saving..." : "Save Plan"}</Button>
-        </div>
+        {!useExternalFooter && (
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting}>Cancel</Button>
+            <Button type="submit" disabled={isSaveDisabled}>{isSubmitting ? "Saving..." : "Save Plan"}</Button>
+          </div>
+        )}
       </form>
     </Form>
   );

@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -10,7 +9,7 @@ import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import DashboardHeader from '@/components/dashboard-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { MoreVertical, PlusCircle, Trash2, Edit, Loader2, BarChart2, Info } from 'lucide-react';
 import { PlanForm, type PlanFormValues } from '@/components/etf/PlanForm';
@@ -68,14 +67,17 @@ export default function EtfPlansPage() {
         if (!user) return;
         setIsSubmitting(true);
         try {
-            const planData = {
+            const planData: Omit<ETFPlan, 'id'|'createdAt'|'updatedAt'> = {
                 title: values.title,
                 startDate: values.startDate.toISOString(),
+                startMonth: values.startDate.toISOString().slice(0, 7),
                 monthContribution: values.monthContribution,
-                feePct: values.feePct,
+                feePct: values.feePct ?? null,
                 rebalanceOnContribution: values.rebalanceOnContribution,
                 baseCurrency: 'EUR' as const,
                 contributionSteps: values.contributionSteps ?? [],
+                frontloadFee: values.frontloadFee,
+                adminFee: values.adminFee,
             };
             const componentsData: Omit<ETFComponent, 'id'>[] = values.components.map(({ id, ...comp }) => comp);
 
@@ -202,7 +204,24 @@ export default function EtfPlansPage() {
                                             </div>
                                         )}
                                         <div className="flex justify-between">
-                                            <span>Broker Fee:</span> <span className="font-medium text-foreground">{((plan.feePct ?? 0) * 100).toFixed(2)}%</span>
+                                            {(plan.frontloadFee || plan.adminFee) ? (
+                                                <>
+                                                <span>Advanced Fees:</span>
+                                                <span className="font-medium text-foreground">
+                                                    {[
+                                                        plan.frontloadFee?.percentOfContribution != null ? `${(plan.frontloadFee.percentOfContribution*100).toFixed(2)}% sales` : null,
+                                                        plan.frontloadFee?.fixedPerMonthEUR ? `€${plan.frontloadFee.fixedPerMonthEUR}/mo sales` : null,
+                                                        plan.adminFee?.annualPercent != null ? `${(plan.adminFee.annualPercent*100).toFixed(2)}% admin` : null,
+                                                        plan.adminFee?.fixedPerMonthEUR ? `€${plan.adminFee.fixedPerMonthEUR}/mo admin` : null,
+                                                    ].filter(Boolean).join(' · ')}
+                                                </span>
+                                                </>
+                                            ) : (
+                                                <>
+                                                <span>Broker Fee:</span> 
+                                                <span className="font-medium text-foreground">{((plan.feePct ?? 0) * 100).toFixed(2)}%</span>
+                                                </>
+                                            )}
                                         </div>
                                         <div className="flex justify-between">
                                             <span>Rebalancing Strategy:</span> <span className="font-medium text-foreground">{plan.rebalanceOnContribution ? 'On Contribution' : 'None'}</span>
@@ -233,24 +252,55 @@ export default function EtfPlansPage() {
             </main>
 
             <Dialog open={isFormOpen} onOpenChange={closeDialog}>
-                 <DialogContent className="max-w-4xl">
-                    <DialogHeader>
-                        <DialogTitle>{editingPlan ? 'Edit' : 'Create New'} ETF Plan</DialogTitle>
-                        <DialogDescription>
-                            {editingPlan ? 'Update your automated savings plan.' : 'Define your automated savings plan details and components.'}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <PlanForm 
-                        plan={editingPlan ?? undefined}
-                        onSubmit={handleFormSubmit}
-                        onCancel={closeDialog} 
-                        isSubmitting={isSubmitting}
+              <DialogContent className="max-w-4xl w-[96vw] p-0">
+                {/* Fixed-height flex shell INSIDE the dialog so the body can scroll */}
+                <div
+                  className="flex flex-col overflow-hidden"
+                  style={{ height: 'min(78dvh, 640px)' }}    // inline style = bullet-proof in Studio
+                >
+                  {/* HEADER (fixed) */}
+                  <div className="p-6 pb-2 border-b">
+                    <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
+                    <DialogDescription>
+                      {editingPlan
+                        ? 'Update your automated savings plan.'
+                        : 'Define your automated savings plan details and components.'}
+                    </DialogDescription>
+                  </div>
+
+                  {/* BODY — the ONLY scroller */}
+                  <div
+                    role="region"
+                    aria-label="ETF plan form"
+                    className="flex-1 min-h-0 px-6 pb-6 pr-3"
+                    style={{
+                      overflowY: 'scroll',              // force visible track on Windows
+                      overscrollBehavior: 'contain',
+                      scrollbarGutter: 'stable',        // keeps content from jumping
+                    }}
+                  >
+                    <PlanForm
+                      formId="etf-plan-form"
+                      useExternalFooter
+                      plan={editingPlan ?? undefined}
+                      onSubmit={handleFormSubmit}
+                      onCancel={closeDialog}
+                      isSubmitting={isSubmitting}
                     />
-                </DialogContent>
+                  </div>
+
+                  {/* FOOTER (fixed) */}
+                  <div className="px-6 py-4 border-t bg-background flex justify-end gap-2">
+                    <Button type="button" variant="ghost" onClick={closeDialog} disabled={isSubmitting}>Cancel</Button>
+                    <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
+                      {isSubmitting ? 'Saving…' : 'Save Plan'}
+                    </Button>
+                  </div>
+                </div>
+              </DialogContent>
             </Dialog>
         </div>
     );
 }
 
-    
     

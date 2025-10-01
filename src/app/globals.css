@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -116,3 +117,15 @@ body {
 .scroll-area::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground) / 0.65);
 }
+
+.etf-dialog-scroll {
+  scrollbar-width: thin;                      /* Firefox */
+  scrollbar-color: hsl(var(--border)) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+.etf-dialog-scroll::-webkit-scrollbar { width: 10px; }
+.etf-dialog-scroll::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--border));
+  border-radius: 9999px;
+}
+.etf-dialog-scroll::-webkit-scrollbar-track { background: transparent; }

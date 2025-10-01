@@ -3,6 +3,18 @@ import type { Timestamp } from 'firebase/firestore';
 
 export type ETFPlanId = string;
 
+export type FrontloadFee = {
+  percentOfContribution?: number;
+  fixedPerMonthEUR?: number;
+  durationMonths?: number;
+} | null;
+
+export type AdminFee = {
+  annualPercent?: number;
+  fixedPerMonthEUR?: number;
+  applyProRataMonthly?: boolean;
+} | null;
+
 export interface ContributionStep {
   month: string;    // 'YYYY-MM' effective from this month (inclusive)
   amount: number;   // € per month
@@ -22,12 +34,14 @@ export interface ETFPlan {
   id: ETFPlanId;
   title: string;
   baseCurrency: 'EUR';
-  monthContribution: number;  // € per month (base amount)
-  contributionSteps?: ContributionStep[]; // optional overrides
-  feePct?: number;            // 0.001 = 0.1% fee per contribution (optional)
-  startDate: string;          // ISO date string for UI picker, e.g., '2023-06-01'
-  startMonth?: string;        // Canonical 'YYYY-MM', the true source for logic
-  rebalanceOnContribution?: boolean; // if true, use contrib to steer back to targets
+  monthContribution: number;
+  contributionSteps?: ContributionStep[];
+  feePct?: number | null;
+  rebalanceOnContribution?: boolean;
+  startDate: string;
+  startMonth: string;
+  frontloadFee?: FrontloadFee;
+  adminFee?: AdminFee;
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
