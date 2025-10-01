@@ -253,32 +253,38 @@ export default function EtfPlansPage() {
             </main>
 
             <Dialog open={isFormOpen} onOpenChange={closeDialog}>
-                <DialogContent className="max-w-4xl w-[96vw] h-[min(82vh,720px)] p-0 grid grid-rows-[auto,1fr,auto] overflow-hidden">
-                    <DialogHeader className="p-6 pb-2">
-                        <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
-                        <DialogDescription>
-                            {editingPlan
-                            ? 'Update your automated savings plan.'
-                            : 'Define your automated savings plan details and components.'}
-                        </DialogDescription>
-                    </DialogHeader>
+                <DialogContent className="max-w-4xl w-[96vw] h-[min(82vh,720px)] p-0 overflow-hidden">
+                    <div className="h-full overflow-y-scroll overscroll-contain etf-dialog-scroll">
+                        <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75">
+                            <div className="px-6 py-4">
+                                <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
+                                <DialogDescription>
+                                    {editingPlan
+                                    ? 'Update your automated savings plan.'
+                                    : 'Define your automated savings plan details and components.'}
+                                </DialogDescription>
+                            </div>
+                        </div>
 
-                    <div className="min-h-0 overflow-y-scroll overscroll-contain px-6 pb-6 pr-2 etf-dialog-scroll" role="region" aria-label="ETF plan form">
-                        <PlanForm
-                            formId="etf-plan-form"
-                            useExternalFooter
-                            plan={editingPlan ?? undefined}
-                            onSubmit={handleFormSubmit}
-                            onCancel={closeDialog}
-                            isSubmitting={isSubmitting}
-                        />
-                    </div>
+                        <div className="px-6 py-6">
+                            <PlanForm
+                                formId="etf-plan-form"
+                                useExternalFooter
+                                plan={editingPlan ?? undefined}
+                                onSubmit={handleFormSubmit}
+                                onCancel={closeDialog}
+                                isSubmitting={isSubmitting}
+                            />
+                        </div>
 
-                    <div className="px-6 py-4 border-t bg-background flex justify-end gap-2">
-                        <Button type="button" variant="ghost" onClick={closeDialog} disabled={isSubmitting}>Cancel</Button>
-                        <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
-                            {isSubmitting ? 'Saving…' : 'Save Plan'}
-                        </Button>
+                        <div className="sticky bottom-0 z-10 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75">
+                            <div className="px-6 py-4 flex justify-end gap-2">
+                                <Button type="button" variant="ghost" onClick={closeDialog} disabled={isSubmitting}>Cancel</Button>
+                                <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
+                                    {isSubmitting ? 'Saving…' : 'Save Plan'}
+                                </Button>
+                            </div>
+                        </div>
                     </div>
                 </DialogContent>
             </Dialog>
