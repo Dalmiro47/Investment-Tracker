@@ -434,7 +434,7 @@ export function PlanForm({
         {!useExternalFooter && (
           <div className="flex justify-end gap-2 pt-4 border-t">
             <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting}>Cancel</Button>
-            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "Saving..." : "Save Plan"}</Button>
+            <Button type="submit" disabled={isSaveDisabled}>{isSubmitting ? "Saving..." : "Save Plan"}</Button>
           </div>
         )}
       </form>
