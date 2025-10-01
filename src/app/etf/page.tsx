@@ -253,38 +253,43 @@ export default function EtfPlansPage() {
             </main>
 
             <Dialog open={isFormOpen} onOpenChange={closeDialog}>
-                <DialogContent className="max-w-4xl w-[96vw] h-[min(82vh,720px)] p-0 overflow-hidden">
-                    <div className="h-full overflow-y-scroll overscroll-contain etf-dialog-scroll">
-                        <div className="sticky top-0 z-10 border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75">
-                            <div className="px-6 py-4">
-                                <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
-                                <DialogDescription>
-                                    {editingPlan
-                                    ? 'Update your automated savings plan.'
-                                    : 'Define your automated savings plan details and components.'}
-                                </DialogDescription>
-                            </div>
-                        </div>
+                <DialogContent
+                    className="max-w-4xl w-[96vw] p-0 grid grid-rows-[auto,1fr,auto] overflow-hidden"
+                    style={{ height: 'min(78vh, 640px)' }}
+                >
+                    <DialogHeader className="p-6 pb-2">
+                        <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
+                        <DialogDescription>
+                            {editingPlan
+                            ? 'Update your automated savings plan.'
+                            : 'Define your automated savings plan details and components.'}
+                        </DialogDescription>
+                    </DialogHeader>
 
-                        <div className="px-6 py-6">
-                            <PlanForm
-                                formId="etf-plan-form"
-                                useExternalFooter
-                                plan={editingPlan ?? undefined}
-                                onSubmit={handleFormSubmit}
-                                onCancel={closeDialog}
-                                isSubmitting={isSubmitting}
-                            />
-                        </div>
+                    <div
+                        className="min-h-0 px-6 pb-6 pr-3"
+                        style={{
+                            maxHeight: 'calc(min(78vh, 640px) - 56px - 56px)',
+                            overflowY: 'scroll',
+                            overscrollBehavior: 'contain',
+                            scrollbarGutter: 'stable',
+                        }}
+                    >
+                        <PlanForm
+                            formId="etf-plan-form"
+                            useExternalFooter
+                            plan={editingPlan ?? undefined}
+                            onSubmit={handleFormSubmit}
+                            onCancel={closeDialog}
+                            isSubmitting={isSubmitting}
+                        />
+                    </div>
 
-                        <div className="sticky bottom-0 z-10 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/75">
-                            <div className="px-6 py-4 flex justify-end gap-2">
-                                <Button type="button" variant="ghost" onClick={closeDialog} disabled={isSubmitting}>Cancel</Button>
-                                <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
-                                    {isSubmitting ? 'Saving…' : 'Save Plan'}
-                                </Button>
-                            </div>
-                        </div>
+                    <div className="px-6 py-4 border-t bg-background flex justify-end gap-2">
+                        <Button type="button" variant="ghost" onClick={closeDialog} disabled={isSubmitting}>Cancel</Button>
+                        <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
+                            {isSubmitting ? 'Saving…' : 'Save Plan'}
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>
