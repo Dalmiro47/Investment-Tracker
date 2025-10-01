@@ -9,46 +9,14 @@ const planDoc = (uid: string, planId: string) => doc(db, 'users', uid, 'etfPlans
 const componentsCol = (uid: string, planId: string) => collection(db, 'users', uid, 'etfPlans', planId, 'components');
 const componentDoc = (uid: string, planId: string, compId: string) => doc(db, 'users', uid, 'etfPlans', planId, 'components', compId);
 
-function normalizeStart(raw: any): { startDate: string; startMonth: string } {
-  // raw can be a string 'YYYY-MM-dd', a Timestamp, or something legacy.
-  if (typeof raw === 'string') {
-    // Expecting 'YYYY-MM-dd' already; ensure month string too.
-    const startMonth = raw.slice(0, 7);
-    return { startDate: raw, startMonth };
-  }
-  if (raw && typeof raw.toDate === 'function') {
-    // Firestore Timestamp → normalize to local-agnostic month/day strings
-    const d: Date = (raw as Timestamp).toDate();
-    const start = startOfMonth(d);
-    return {
-      startDate: format(start, 'yyyy-MM-dd'),
-      startMonth: format(start, 'yyyy-MM'),
-    };
-  }
-  // Fallback: try Date constructor
-  const d = new Date(raw);
-  const start = startOfMonth(isNaN(d.getTime()) ? new Date() : d);
-  return {
-    startDate: format(start, 'yyyy-MM-dd'),
-    startMonth: format(start, 'yyyy-MM'),
-  };
-}
-
 function fromPlanDoc(snap: any): ETFPlan {
     const data = snap.data();
-    const norm = normalizeStart(data.startDate);
-
-    // Prefer stored startMonth if valid; otherwise use normalized
-    const storedStartMonth: string | undefined =
-        typeof data.startMonth === 'string' && /^\d{4}-\d{2}$/.test(data.startMonth)
-        ? data.startMonth
-        : undefined;
-
+    
     return {
         id: snap.id,
         ...data,
-        startDate: norm.startDate,
-        startMonth: storedStartMonth ?? norm.startMonth,
+        startDate: data.startDate,
+        startMonth: data.startMonth,
     } as ETFPlan;
 }
 
@@ -58,6 +26,22 @@ function fromComponentDoc(snap: any): ETFComponent {
         ...snap.data()
     } as ETFComponent;
 }
+
+const omitUndefinedDeep = (obj: any): any => {
+    if (typeof obj !== 'object' || obj === null) return obj;
+    if (Array.isArray(obj)) return obj.map(omitUndefinedDeep);
+
+    const newObj: { [key: string]: any } = {};
+    for (const key in obj) {
+        if (Object.prototype.hasOwnProperty.call(obj, key)) {
+            const value = obj[key];
+            if (value !== undefined) {
+                newObj[key] = omitUndefinedDeep(value);
+            }
+        }
+    }
+    return newObj;
+};
 
 export async function getEtfPlans(uid: string): Promise<ETFPlan[]> {
     const snapshot = await getDocs(query(plansCol(uid)));
@@ -82,13 +66,10 @@ export async function createEtfPlan(uid: string, planData: Omit<ETFPlan, 'id'|'c
     
     const batch = writeBatch(db);
 
-    const startDateObj = new Date(planData.startDate);
-    const startMonth = format(startOfMonth(startDateObj), 'yyyy-MM');
+    const cleanPlanData = omitUndefinedDeep(planData);
 
     batch.set(planRef, {
-        ...planData,
-        startDate: format(startDateObj, 'yyyy-MM-dd'),
-        startMonth: startMonth,
+        ...cleanPlanData,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
     });
@@ -107,20 +88,17 @@ export async function updateEtfPlan(uid: string, planId: string, planData: Parti
     const batch = writeBatch(db);
 
     const planRef = planDoc(uid, planId);
-    const payload: Record<string, any> = { ...planData, updatedAt: serverTimestamp() };
-    if (planData.startDate) {
-        const startDateObj = new Date(planData.startDate);
-        payload.startDate = format(startDateObj, 'yyyy-MM-dd');
-        payload.startMonth = format(startOfMonth(startDateObj), 'yyyy-MM');
-    }
+    
+    const cleanPlanData = omitUndefinedDeep(planData);
+
+    const payload: Record<string, any> = { ...cleanPlanData, updatedAt: serverTimestamp() };
+
     batch.update(planRef, payload);
 
-    // Easiest way to sync components is to delete existing and create new ones.
     const existingComps = await getDocs(query(componentsCol(uid, planId)));
     existingComps.forEach(doc => batch.delete(doc.ref));
 
     components.forEach(comp => {
-        // When updating, we create new component docs. Their IDs will be auto-generated.
         const compRef = doc(componentsCol(uid, planId));
         batch.set(compRef, comp);
     });
@@ -132,15 +110,12 @@ export async function updateEtfPlan(uid: string, planId: string, planData: Parti
 export async function deleteEtfPlan(uid: string, planId: string) {
     const batch = writeBatch(db);
     
-    // Delete components subcollection
     const compsSnap = await getDocs(query(componentsCol(uid, planId)));
     compsSnap.forEach(docu => batch.delete(docu.ref));
 
-    // Delete latest ETF sim summary
     const latestSummaryRef = doc(db, 'users', uid, 'etfPlans', planId, 'latest_sim_summary', 'latest');
     batch.delete(latestSummaryRef);
 
-    // Delete plan document
     batch.delete(planDoc(uid, planId));
     
     await batch.commit();

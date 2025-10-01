@@ -1,24 +1,24 @@
-import { endOfMonth, parseISO, format } from 'date-fns';
+
+import { endOfMonth, parseISO, format, addMonths as addMonthsFns } from 'date-fns';
 import type { ETFPlan, ETFComponent, ETFPricePoint, FXRatePoint, PlanRowDrift, SimulationRows, PlanRowPerformance } from '@/lib/types.etf';
 import { dec, add, sub, mul, div, toNum, EPS } from '@/lib/money';
 import Big from 'big.js';
 import { getStartMonth } from '@/lib/date-helpers';
 
-type PriceMap = Record<string, Record<string, ETFPricePoint>>; // symbol -> month -> point
-type FXMap = Record<string, FXRatePoint>;                       // month -> point (EUR base)
+type PriceMap = Record<string, Record<string, ETFPricePoint>>;
+type FXMap = Record<string, FXRatePoint>;
 type EngineOptions = { 
   allocationMode?: 'fixed' | 'rebalance';
   endMonth?: string;
 };
 
-const monthsBetween = (start: string, end: string) => {
+const monthsBetweenInclusive = (start: string, end: string) => {
   const out: string[] = [];
-  const [sy, sm] = start.split('-').map(Number);
-  const [ey, em] = end.split('-').map(Number);
-  let y = sy, m = sm;
-  while (y < ey || (y === ey && m <= em)) {
-    out.push(`${y}-${String(m).padStart(2,'0')}`);
-    m++; if (m === 13) { m = 1; y++; }
+  let current = parseISO(`${start}-01`);
+  const endDate = parseISO(`${end}-01`);
+  while (current <= endDate) {
+    out.push(format(current, 'yyyy-MM'));
+    current = addMonthsFns(current, 1);
   }
   return out;
 };
@@ -48,7 +48,7 @@ export function simulatePlan(
   const planStartMonth = getStartMonth(plan);
   const endMonth = options.endMonth ?? new Date().toISOString().slice(0,7);
   
-  const months = monthsBetween(planStartMonth, endMonth);
+  const months = monthsBetweenInclusive(planStartMonth, endMonth);
 
   const driftRows: PlanRowDrift[] = [];
   const performanceRows: PlanRowPerformance[] = [];
@@ -56,6 +56,7 @@ export function simulatePlan(
   const unitsByEtf: Record<string, Big> = {};
   const cumContribByEtf: Record<string, Big> = {};
   const prevPriceByEtf: Record<string, Big | undefined> = {};
+  let monthsElapsed = 0;
 
   components.forEach(c => {
     unitsByEtf[c.id] = dec(0);
@@ -69,9 +70,28 @@ export function simulatePlan(
     const unitsStartByEtf: Record<string, Big> = {};
     for (const comp of components) unitsStartByEtf[comp.id] = unitsByEtf[comp.id];
 
-    const monthlyContribution = getContributionForMonth(plan, monthKey);
-    const fee = plan.feePct ? mul(dec(monthlyContribution), dec(plan.feePct)) : dec(0);
-    const cashToInvest = sub(dec(monthlyContribution), fee);
+    let monthlyContribution = getContributionForMonth(plan, monthKey);
+    let totalFeeThisMonth = dec(0);
+    
+    // Legacy fee
+    if (plan.feePct) {
+      totalFeeThisMonth = add(totalFeeThisMonth, mul(dec(monthlyContribution), dec(plan.feePct)));
+    }
+
+    // Front-load fee
+    if (plan.frontloadFee) {
+      const isFeeActive = !plan.frontloadFee.durationMonths || monthsElapsed < plan.frontloadFee.durationMonths;
+      if (isFeeActive) {
+        if (plan.frontloadFee.percentOfContribution) {
+          totalFeeThisMonth = add(totalFeeThisMonth, mul(dec(monthlyContribution), dec(plan.frontloadFee.percentOfContribution)));
+        }
+        if (plan.frontloadFee.fixedPerMonthEUR) {
+          totalFeeThisMonth = add(totalFeeThisMonth, dec(plan.frontloadFee.fixedPerMonthEUR));
+        }
+      }
+    }
+    
+    const cashToInvest = sub(dec(monthlyContribution), totalFeeThisMonth);
 
     const hasAllPrices = components.every(c => monthlyByMonth[c.ticker]?.[monthKey]);
     if (!hasAllPrices) continue;
@@ -102,6 +122,17 @@ export function simulatePlan(
       preValue = add(preValue, valueEUR);
       return { symbol: c.ticker, valueEUR };
     });
+
+    // Admin fee (on NAV before contribution)
+    if (plan.adminFee && preValue.gt(0)) {
+        if (plan.adminFee.annualPercent) {
+            const monthlyRate = plan.adminFee.applyProRataMonthly === false ? 0 : plan.adminFee.annualPercent / 12;
+            totalFeeThisMonth = add(totalFeeThisMonth, mul(preValue, dec(monthlyRate)));
+        }
+        if (plan.adminFee.fixedPerMonthEUR) {
+            totalFeeThisMonth = add(totalFeeThisMonth, dec(plan.adminFee.fixedPerMonthEUR));
+        }
+    }
 
     const contribThisMonth: Record<string, Big> = {};
     for (const comp of components) contribThisMonth[comp.id] = dec(0);
@@ -227,10 +258,12 @@ export function simulatePlan(
     driftRows.push({
       date: format(endOfMonth(parseISO(`${monthKey}-15`)), 'yyyy-MM-dd'),
       contribution: monthlyContribution,
-      fees: toNum(fee),
+      fees: toNum(totalFeeThisMonth),
       portfolioValue: toNum(portfolioValue),
       positions: driftPositions.sort((a,b) => b.valueEUR - a.valueEUR),
     });
+
+    monthsElapsed++;
   }
   
   return {
