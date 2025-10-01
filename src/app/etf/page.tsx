@@ -252,44 +252,55 @@ export default function EtfPlansPage() {
             </main>
 
             <Dialog open={isFormOpen} onOpenChange={closeDialog}>
-              <DialogContent
-                className="max-w-4xl w-[96vw] h-[min(78vh,640px)] p-0 grid grid-rows-[auto,1fr,auto] overflow-hidden"
-              >
-                <DialogHeader className="p-6 pb-2">
-                  <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
-                  <DialogDescription>
-                    {editingPlan
-                      ? 'Update your automated savings plan.'
-                      : 'Define your automated savings plan details and components.'}
-                  </DialogDescription>
-                </DialogHeader>
-        
+              <DialogContent className="max-w-4xl w-[96vw] p-0">
+                {/* Fixed-height flex shell INSIDE the dialog so the body can scroll */}
                 <div
-                  className="min-h-0 px-6 pb-6 pr-3"
-                  style={{
-                    overflowY: 'scroll',
-                    overscrollBehavior: 'contain',
-                    scrollbarGutter: 'stable',
-                  }}
+                  className="flex flex-col overflow-hidden"
+                  style={{ height: 'min(78dvh, 640px)' }}    // inline style = bullet-proof in Studio
                 >
-                  <PlanForm
-                    formId="etf-plan-form"
-                    useExternalFooter
-                    plan={editingPlan ?? undefined}
-                    onSubmit={handleFormSubmit}
-                    onCancel={closeDialog}
-                    isSubmitting={isSubmitting}
-                  />
-                </div>
-        
-                <div className="px-6 py-4 border-t bg-background flex justify-end gap-2">
-                  <Button type="button" variant="ghost" onClick={closeDialog} disabled={isSubmitting}>Cancel</Button>
-                  <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
-                    {isSubmitting ? 'Saving…' : 'Save Plan'}
-                  </Button>
+                  {/* HEADER (fixed) */}
+                  <div className="p-6 pb-2 border-b">
+                    <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
+                    <DialogDescription>
+                      {editingPlan
+                        ? 'Update your automated savings plan.'
+                        : 'Define your automated savings plan details and components.'}
+                    </DialogDescription>
+                  </div>
+
+                  {/* BODY — the ONLY scroller */}
+                  <div
+                    role="region"
+                    aria-label="ETF plan form"
+                    className="flex-1 min-h-0 px-6 pb-6 pr-3"
+                    style={{
+                      overflowY: 'scroll',              // force visible track on Windows
+                      overscrollBehavior: 'contain',
+                      scrollbarGutter: 'stable',        // keeps content from jumping
+                    }}
+                  >
+                    <PlanForm
+                      formId="etf-plan-form"
+                      useExternalFooter
+                      plan={editingPlan ?? undefined}
+                      onSubmit={handleFormSubmit}
+                      onCancel={closeDialog}
+                      isSubmitting={isSubmitting}
+                    />
+                  </div>
+
+                  {/* FOOTER (fixed) */}
+                  <div className="px-6 py-4 border-t bg-background flex justify-end gap-2">
+                    <Button type="button" variant="ghost" onClick={closeDialog} disabled={isSubmitting}>Cancel</Button>
+                    <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
+                      {isSubmitting ? 'Saving…' : 'Save Plan'}
+                    </Button>
+                  </div>
                 </div>
               </DialogContent>
             </Dialog>
         </div>
     );
 }
+
+    
