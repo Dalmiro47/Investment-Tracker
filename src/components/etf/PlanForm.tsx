@@ -1,4 +1,3 @@
-
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -92,7 +91,7 @@ export function PlanForm({
   onCancel,
   isSubmitting,
   formId = "etf-plan-form",
-  useExternalFooter = false
+  useExternalFooter = false,
 }: PlanFormProps) {
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planSchema),

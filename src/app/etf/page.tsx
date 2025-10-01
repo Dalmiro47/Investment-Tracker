@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -254,10 +253,9 @@ export default function EtfPlansPage() {
 
             <Dialog open={isFormOpen} onOpenChange={closeDialog}>
               <DialogContent
-                className="max-w-4xl w-[96vw] p-0 flex flex-col overflow-hidden"
-                style={{ height: 'min(86vh, 740px)' }}
+                className="max-w-4xl w-[96vw] h-[min(78vh,640px)] p-0 grid grid-rows-[auto,1fr,auto] overflow-hidden"
               >
-                <DialogHeader className="p-6 pb-2 shrink-0">
+                <DialogHeader className="p-6 pb-2">
                   <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
                   <DialogDescription>
                     {editingPlan
@@ -265,8 +263,15 @@ export default function EtfPlansPage() {
                       : 'Define your automated savings plan details and components.'}
                   </DialogDescription>
                 </DialogHeader>
-
-                <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 etf-dialog-scroll">
+        
+                <div
+                  className="min-h-0 px-6 pb-6 pr-3"
+                  style={{
+                    overflowY: 'scroll',
+                    overscrollBehavior: 'contain',
+                    scrollbarGutter: 'stable',
+                  }}
+                >
                   <PlanForm
                     formId="etf-plan-form"
                     useExternalFooter
@@ -276,8 +281,8 @@ export default function EtfPlansPage() {
                     isSubmitting={isSubmitting}
                   />
                 </div>
-
-                <div className="px-6 py-4 border-t bg-background flex justify-end gap-2 shrink-0">
+        
+                <div className="px-6 py-4 border-t bg-background flex justify-end gap-2">
                   <Button type="button" variant="ghost" onClick={closeDialog} disabled={isSubmitting}>Cancel</Button>
                   <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
                     {isSubmitting ? 'Saving…' : 'Save Plan'}
