@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -26,6 +27,8 @@ export default function EtfPlansPage() {
     const [isFormOpen, setIsFormOpen] = useState(false);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [editingPlan, setEditingPlan] = useState<(ETFPlan & { components: ETFComponent[] }) | null>(null);
+    const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
+    const [infoDialogPlan, setInfoDialogPlan] = useState<ETFPlan | null>(null);
 
     const fetchPlans = useCallback(async (uid: string) => {
         setLoading(true);
@@ -61,6 +64,11 @@ export default function EtfPlansPage() {
         } catch (error) {
             toast({ variant: 'destructive', title: 'Error', description: 'Could not load plan for editing.' });
         }
+    };
+    
+    const handleOpenInfoDialog = (plan: ETFPlan) => {
+        setInfoDialogPlan(plan);
+        setIsInfoDialogOpen(true);
     };
 
     const handleFormSubmit = async (values: PlanFormValues) => {
@@ -172,34 +180,9 @@ export default function EtfPlansPage() {
                                                 <span>Contribution Step-ups:</span>
                                                 <div className="flex items-center gap-1">
                                                     <span className="font-medium text-foreground">Yes</span>
-                                                    <Dialog>
-                                                        <DialogTrigger asChild>
-                                                            <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground">
-                                                                <Info className="h-4 w-4"/>
-                                                            </Button>
-                                                        </DialogTrigger>
-                                                        <DialogContent>
-                                                            <DialogHeader>
-                                                                <DialogTitle>Contribution Schedule for {plan.title}</DialogTitle>
-                                                            </DialogHeader>
-                                                            <Table>
-                                                                <TableHeader>
-                                                                    <TableRow>
-                                                                        <TableHead>Effective Month</TableHead>
-                                                                        <TableHead className="text-right">New Monthly Amount</TableHead>
-                                                                    </TableRow>
-                                                                </TableHeader>
-                                                                <TableBody>
-                                                                    {sortedSteps.map(step => (
-                                                                        <TableRow key={step.month}>
-                                                                            <TableCell>{format(parseISO(`${step.month}-01`), 'MMM yyyy')}</TableCell>
-                                                                            <TableCell className="text-right font-mono">{formatCurrency(step.amount)}</TableCell>
-                                                                        </TableRow>
-                                                                    ))}
-                                                                </TableBody>
-                                                            </Table>
-                                                        </DialogContent>
-                                                    </Dialog>
+                                                    <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground" onClick={() => handleOpenInfoDialog(plan)}>
+                                                        <Info className="h-4 w-4"/>
+                                                    </Button>
                                                 </div>
                                             </div>
                                         )}
@@ -272,7 +255,7 @@ export default function EtfPlansPage() {
                   <div
                     role="region"
                     aria-label="ETF plan form"
-                    className="flex-1 min-h-0 px-6 pb-6 pr-3"
+                    className="flex-1 min-h-0 px-6 pb-6 pr-3 custom-scroll"
                     style={{
                       overflowY: 'scroll',              // force visible track on Windows
                       overscrollBehavior: 'contain',
@@ -299,8 +282,32 @@ export default function EtfPlansPage() {
                 </div>
               </DialogContent>
             </Dialog>
+
+            {infoDialogPlan && (
+                <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Contribution Schedule for {infoDialogPlan.title}</DialogTitle>
+                        </DialogHeader>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Effective Month</TableHead>
+                                    <TableHead className="text-right">New Monthly Amount</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {(infoDialogPlan.contributionSteps ?? []).slice().sort((a,b) => a.month.localeCompare(b.month)).map(step => (
+                                    <TableRow key={step.month}>
+                                        <TableCell>{format(parseISO(`${step.month}-01`), 'MMM yyyy')}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(step.amount)}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </DialogContent>
+                </Dialog>
+            )}
         </div>
     );
 }
-
-    
