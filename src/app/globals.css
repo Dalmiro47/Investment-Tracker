@@ -178,3 +178,22 @@ body {
   background: hsl(var(--border));            /* slightly brighter on hover */
 }
 .etf-dialog-scroll-v3::-webkit-scrollbar-corner { background: transparent; }
+
+/* v4 — dark scrollbar for dialog body (cache-busting class name) */
+.etf-dialog-scroll-v4 {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.75) hsl(var(--background) / 0.25);
+  -webkit-overflow-scrolling: touch;
+}
+.etf-dialog-scroll-v4::-webkit-scrollbar { width: 10px; }
+.etf-dialog-scroll-v4::-webkit-scrollbar-track {
+  background: hsl(var(--background) / 0.25);
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v4::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.8);
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v4::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--border));
+}

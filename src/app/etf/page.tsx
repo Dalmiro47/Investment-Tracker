@@ -10,13 +10,87 @@ import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import DashboardHeader from '@/components/dashboard-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { MoreVertical, PlusCircle, Trash2, Edit, Loader2, BarChart2, Info } from 'lucide-react';
 import { PlanForm, type PlanFormValues } from '@/components/etf/PlanForm';
 import { format, parseISO } from 'date-fns';
 import { formatCurrency } from '@/lib/money';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+
+function PlanModal({
+  open,
+  onOpenChange,
+  editingPlan,
+  onSubmit,
+  onCancel,
+  isSubmitting,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  editingPlan?: ETFPlan | null;
+  onSubmit: (p: any) => void;
+  onCancel: () => void;
+  isSubmitting: boolean;
+}) {
+  // Key forces React to remount when switching create/edit -> obliterates stale tree in Studio
+  const dialogKey = editingPlan ? 'etf-dialog-edit-v4' : 'etf-dialog-create-v4';
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        key={dialogKey}
+        data-testid="etf-dialog-v4"
+        className="max-w-4xl w-[96vw] p-0 grid grid-rows-[auto,1fr,auto] overflow-hidden"
+        style={{ height: 'min(90dvh, 820px)' }}
+      >
+        {/* Header (fixed) */}
+        <DialogHeader className="p-6 pb-2">
+          <div className="flex items-center gap-2">
+            <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
+            <span className="text-xs text-muted-foreground">·v4</span>
+          </div>
+          <DialogDescription>
+            {editingPlan
+              ? 'Update your automated savings plan.'
+              : 'Define your automated savings plan details and components.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Body (the ONLY scroller) */}
+        <div
+          data-testid="etf-dialog-body"
+          className="
+            min-h-0 px-6 pb-6 pr-3
+            etf-dialog-scroll etf-dialog-scroll-v2 etf-dialog-scroll-v3 etf-dialog-scroll-v4
+          "
+          style={{
+            overflowY: 'scroll',
+            overscrollBehavior: 'contain',
+            scrollbarGutter: 'stable',
+          }}
+        >
+          <PlanForm
+            formId="etf-plan-form"
+            useExternalFooter
+            plan={editingPlan ?? undefined}
+            onSubmit={onSubmit}
+            onCancel={onCancel}
+            isSubmitting={isSubmitting}
+          />
+        </div>
+
+        {/* Footer (fixed) */}
+        <div className="px-6 py-4 border-t bg-background flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting}>Cancel</Button>
+          <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
+            {isSubmitting ? 'Saving…' : 'Save Plan'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
 
 
 export default function EtfPlansPage() {
@@ -176,8 +250,7 @@ export default function EtfPlansPage() {
                                             <span className="font-medium text-foreground">{formatCurrency(plan.monthContribution)}</span>
                                         </div>
                                         {hasStepUps && (
-                                            <DialogTrigger asChild>
-                                             <div className="flex justify-between items-center">
+                                            <div className="flex justify-between items-center">
                                                 <span>Contribution Step-ups:</span>
                                                 <div className="flex items-center gap-1">
                                                     <span className="font-medium text-foreground">Yes</span>
@@ -186,7 +259,6 @@ export default function EtfPlansPage() {
                                                     </Button>
                                                 </div>
                                             </div>
-                                            </DialogTrigger>
                                         )}
                                         <div className="flex justify-between">
                                             {(plan.frontloadFee || plan.adminFee) ? (
@@ -236,54 +308,14 @@ export default function EtfPlansPage() {
                 )}
             </main>
 
-            <Dialog open={isFormOpen} onOpenChange={closeDialog}>
-              <DialogContent
-                data-testid="etf-dialog-v3"
-                className="max-w-4xl w-[96vw] p-0 grid grid-rows-[auto,1fr,auto] overflow-hidden"
-                style={{ height: 'min(90dvh, 820px)' }}
-              >
-                <DialogHeader className="p-6 pb-2">
-                  <div className="flex items-center gap-2">
-                    <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
-                    <span className="text-xs text-muted-foreground">·v3</span>
-                  </div>
-                  <DialogDescription>
-                    {editingPlan
-                      ? 'Update your automated savings plan.'
-                      : 'Define your automated savings plan details and components.'}
-                  </DialogDescription>
-                </DialogHeader>
-
-                {/* BODY — the ONLY scroller */}
-                <div
-                  data-testid="etf-dialog-body"
-                  className="min-h-0 px-6 pb-6 pr-3 etf-dialog-scroll etf-dialog-scroll-v2 etf-dialog-scroll-v3"
-                  style={{
-                    overflowY: 'scroll',
-                    overscrollBehavior: 'contain',
-                    scrollbarGutter: 'stable',
-                    maxHeight: 'calc(min(90dvh, 820px) - 56px - 56px)',
-                  }}
-                >
-                  <PlanForm
-                    formId="etf-plan-form"
-                    useExternalFooter
-                    plan={editingPlan ?? undefined}
-                    onSubmit={handleFormSubmit}
-                    onCancel={closeDialog}
-                    isSubmitting={isSubmitting}
-                  />
-                </div>
-
-                {/* FOOTER (fixed) */}
-                <div className="px-6 py-4 border-t bg-background flex justify-end gap-2">
-                  <Button type="button" variant="ghost" onClick={closeDialog} disabled={isSubmitting}>Cancel</Button>
-                  <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
-                    {isSubmitting ? 'Saving…' : 'Save Plan'}
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
+            <PlanModal
+                open={isFormOpen}
+                onOpenChange={closeDialog}
+                editingPlan={editingPlan}
+                onSubmit={handleFormSubmit}
+                onCancel={closeDialog}
+                isSubmitting={isSubmitting}
+            />
 
             <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
                 <DialogContent>
