@@ -10,7 +10,7 @@ import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import DashboardHeader from '@/components/dashboard-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { MoreVertical, PlusCircle, Trash2, Edit, Loader2, BarChart2, Info } from 'lucide-react';
 import { PlanForm, type PlanFormValues } from '@/components/etf/PlanForm';
@@ -236,12 +236,15 @@ export default function EtfPlansPage() {
 
             <Dialog open={isFormOpen} onOpenChange={closeDialog}>
                 <DialogContent
-                    data-testid="etf-dialog-v2"
+                    data-testid="etf-dialog-v3"
                     className="max-w-4xl w-[96vw] p-0 grid grid-rows-[auto,1fr,auto] overflow-hidden"
                     style={{ height: 'min(90dvh, 820px)' }}
                 >
                     <DialogHeader className="p-6 pb-2">
-                        <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
+                        <div className="flex items-center gap-2">
+                            <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
+                            <span className="text-xs text-muted-foreground">·v3</span>
+                        </div>
                         <DialogDescription>
                             {editingPlan
                             ? 'Update your automated savings plan.'
@@ -250,7 +253,7 @@ export default function EtfPlansPage() {
                     </DialogHeader>
 
                     <div
-                        className="min-h-0 px-6 pb-6 pr-3 etf-dialog-scroll-v2"
+                        className="min-h-0 px-6 pb-6 pr-3 etf-dialog-scroll-v3"
                         style={{
                         overflowY: 'scroll',
                         overscrollBehavior: 'contain',

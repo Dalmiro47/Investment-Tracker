@@ -155,3 +155,26 @@ body {
   background-color: hsl(var(--border));
 }
 .etf-dialog-scroll-v2::-webkit-scrollbar-track { background: transparent; }
+
+/* v3 — definitive dark scrollbar for ETF dialog body */
+.etf-dialog-scroll-v3 {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.7) hsl(var(--background) / 0.2);
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Chromium / WebKit */
+.etf-dialog-scroll-v3::-webkit-scrollbar { width: 10px; }
+.etf-dialog-scroll-v3::-webkit-scrollbar-track {
+  background: hsl(var(--background) / 0.2);   /* subtle dark track */
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v3::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.75); /* dark thumb */
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v3::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--border));            /* slightly brighter on hover */
+}
+.etf-dialog-scroll-v3::-webkit-scrollbar-corner { background: transparent; }
