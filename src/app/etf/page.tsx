@@ -236,8 +236,9 @@ export default function EtfPlansPage() {
 
             <Dialog open={isFormOpen} onOpenChange={closeDialog}>
                 <DialogContent
+                    data-testid="etf-dialog-v2"
                     className="max-w-4xl w-[96vw] p-0 grid grid-rows-[auto,1fr,auto] overflow-hidden"
-                    style={{ height: 'min(88dvh, 780px)' }}
+                    style={{ height: 'min(90dvh, 820px)' }}
                 >
                     <DialogHeader className="p-6 pb-2">
                         <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
@@ -249,11 +250,11 @@ export default function EtfPlansPage() {
                     </DialogHeader>
 
                     <div
-                        className="min-h-0 px-6 pb-6 pr-3 etf-dialog-scroll"
+                        className="min-h-0 px-6 pb-6 pr-3 etf-dialog-scroll-v2"
                         style={{
-                            overflowY: 'scroll',
-                            overscrollBehavior: 'contain',
-                            scrollbarGutter: 'stable',
+                        overflowY: 'scroll',
+                        overscrollBehavior: 'contain',
+                        scrollbarGutter: 'stable',
                         }}
                     >
                         <PlanForm

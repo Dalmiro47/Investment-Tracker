@@ -139,3 +139,19 @@ body {
 .etf-dialog-scroll::-webkit-scrollbar-track {
   background: transparent;                        /* keep it clean on dark UI */
 }
+
+/* v2 — dark, thin scrollbar for ETF dialog body */
+.etf-dialog-scroll-v2 {
+  scrollbar-width: thin;                          /* Firefox */
+  scrollbar-color: hsl(var(--muted-foreground)) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+.etf-dialog-scroll-v2::-webkit-scrollbar { width: 10px; }
+.etf-dialog-scroll-v2::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground));
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v2::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--border));
+}
+.etf-dialog-scroll-v2::-webkit-scrollbar-track { background: transparent; }
