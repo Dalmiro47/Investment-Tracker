@@ -239,7 +239,7 @@ export default function EtfPlansPage() {
                 {/* Fixed-height flex shell INSIDE the dialog so the body can scroll */}
                 <div
                   className="flex flex-col overflow-hidden"
-                  style={{ height: 'min(78dvh, 640px)' }}    // inline style = bullet-proof in Studio
+                  style={{ height: 'min(88vh, 780px)' }}    // inline style = bullet-proof in Studio
                 >
                   {/* HEADER (fixed) */}
                   <div className="p-6 pb-2 border-b">
@@ -255,7 +255,7 @@ export default function EtfPlansPage() {
                   <div
                     role="region"
                     aria-label="ETF plan form"
-                    className="flex-1 min-h-0 px-6 pb-6 pr-3 custom-scroll"
+                    className="flex-1 min-h-0 px-6 pb-6 pr-3 etf-dialog-scroll"
                     style={{
                       overflowY: 'scroll',              // force visible track on Windows
                       overscrollBehavior: 'contain',
