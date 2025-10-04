@@ -10,7 +10,7 @@ import type { ETFPlan, ETFComponent } from '@/lib/types.etf';
 import DashboardHeader from '@/components/dashboard-header';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { MoreVertical, PlusCircle, Trash2, Edit, Loader2, BarChart2, Info } from 'lucide-react';
 import { PlanForm, type PlanFormValues } from '@/components/etf/PlanForm';
@@ -253,7 +253,7 @@ export default function EtfPlansPage() {
                     </DialogHeader>
 
                     <div
-                        className="min-h-0 px-6 pb-6 pr-3 etf-dialog-scroll-v3"
+                        className="min-h-0 px-6 pb-6 pr-3 etf-dialog-scroll etf-dialog-scroll-v2 etf-dialog-scroll-v3"
                         style={{
                         overflowY: 'scroll',
                         overscrollBehavior: 'contain',
