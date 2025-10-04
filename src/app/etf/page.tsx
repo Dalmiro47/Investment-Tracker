@@ -176,6 +176,7 @@ export default function EtfPlansPage() {
                                             <span className="font-medium text-foreground">{formatCurrency(plan.monthContribution)}</span>
                                         </div>
                                         {hasStepUps && (
+                                            <DialogTrigger asChild>
                                              <div className="flex justify-between items-center">
                                                 <span>Contribution Step-ups:</span>
                                                 <div className="flex items-center gap-1">
@@ -185,6 +186,7 @@ export default function EtfPlansPage() {
                                                     </Button>
                                                 </div>
                                             </div>
+                                            </DialogTrigger>
                                         )}
                                         <div className="flex justify-between">
                                             {(plan.frontloadFee || plan.adminFee) ? (
@@ -235,48 +237,52 @@ export default function EtfPlansPage() {
             </main>
 
             <Dialog open={isFormOpen} onOpenChange={closeDialog}>
-                <DialogContent
-                    data-testid="etf-dialog-v3"
-                    className="max-w-4xl w-[96vw] p-0 grid grid-rows-[auto,1fr,auto] overflow-hidden"
-                    style={{ height: 'min(90dvh, 820px)' }}
+              <DialogContent
+                data-testid="etf-dialog-v3"
+                className="max-w-4xl w-[96vw] p-0 grid grid-rows-[auto,1fr,auto] overflow-hidden"
+                style={{ height: 'min(90dvh, 820px)' }}
+              >
+                <DialogHeader className="p-6 pb-2">
+                  <div className="flex items-center gap-2">
+                    <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
+                    <span className="text-xs text-muted-foreground">·v3</span>
+                  </div>
+                  <DialogDescription>
+                    {editingPlan
+                      ? 'Update your automated savings plan.'
+                      : 'Define your automated savings plan details and components.'}
+                  </DialogDescription>
+                </DialogHeader>
+
+                {/* BODY — the ONLY scroller */}
+                <div
+                  data-testid="etf-dialog-body"
+                  className="min-h-0 px-6 pb-6 pr-3 etf-dialog-scroll etf-dialog-scroll-v2 etf-dialog-scroll-v3"
+                  style={{
+                    overflowY: 'scroll',
+                    overscrollBehavior: 'contain',
+                    scrollbarGutter: 'stable',
+                    maxHeight: 'calc(min(90dvh, 820px) - 56px - 56px)',
+                  }}
                 >
-                    <DialogHeader className="p-6 pb-2">
-                        <div className="flex items-center gap-2">
-                            <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
-                            <span className="text-xs text-muted-foreground">·v3</span>
-                        </div>
-                        <DialogDescription>
-                            {editingPlan
-                            ? 'Update your automated savings plan.'
-                            : 'Define your automated savings plan details and components.'}
-                        </DialogDescription>
-                    </DialogHeader>
+                  <PlanForm
+                    formId="etf-plan-form"
+                    useExternalFooter
+                    plan={editingPlan ?? undefined}
+                    onSubmit={handleFormSubmit}
+                    onCancel={closeDialog}
+                    isSubmitting={isSubmitting}
+                  />
+                </div>
 
-                    <div
-                        className="min-h-0 px-6 pb-6 pr-3 etf-dialog-scroll etf-dialog-scroll-v2 etf-dialog-scroll-v3"
-                        style={{
-                        overflowY: 'scroll',
-                        overscrollBehavior: 'contain',
-                        scrollbarGutter: 'stable',
-                        }}
-                    >
-                        <PlanForm
-                            formId="etf-plan-form"
-                            useExternalFooter
-                            plan={editingPlan ?? undefined}
-                            onSubmit={handleFormSubmit}
-                            onCancel={closeDialog}
-                            isSubmitting={isSubmitting}
-                        />
-                    </div>
-
-                    <div className="px-6 py-4 border-t bg-background flex justify-end gap-2">
-                        <Button type="button" variant="ghost" onClick={closeDialog} disabled={isSubmitting}>Cancel</Button>
-                        <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
-                            {isSubmitting ? 'Saving…' : 'Save Plan'}
-                        </Button>
-                    </div>
-                </DialogContent>
+                {/* FOOTER (fixed) */}
+                <div className="px-6 py-4 border-t bg-background flex justify-end gap-2">
+                  <Button type="button" variant="ghost" onClick={closeDialog} disabled={isSubmitting}>Cancel</Button>
+                  <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
+                    {isSubmitting ? 'Saving…' : 'Save Plan'}
+                  </Button>
+                </div>
+              </DialogContent>
             </Dialog>
 
             <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
