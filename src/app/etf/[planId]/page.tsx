@@ -31,7 +31,6 @@ import PerformanceSummary from '@/components/etf/PerformanceSummary';
 import AggregatedPerformanceTable from '@/components/etf/AggregatedPerformanceTable';
 import { cn } from '@/lib/utils';
 
-export const runtime = 'nodejs';
 
 interface MissingPrice {
     month: string;

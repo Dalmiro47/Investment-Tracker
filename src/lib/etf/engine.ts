@@ -104,7 +104,10 @@ export function simulatePlan(
     }
     if (!canProceed) continue;
 
-    const preValue = components.reduce((s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))), dec(0));
+    const preValue = components.reduce(
+      (s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))),
+      dec(0)
+    );
 
     const admin = plan.adminFee ?? {};
     const adminFixed = Number(admin.fixedPerMonthEUR ?? 0);
@@ -118,22 +121,22 @@ export function simulatePlan(
 
     let adminRemainder = dec(0);
     if (adminFeeThisMonth.gt(0)) {
-        if (preValue.gt(0)) {
-            const takeFromNav = preValue.gte(adminFeeThisMonth) ? adminFeeThisMonth : preValue;
-            const ratio = div(takeFromNav, preValue);
-            for (const c of components) {
-                const id = c.id;
-                const px = priceNowByEtf[id];
-                if (!px || px.lte(0)) continue;
-                const val = mul(unitsByEtf[id], px);
-                const sellV = mul(val, ratio);
-                const sellU = div(sellV, px);
-                unitsByEtf[id] = unitsByEtf[id].gt(sellU) ? sub(unitsByEtf[id], sellU) : dec(0);
-            }
-            adminRemainder = sub(adminFeeThisMonth, takeFromNav);
-        } else {
-            adminRemainder = adminFeeThisMonth;
+      if (preValue.gt(0)) {
+        const takeFromNav = preValue.gte(adminFeeThisMonth) ? adminFeeThisMonth : preValue;
+        const ratio = div(takeFromNav, preValue);
+        for (const c of components) {
+          const id = c.id;
+          const px = priceNowByEtf[id];
+          if (!px || px.lte(0)) continue;
+          const val   = mul(unitsByEtf[id], px);
+          const sellV = mul(val, ratio);
+          const sellU = div(sellV, px);
+          unitsByEtf[id] = unitsByEtf[id].gt(sellU) ? sub(unitsByEtf[id], sellU) : dec(0);
         }
+        adminRemainder = sub(adminFeeThisMonth, takeFromNav);
+      } else {
+        adminRemainder = adminFeeThisMonth;
+      }
     }
 
     const fl = plan.frontloadFee ?? {};
@@ -142,30 +145,26 @@ export function simulatePlan(
       (Number(monthKey.slice(5,7)) - Number(getStartMonth(plan).slice(5,7)));
 
     let plannedContribution = dec(getContributionForMonth(plan, monthKey));
-    if (monthKey < getStartMonth(plan)) plannedContribution = dec(0);
+    if (monthKey < planStartMonth) plannedContribution = dec(0);
 
     let contrib = plannedContribution;
     if (adminRemainder.gt(0)) {
       contrib = sub(contrib, adminRemainder);
       if (contrib.lt(0)) contrib = dec(0);
     }
-    
+
     let frontFeeThisMonth = dec(0);
     const inWindow = fl.durationMonths == null ? true : (monthsElapsed < fl.durationMonths);
-
     const pctRaw = Number(fl.percentOfContribution ?? 0);
     const pct = pctRaw > 1 ? pctRaw / 100 : pctRaw;
 
     if (inWindow) {
       if (pct > 0) frontFeeThisMonth = add(frontFeeThisMonth, mul(contrib, dec(pct)));
-      if (Number(fl.fixedPerMonthEUR ?? 0) > 0) {
-        frontFeeThisMonth = add(frontFeeThisMonth, dec(fl.fixedPerMonthEUR!));
-      }
+      if (Number(fl.fixedPerMonthEUR ?? 0) > 0) frontFeeThisMonth = add(frontFeeThisMonth, dec(fl.fixedPerMonthEUR!));
     }
-    
+
     let cashToInvest = sub(contrib, frontFeeThisMonth);
     if (cashToInvest.lt(0)) cashToInvest = dec(0);
-
 
     const contribThisMonth: Record<string, Big> = {};
     for (const comp of components) contribThisMonth[comp.id] = dec(0);
