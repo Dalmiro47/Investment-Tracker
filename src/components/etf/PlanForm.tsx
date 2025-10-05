@@ -25,13 +25,12 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { PlusCircle, Trash2 } from "lucide-react";
+import { PlusCircle, Trash2, Info } from "lucide-react";
 import type { ETFPlan, ETFComponent, AdminFee, FrontloadFee } from "@/lib/types.etf";
 import React, { useEffect, useMemo } from "react";
 import AppDatePicker from "../ui/app-date-picker";
 import { parseISO } from 'date-fns';
 import { NumericInput } from "../ui/numeric-input";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 
 const planSchema = z.object({
@@ -77,23 +76,23 @@ const planSchema = z.object({
 
 export type PlanFormValues = z.infer<typeof planSchema>;
 
-interface PlanFormProps {
-  plan?: ETFPlan & { components: ETFComponent[] };
-  onSubmit: (values: PlanFormValues) => void;
-  onCancel: () => void;
-  isSubmitting?: boolean;
-  formId?: string;
-  useExternalFooter?: boolean;
-}
-
 export function PlanForm({
+  formId,
+  useExternalFooter,
   plan,
   onSubmit,
   onCancel,
   isSubmitting,
-  formId = "etf-plan-form",
-  useExternalFooter = false,
-}: PlanFormProps) {
+  onOpenFeeHelp,
+}: {
+  formId?: string;
+  useExternalFooter?: boolean;
+  plan?: ETFPlan & { components: ETFComponent[] };
+  onSubmit: (values: PlanFormValues) => void;
+  onCancel: () => void;
+  isSubmitting?: boolean;
+  onOpenFeeHelp?: () => void;
+}) {
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planSchema),
     defaultValues: {
@@ -273,7 +272,18 @@ export function PlanForm({
         </div>
         
         <div className="space-y-4">
-            <h3 className="text-lg font-medium">Advanced Fees (Optional)</h3>
+            <div className="mt-6 mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-medium text-muted-foreground">Advanced Fees</h3>
+              <button
+                type="button"
+                onClick={onOpenFeeHelp}
+                className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                aria-label="What are advanced fees?"
+                title="What are advanced fees?"
+              >
+                <Info className="h-4 w-4" />
+              </button>
+            </div>
               <div className="p-4 border rounded-lg">
                 <h4 className="font-medium mb-2">Legacy Fee (%)</h4>
                 <FormField
@@ -437,5 +447,3 @@ export function PlanForm({
     </Form>
   );
 }
-
-    
