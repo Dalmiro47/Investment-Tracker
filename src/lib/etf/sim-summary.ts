@@ -1,7 +1,7 @@
 
 // src/lib/etf/sim-summary.ts
 import { parseISO, getYear } from 'date-fns';
-import type { PlanRow } from '@/lib/etf/engine';
+import type { PlanRowDrift } from '@/lib/types.etf';
 
 export type EtfSimYearBucket = {
   year: number;
@@ -31,7 +31,7 @@ export type EtfSimSummary = {
   byYear: Record<string, EtfSimYearBucket>;
 };
 
-export function buildSimSummary(rows: PlanRow[], startMonth: string, planMeta: { planId: string; title: string; baseCurrency: 'EUR' }): EtfSimSummary {
+export function buildSimSummary(rows: PlanRowDrift[], startMonth: string, planMeta: { planId: string; title: string; baseCurrency: 'EUR' }): EtfSimSummary {
   if (!rows.length) {
     return {
       planId: planMeta.planId,

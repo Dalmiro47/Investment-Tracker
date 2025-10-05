@@ -103,7 +103,7 @@ export function simulatePlan(
     if (!canProceed) continue;
 
     const preValue = components.reduce((s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))), dec(0));
-
+    
     // ---------- 1) ADMIN FEE (reduces NAV) ----------
     const admin = plan.adminFee ?? {};
     const adminFixed = Number(admin.fixedPerMonthEUR ?? 0);
