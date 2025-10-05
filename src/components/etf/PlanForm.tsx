@@ -272,17 +272,21 @@ export function PlanForm({
         </div>
         
         <div className="space-y-4">
-            <div className="mb-2 flex items-center justify-between">
-              <span className="text-sm font-medium text-foreground">Fees (Optional)</span>
-              <button
-                type="button"
-                onClick={(e) => { e.preventDefault(); onOpenFeeHelp?.(); }}
-                className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                aria-label="Fees help"
-                title="How these fees are applied"
-              >
-                <Info className="h-4 w-4" />
-              </button>
+            <div className="mb-2 flex items-center gap-2">
+                <span className="text-sm font-medium text-foreground">Fees (Optional)</span>
+                <button
+                    type="button"
+                    onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation(); // important: don’t let parent handlers eat the click
+                    onOpenFeeHelp?.();
+                    }}
+                    className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                    aria-label="Fees help"
+                    title="How these fees are applied"
+                >
+                    <Info className="h-4 w-4" />
+                </button>
             </div>
               <div className="p-4 border rounded-lg">
                 <h4 className="font-medium mb-2">Legacy Fee (%)</h4>

@@ -311,12 +311,12 @@ export default function EtfPlansPage() {
                                                     </span>
                                                     ))}
                                                     <button
-                                                    type="button"
-                                                    aria-label="Advanced fee details"
-                                                    onClick={() => setFeeInfoOpen(true)}
-                                                    className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                                                        type="button"
+                                                        aria-label="Advanced fee details"
+                                                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); setFeeInfoOpen(true); }}
+                                                        className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
                                                     >
-                                                    <Info className="h-4 w-4" />
+                                                        <Info className="h-4 w-4" />
                                                     </button>
                                                 </>
                                                 ) : (
