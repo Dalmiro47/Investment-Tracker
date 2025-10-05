@@ -180,10 +180,17 @@ export default function EtfPlansPage() {
         if (!user) return;
         setIsSubmitting(true);
         try {
+            const monthKey = format(values.startDate, 'yyyy-MM'); // local-safe
+            const startDateUtc = new Date(Date.UTC(
+              values.startDate.getFullYear(),
+              values.startDate.getMonth(),
+              1
+            ));
+
             const planData: Omit<ETFPlan, 'id'|'createdAt'|'updatedAt'> = {
                 title: values.title,
-                startDate: values.startDate.toISOString(),
-                startMonth: values.startDate.toISOString().slice(0, 7),
+                startDate: startDateUtc.toISOString(),
+                startMonth: monthKey,
                 monthContribution: values.monthContribution,
                 rebalanceOnContribution: values.rebalanceOnContribution,
                 baseCurrency: 'EUR' as const,

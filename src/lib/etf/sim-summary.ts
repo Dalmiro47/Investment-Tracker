@@ -1,7 +1,7 @@
 
 // src/lib/etf/sim-summary.ts
 import { parseISO, getYear } from 'date-fns';
-import type { PlanRow } from '@/lib/etf/engine';
+import type { PlanRowDrift } from '@/lib/types.etf';
 
 export type EtfSimYearBucket = {
   year: number;
@@ -31,7 +31,7 @@ export type EtfSimSummary = {
   byYear: Record<string, EtfSimYearBucket>;
 };
 
-export function buildSimSummary(rows: PlanRow[], startMonth: string, planMeta: { planId: string; title: string; baseCurrency: 'EUR' }): EtfSimSummary {
+export function buildSimSummary(rows: PlanRowDrift[], startMonth: string, planMeta: { planId: string; title: string; baseCurrency: 'EUR' }): EtfSimSummary {
   if (!rows.length) {
     return {
       planId: planMeta.planId,
@@ -66,13 +66,13 @@ export function buildSimSummary(rows: PlanRow[], startMonth: string, planMeta: {
   Object.keys(byYear).sort().forEach(y => {
     runningCum += byYear[y].contrib;
     byYear[y].cumContribToDate = runningCum;
-    byYear[y].unrealizedPL = byYear[y].endValue - byYear[y].cumContribToDate;
+    byYear[y].unrealizedPL = byYear[y].endValue - byYear[y].cumContribToDate - byYear[y].fees;
     byYear[y].performance = byYear[y].cumContribToDate > 0 ? byYear[y].unrealizedPL / byYear[y].cumContribToDate : 0;
   });
 
   const last = rows[rows.length - 1];
   totalContrib = runningCum;
-  const lifetimeUnrealized = last.portfolioValue - totalContrib;
+  const lifetimeUnrealized = last.portfolioValue - totalContrib - totalFees;
   const lifetimePerf = totalContrib > 0 ? lifetimeUnrealized / totalContrib : 0;
 
   return {

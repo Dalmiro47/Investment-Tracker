@@ -173,9 +173,10 @@ export default function PlanDetailPage() {
                 monthContribution: plan.monthContribution,
                 startDate: plan.startDate,
                 startMonth: plan.startMonth,
-                feePct: plan.feePct,
                 rebalanceOnContribution: plan.rebalanceOnContribution,
                 contributionSteps: plan.contributionSteps ?? [],
+                frontloadFee: plan.frontloadFee ?? {},
+                adminFee: plan.adminFee ?? {},
             };
             const res = await fetch('/api/simulate', {
                 method: 'POST',
@@ -248,7 +249,6 @@ export default function PlanDetailPage() {
     const kpis = useMemo(() => {
       if (effectiveDriftRows.length === 0 || !simData || perfRowsPeriod.length === 0) return null;
 
-      // Simple % (your existing logic)
       const firstRowInPeriod = effectiveDriftRows[0];
       const before = simData.drift.filter(row => row.date < firstRowInPeriod.date);
       const valueBeforePeriod = before[before.length - 1]?.portfolioValue ?? 0;
@@ -258,11 +258,10 @@ export default function PlanDetailPage() {
       const totalFees = effectiveDriftRows.reduce((sum, row) => sum + row.fees, 0);
       const currentValue = lastRow.portfolioValue;
 
-      const gainLoss = currentValue - valueBeforePeriod - totalContributions;
-      const basis = valueBeforePeriod + totalContributions;
+      const gainLoss = currentValue - valueBeforePeriod - totalContributions - totalFees;
+      const basis = valueBeforePeriod + totalContributions + totalFees;
       const performance = basis > 0 ? gainLoss / basis : 0;
 
-      // XIRR (money-weighted, annualized)
       const feesByMonth = new Map<string, number>();
       effectiveDriftRows.forEach(dr => {
         const m = dr.date.slice(0,7);
@@ -274,7 +273,6 @@ export default function PlanDetailPage() {
         const fees = feesByMonth.get(r.dateKey) ?? 0;
         return { date: new Date(`${r.dateKey}-28`), amount: -(contrib + fees) };
       });
-      // terminal inflow at period end
       if (currentValue > 0) cf.push({ date: new Date(`${lastRow.date.slice(0,10)}`), amount: currentValue });
       const xirrValue =
         (cf.some(c => c.amount < 0) && cf.some(c => c.amount > 0)) ? xirr(cf) : null;
