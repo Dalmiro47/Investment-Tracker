@@ -100,10 +100,6 @@ function getAdvancedFeeChips(plan: ETFPlan): string[] {
   const fmt = (n: number) =>
     n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 });
 
-  // Legacy fee (% per contribution)
-  const legacyPct = (plan.feePct ?? 0) * 100;
-  if (legacyPct > 0) chips.push(`Legacy ${legacyPct}%/contrib`);
-
   // Front-load (sales)
   const fl = plan.frontloadFee;
   if (fl && (fl.percentOfContribution != null || fl.fixedPerMonthEUR != null || fl.durationMonths != null)) {
@@ -189,7 +185,6 @@ export default function EtfPlansPage() {
                 startDate: values.startDate.toISOString(),
                 startMonth: values.startDate.toISOString().slice(0, 7),
                 monthContribution: values.monthContribution,
-                feePct: values.feePct ?? null,
                 rebalanceOnContribution: values.rebalanceOnContribution,
                 baseCurrency: 'EUR' as const,
                 contributionSteps: values.contributionSteps ?? [],
@@ -320,7 +315,7 @@ export default function EtfPlansPage() {
                                                     </button>
                                                 </>
                                                 ) : (
-                                                <span className="font-medium text-foreground">{((plan.feePct ?? 0) * 100).toFixed(2)}%</span>
+                                                <span className="font-medium text-foreground">None</span>
                                                 )}
                                             </div>
                                         </div>
@@ -396,14 +391,6 @@ export default function EtfPlansPage() {
                     </DialogHeader>
 
                     <div className="px-6 pb-6 max-h-[65vh] overflow-y-auto space-y-6 text-[0.95rem] leading-7">
-                    <section className="space-y-2">
-                        <h4 className="font-semibold">Legacy Fee (%)</h4>
-                        <p>
-                        A per-contribution brokerage fee as a percentage. Applied <em>each time</em> your monthly
-                        contribution is invested. Example: <code>0.1%</code> → €0.10 taken out of every €100 contributed.
-                        </p>
-                    </section>
-
                     <section className="space-y-2">
                         <h4 className="font-semibold">Front-load Fee (Sales Cost)</h4>
                         <ul className="list-disc pl-6 space-y-1">
