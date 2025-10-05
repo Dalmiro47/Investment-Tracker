@@ -34,13 +34,13 @@ function PlanModal({
   isSubmitting: boolean;
 }) {
   // Key forces React to remount when switching create/edit -> obliterates stale tree in Studio
-  const dialogKey = editingPlan ? 'etf-dialog-edit-v4' : 'etf-dialog-create-v4';
+  const dialogKey = editingPlan ? 'etf-dialog-edit-v5' : 'etf-dialog-create-v5';
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         key={dialogKey}
-        data-testid="etf-dialog-v4"
+        data-testid="etf-dialog-v5"
         className="max-w-4xl w-[96vw] p-0 grid grid-rows-[auto,1fr,auto] overflow-hidden"
         style={{ height: 'min(90dvh, 820px)' }}
       >
@@ -48,7 +48,7 @@ function PlanModal({
         <DialogHeader className="p-6 pb-2">
           <div className="flex items-center gap-2">
             <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
-            <span className="text-xs text-muted-foreground">·v4</span>
+            <span className="text-xs text-muted-foreground">·v5</span>
           </div>
           <DialogDescription>
             {editingPlan
@@ -62,7 +62,7 @@ function PlanModal({
           data-testid="etf-dialog-body"
           className="
             min-h-0 px-6 pb-6 pr-3
-            etf-dialog-scroll etf-dialog-scroll-v2 etf-dialog-scroll-v3 etf-dialog-scroll-v4
+            etf-dialog-scroll etf-dialog-scroll-v2 etf-dialog-scroll-v3 etf-dialog-scroll-v4 etf-dialog-scroll-v5
           "
           style={{
             overflowY: 'scroll',

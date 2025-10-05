@@ -197,3 +197,22 @@ body {
 .etf-dialog-scroll-v4::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--border));
 }
+
+/* v5 — dark scrollbar for dialog body (cache-busting) */
+.etf-dialog-scroll-v5 {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.8) hsl(var(--background) / 0.3);
+  -webkit-overflow-scrolling: touch;
+}
+.etf-dialog-scroll-v5::-webkit-scrollbar { width: 10px; }
+.etf-dialog-scroll-v5::-webkit-scrollbar-track {
+  background: hsl(var(--background) / 0.3);
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v5::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.85);
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v5::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--border));
+}
