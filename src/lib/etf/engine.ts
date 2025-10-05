@@ -102,12 +102,7 @@ export function simulatePlan(
     }
     if (!canProceed) continue;
 
-    let preValue = dec(0);
-    const preValuePositions = components.map(c => {
-      const valueEUR = mul(unitsStartByEtf[c.id], priceNowByEtf[c.id]);
-      preValue = add(preValue, valueEUR);
-      return { symbol: c.ticker, valueEUR };
-    });
+    const preValue = components.reduce((s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))), dec(0));
 
     // ---------- 1) ADMIN FEE (reduces NAV) ----------
     const admin = plan.adminFee ?? {};
@@ -146,19 +141,19 @@ export function simulatePlan(
     }
     
     // ---------- 2) FRONT-LOAD on contribution ONLY ----------
+    const fl = plan.frontloadFee ?? {};
+    const monthsElapsed =
+      (Number(monthKey.slice(0,4)) - Number(getStartMonth(plan).slice(0,4))) * 12 +
+      (Number(monthKey.slice(5,7)) - Number(getStartMonth(plan).slice(5,7)));
+
     let contrib = dec(getContributionForMonth(plan, monthKey));
-    if (monthKey < planStartMonth) contrib = dec(0);
-    
+    if (monthKey < getStartMonth(plan)) contrib = dec(0);
+
     if (adminRemainder.gt(0)) {
       contrib = sub(contrib, adminRemainder);
       if (contrib.lt(0)) contrib = dec(0);
     }
     
-    const fl = plan.frontloadFee ?? {};
-    const monthsElapsed =
-      (Number(monthKey.slice(0,4)) - Number(planStartMonth.slice(0,4))) * 12 +
-      (Number(monthKey.slice(5,7)) - Number(planStartMonth.slice(5,7)));
-
     let frontFeeThisMonth = dec(0);
     const inWindow = fl.durationMonths == null ? true : (monthsElapsed < fl.durationMonths);
 
@@ -178,9 +173,12 @@ export function simulatePlan(
     const contribThisMonth: Record<string, Big> = {};
     for (const comp of components) contribThisMonth[comp.id] = dec(0);
 
-    if (allocationMode === 'rebalance' && preValue.gt(0)) {
+    const portfolioValueAfterAdminFee = components.reduce((s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))), dec(0));
+
+    if (allocationMode === 'rebalance' && portfolioValueAfterAdminFee.gt(0)) {
       const needs = components.map(c => {
-        const currentWeight = preValue.gt(0) ? div(preValuePositions.find(p => p.symbol === c.ticker)!.valueEUR, preValue) : dec(0);
+        const currentVal = mul(unitsByEtf[c.id], priceNowByEtf[c.id]);
+        const currentWeight = portfolioValueAfterAdminFee.gt(0) ? div(currentVal, portfolioValueAfterAdminFee) : dec(0);
         return { id: c.id, need: sub(dec(c.targetWeight), currentWeight) };
       });
 
