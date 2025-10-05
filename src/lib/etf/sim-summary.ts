@@ -1,4 +1,5 @@
 
+
 // src/lib/etf/sim-summary.ts
 import { parseISO, getYear } from 'date-fns';
 import type { PlanRowDrift, ETFPlan } from '@/lib/types.etf';
@@ -78,8 +79,10 @@ export function buildSimSummary(
   
   const totalFees = feesFromRows > 0 ? feesFromRows : computeFixedFeesFromPlan(plan, endMonth);
 
-  const gainLoss  = endValue - contrib - totalFees;
-  const basis     = contrib + totalFees;
+  // End value is net of fees -> add fees back for profit.
+  const gainLoss  = endValue - contrib + totalFees;
+  // Basis = contributions - fees
+  const basis     = contrib - totalFees;
   const simplePct = basis > 0 ? (gainLoss / basis) : 0;
 
   const byYearMap = new Map<number, {
@@ -100,8 +103,9 @@ export function buildSimSummary(
   }
 
   const byYear = Array.from(byYearMap.entries()).map(([year, m]) => {
-    const gl = m.lastValue - m.cumContrib - m.fees;
-    const perf = m.cumContrib > 0 ? (gl / m.cumContrib) : 0;
+    const gl = m.lastValue - m.cumContrib + m.fees;
+    const base = m.cumContrib - m.fees;
+    const perf = base > 0 ? gl / base : 0;
     return {
       year,
       contrib: round2(m.contrib),

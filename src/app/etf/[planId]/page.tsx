@@ -246,38 +246,40 @@ export default function PlanDetailPage() {
     }, [simData, yearFilter]);
 
     const kpis = useMemo(() => {
-      if (effectiveDriftRows.length === 0 || !simData || perfRowsPeriod.length === 0) return null;
+        if (effectiveDriftRows.length === 0 || !simData) return null;
 
-      const firstRowInPeriod = effectiveDriftRows[0];
-      const before = simData.drift.filter(row => row.date < firstRowInPeriod.date);
-      const valueBeforePeriod = before[before.length - 1]?.portfolioValue ?? 0;
+        const firstRowInPeriod = effectiveDriftRows[0];
+        const before = simData.drift.filter(row => row.date < firstRowInPeriod.date);
+        const valueBeforePeriod = before[before.length - 1]?.portfolioValue ?? 0;
 
-      const lastRow = effectiveDriftRows[effectiveDriftRows.length - 1];
-      const totalContributions = effectiveDriftRows.reduce((sum, row) => sum + row.contribution, 0);
-      const totalFees = effectiveDriftRows.reduce((sum, row) => sum + row.fees, 0);
-      const currentValue = lastRow.portfolioValue;
+        const lastRow = effectiveDriftRows[effectiveDriftRows.length - 1];
+        const totalContributions = effectiveDriftRows.reduce((sum, row) => sum + (row.contribution ?? 0), 0);
+        const totalFees = effectiveDriftRows.reduce((sum, row) => sum + (row.fees ?? 0), 0);
+        const currentValue = lastRow.portfolioValue;
 
-      const gainLoss = currentValue - valueBeforePeriod - totalContributions - totalFees;
-      const basis = valueBeforePeriod + totalContributions + totalFees;
-      const performance = basis > 0 ? gainLoss / basis : 0;
+        // Fees already reduced NAV in the engine -> add them back for gain calc
+        const gainLoss = currentValue - valueBeforePeriod - totalContributions + totalFees;
+        // Basis is net invested capital (contributions - fees)
+        const basis = valueBeforePeriod + totalContributions - totalFees;
+        const performance = basis > 0 ? gainLoss / basis : 0;
+        
+        const cashflows: { date: Date; amount: number }[] = [];
+        for (const r of effectiveDriftRows) {
+            if ((r.contribution ?? 0) > 0) {
+                cashflows.push({ date: new Date(r.date), amount: -(r.contribution ?? 0) });
+            }
+        }
+        if (currentValue > 0) {
+          cashflows.push({ date: new Date(lastRow.date), amount: currentValue });
+        }
 
-      const feesByMonth = new Map<string, number>();
-      effectiveDriftRows.forEach(dr => {
-        const m = dr.date.slice(0,7);
-        feesByMonth.set(m, (feesByMonth.get(m) ?? 0) + (dr.fees ?? 0));
-      });
+        const xirrValue =
+            (cashflows.some(c => c.amount < 0) && cashflows.some(c => c.amount > 0))
+            ? xirr(cashflows)
+            : null;
 
-      const cf = perfRowsPeriod.map(r => {
-        const contrib = r.perEtf.reduce((s, e) => s + Number(e.contribThisMonth), 0);
-        const fees = feesByMonth.get(r.dateKey) ?? 0;
-        return { date: new Date(`${r.dateKey}-28`), amount: -(contrib + fees) };
-      });
-      if (currentValue > 0) cf.push({ date: new Date(`${lastRow.date.slice(0,10)}`), amount: currentValue });
-      const xirrValue =
-        (cf.some(c => c.amount < 0) && cf.some(c => c.amount > 0)) ? xirr(cf) : null;
-
-      return { totalContributions, totalFees, currentValue, gainLoss, performance, xirrValue };
-    }, [effectiveDriftRows, simData, perfRowsPeriod]);
+        return { totalContributions, totalFees, currentValue, gainLoss, performance, xirrValue };
+    }, [effectiveDriftRows, simData]);
 
 
     const availableYears = useMemo(() => {
