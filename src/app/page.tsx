@@ -96,6 +96,13 @@ function DashboardPageContent() {
   const fetchAllData = React.useCallback(async (userId: string) => {
     setLoading(true);
     try {
+      const parseYear = (y: unknown): number | null => {
+        const n = typeof y === "number" ? y : parseInt(String(y), 10);
+        if (Number.isNaN(n)) return null;
+        if (n < 1900 || n > 3000) return null;
+        return n;
+      };
+
       const [userInvestments, etfSums, years, settings] = await Promise.all([
         getInvestments(userId),
         getAllEtfSummaries(userId),
@@ -109,13 +116,29 @@ function DashboardPageContent() {
       setEtfSummaries(etfSums);
       setRateSchedulesMap(rateSchedules);
 
-      const yearSet = new Set<number>(years);
-      for (const s of etfSums) {
-        Object.keys(s.byYear ?? {}).forEach(y => {
-          const n = parseInt(y, 10);
-          if (!Number.isNaN(n)) yearSet.add(n);
-        });
+      const yearSet = new Set<number>();
+      for (const y of years ?? []) {
+        const n = parseYear(y);
+        if (n != null) yearSet.add(n);
       }
+
+      for (const s of etfSums) {
+        const byYear = (s as any).byYear;
+        if (!byYear) continue;
+
+        if (Array.isArray(byYear)) {
+          for (const row of byYear) {
+            const n = parseYear(row?.year);
+            if (n != null) yearSet.add(n);
+          }
+        } else {
+          for (const key of Object.keys(byYear)) {
+            const n = parseYear(key);
+            if (n != null) yearSet.add(n);
+          }
+        }
+      }
+      
       yearSet.add(new Date().getFullYear());
       const unifiedYears = Array.from(yearSet).sort((a,b) => b - a);
       setSellYears(unifiedYears);
