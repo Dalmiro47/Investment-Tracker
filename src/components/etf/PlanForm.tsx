@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -271,11 +272,8 @@ export function PlanForm({
             </Button>
         </div>
         
-        <Collapsible>
-          <CollapsibleTrigger asChild>
-            <Button variant="link" className="p-0">Advanced Fees</Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-4">
+        <div className="space-y-4">
+            <h3 className="text-lg font-medium">Advanced Fees (Optional)</h3>
               <div className="p-4 border rounded-lg">
                 <h4 className="font-medium mb-2">Legacy Fee (%)</h4>
                 <FormField
@@ -322,8 +320,7 @@ export function PlanForm({
                   )} />
                 </div>
               </div>
-          </CollapsibleContent>
-        </Collapsible>
+        </div>
 
 
         <div>
@@ -440,3 +437,5 @@ export function PlanForm({
     </Form>
   );
 }
+
+    
