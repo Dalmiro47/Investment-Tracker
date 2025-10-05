@@ -28,8 +28,8 @@ export type EtfSimSummary = {
     contrib: number;
     fees: number;
     marketValue: number;   // from last row
-    unrealizedPL: number;  // marketValue - total lifetime contrib - total fees
-    performance: number;   // unrealizedPL / max(contrib + fees, 1)
+    unrealizedPL: number;  // marketValue - total lifetime contrib
+    performance: number;   // unrealizedPL / max(contrib, 1)
   };
   byYear: EtfSimYearBucket[];
 };
@@ -80,9 +80,9 @@ export function buildSimSummary(
   const totalFees = feesFromRows > 0 ? feesFromRows : computeFixedFeesFromPlan(plan, endMonth);
 
   // End value is net of fees -> add fees back for profit.
-  const gainLoss  = endValue - contrib + totalFees;
-  // Basis = contributions - fees
-  const basis     = contrib - totalFees;
+  const gainLoss  = endValue - contrib;
+  // Basis = contributions
+  const basis     = contrib;
   const simplePct = basis > 0 ? (gainLoss / basis) : 0;
 
   const byYearMap = new Map<number, {
@@ -103,8 +103,8 @@ export function buildSimSummary(
   }
 
   const byYear = Array.from(byYearMap.entries()).map(([year, m]) => {
-    const gl = m.lastValue - m.cumContrib + m.fees;
-    const base = m.cumContrib - m.fees;
+    const gl = m.lastValue - m.cumContrib;
+    const base = m.cumContrib;
     const perf = base > 0 ? gl / base : 0;
     return {
       year,

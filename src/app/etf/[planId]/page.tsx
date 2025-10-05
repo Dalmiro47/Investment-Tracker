@@ -174,8 +174,8 @@ export default function PlanDetailPage() {
                 startMonth: plan.startMonth,
                 rebalanceOnContribution: plan.rebalanceOnContribution,
                 contributionSteps: plan.contributionSteps ?? [],
-                frontloadFee: plan.frontloadFee ?? {},
-                adminFee: plan.adminFee ?? {},
+                frontloadFee: plan.frontloadFee,
+                adminFee: plan.adminFee,
             };
             const res = await fetch('/api/simulate', {
                 method: 'POST',
@@ -257,10 +257,12 @@ export default function PlanDetailPage() {
         const totalFees = effectiveDriftRows.reduce((sum, row) => sum + (row.fees ?? 0), 0);
         const currentValue = lastRow.portfolioValue;
 
-        // Fees already reduced NAV in the engine -> add them back for gain calc
-        const gainLoss = currentValue - valueBeforePeriod - totalContributions + totalFees;
-        // Basis is net invested capital (contributions - fees)
-        const basis = valueBeforePeriod + totalContributions - totalFees;
+        // Fees are already taken out of NAV. Gain/Loss is vs. invested capital.
+        const gainLoss = currentValue - valueBeforePeriod - totalContributions;
+
+        // Basis is invested capital, not net of fees.
+        const basis = valueBeforePeriod + totalContributions;
+        
         const performance = basis > 0 ? gainLoss / basis : 0;
         
         const cashflows: { date: Date; amount: number }[] = [];
@@ -352,10 +354,10 @@ export default function PlanDetailPage() {
                                   <DialogTitle>Simple % vs XIRR — what’s the difference?</DialogTitle>
                                 </DialogHeader>
                                 <div className="space-y-3 text-sm">
-                                  <p><b>Simple %</b> = (End Value − (Contributions + Fees)) ÷ (Contributions + Fees) for the selected period.</p>
-                                  <p><b>XIRR</b> is the money-weighted, annualized return that accounts for <i>when</i> each contribution/fee happened. We build monthly cash flows
-                                     as outflows (contribution + fee) and a final inflow equal to the end value.</p>
-                                  <p>They differ whenever contributions are spread over time (i.e., regular investing). XIRR captures compounding with cash-flow timing; Simple % is a quick ratio.</p>
+                                   <p><b>Simple %</b> = (End Value − Contributions) ÷ Contributions for the selected period.</p>
+                                   <p><b>XIRR</b> is the money-weighted, annualized return based on cash-flow timing.
+                                      We build monthly cash flows using <i>contributions only</i> (outflows) and a final inflow equal to the end value.</p>
+                                   <p>Fees are deducted from NAV inside the simulation, so they are already reflected in End Value.</p>
                                 </div>
                               </DialogContent>
                             </Dialog>
