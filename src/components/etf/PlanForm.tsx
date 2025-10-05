@@ -272,14 +272,14 @@ export function PlanForm({
         </div>
         
         <div className="space-y-4">
-            <div className="mt-6 mb-2 flex items-center justify-between">
-              <h3 className="text-sm font-medium text-muted-foreground">Advanced Fees</h3>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-medium text-foreground">Fees (Optional)</span>
               <button
                 type="button"
-                onClick={onOpenFeeHelp}
+                onClick={(e) => { e.preventDefault(); onOpenFeeHelp?.(); }}
                 className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground"
-                aria-label="What are advanced fees?"
-                title="What are advanced fees?"
+                aria-label="Fees help"
+                title="How these fees are applied"
               >
                 <Info className="h-4 w-4" />
               </button>

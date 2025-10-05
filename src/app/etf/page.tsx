@@ -298,7 +298,7 @@ export default function EtfPlansPage() {
                                             </div>
                                         )}
                                         <div className="flex justify-between items-start">
-                                            <span className="pt-px">{hasAdvanced ? 'Advanced Fees:' : 'Broker Fee:'}</span>
+                                            <span className="pt-px">{hasAdvanced ? 'Fees:' : 'Broker Fee:'}</span>
                                             <div className="flex items-center gap-2 flex-wrap justify-end max-w-[70%]">
                                                 {hasAdvanced ? (
                                                 <>
