@@ -7,6 +7,8 @@ import type { SimulationRows } from '@/lib/types.etf';
 import { getStartMonth } from '@/lib/date-helpers';
 import { adminDb } from '@/lib/firebase-admin';
 import { buildSimSummary } from '@/lib/etf/sim-summary';
+import { doc, setDoc } from 'firebase/firestore'; // Note: using client SDK types for server is fine
+import { db } from '@/lib/firebase';
 
 export const runtime = 'nodejs'; // ensure Admin SDK works
 
@@ -118,8 +120,7 @@ export async function POST(req: Request) {
 
     const simStartMonth = startMonth;
     const wireDrift = simulationResult.drift
-      .filter(row => row.date.slice(0, 7) >= simStartMonth)
-      .map(row => JSON.parse(JSON.stringify(row)));
+      .filter(row => row.date.slice(0, 7) >= simStartMonth);
 
     if (wireDrift.length && wireDrift[0].date.slice(0,7) !== startMonth) {
       console.warn('Invariant violation: first simulation row month does not match plan start month.', { 
@@ -133,7 +134,7 @@ export async function POST(req: Request) {
     try {
         const summary = buildSimSummary(wireDrift, startMonth, { planId: plan.id, title: plan.title, baseCurrency: plan.baseCurrency });
         const ref = adminDb.doc(`users/${uid}/etfPlans/${plan.id}/latest_sim_summary/latest`);
-        await ref.set(summary, { merge: true });
+        await ref.set(summary, { merge: false });
     } catch (e) {
         console.warn('Failed to persist latest ETF sim summary:', e);
     }
