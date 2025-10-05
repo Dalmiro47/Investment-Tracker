@@ -1,5 +1,5 @@
 
-import { endOfMonth, parseISO, format, addMonths as addMonthsFns } from 'date-fns';
+import { endOfMonth, parseISO, format, addMonths as addMonthsFns, subMonths as subMonthsFns } from 'date-fns';
 import type { ETFPlan, ETFComponent, ETFPricePoint, FXRatePoint, PlanRowDrift, SimulationRows, PlanRowPerformance } from '@/lib/types.etf';
 import { dec, add, sub, mul, div, toNum, EPS } from '@/lib/money';
 import Big from 'big.js';
@@ -24,8 +24,9 @@ const monthsBetweenInclusive = (start: string, end: string) => {
 };
 
 export function getContributionForMonth(plan: ETFPlan, month: string): number {
-  let amt = plan.monthContribution ?? 0;
+  if (month < getStartMonth(plan)) return 0;
   
+  let amt = plan.monthContribution ?? 0;
   const steps = (plan.contributionSteps ?? []).slice().sort((a,b)=>a.month.localeCompare(b.month));
   for (const s of steps) {
     if (s.month <= month) {
@@ -62,7 +63,22 @@ export function simulatePlan(
     unitsByEtf[c.id] = dec(0);
     cumContribByEtf[c.id] = dec(0);
     prevPriceByEtf[c.id] = undefined;
+
+    // Preload previous month's price if available for first month return calc
+    const prevMonthStr = format(subMonthsFns(parseISO(`${planStartMonth}-01`), 1), 'yyyy-MM');
+    const basePrice = getBasePrice(c.ticker, prevMonthStr);
+    if (basePrice) {
+        prevPriceByEtf[c.id] = basePrice;
+    }
   });
+
+  function getBasePrice(symbol: string, month: string): Big | null {
+    const p = monthlyByMonth[symbol]?.[month];
+    if (!p) return null;
+    const fxRate = p.currency === 'EUR' ? 1 : (fxByMonth[month]?.rates?.[p.currency] ?? null);
+    if (p.currency !== 'EUR' && !fxRate) return null;
+    return fxRate ? div(dec(p.close), dec(fxRate)) : dec(p.close);
+  }
 
   for (const monthKey of months) {
     if (monthKey < planStartMonth) continue;
@@ -72,33 +88,10 @@ export function simulatePlan(
 
     let monthlyContribution = getContributionForMonth(plan, monthKey);
     let totalFeeThisMonth = dec(0);
-    
-    // Front-load fee
-    if (plan.frontloadFee) {
-      const isFeeActive = !plan.frontloadFee.durationMonths || monthsElapsed < plan.frontloadFee.durationMonths;
-      if (isFeeActive) {
-        if (plan.frontloadFee.percentOfContribution) {
-          totalFeeThisMonth = add(totalFeeThisMonth, mul(dec(monthlyContribution), dec(plan.frontloadFee.percentOfContribution)));
-        }
-        if (plan.frontloadFee.fixedPerMonthEUR) {
-          totalFeeThisMonth = add(totalFeeThisMonth, dec(plan.frontloadFee.fixedPerMonthEUR));
-        }
-      }
-    }
-    
-    const cashToInvest = sub(dec(monthlyContribution), totalFeeThisMonth);
 
     const hasAllPrices = components.every(c => monthlyByMonth[c.ticker]?.[monthKey]);
     if (!hasAllPrices) continue;
 
-    const getBasePrice = (symbol: string, month: string) => {
-      const p = monthlyByMonth[symbol]?.[month];
-      if (!p) return null;
-      const fxRate = p.currency === 'EUR' ? 1 : (fxByMonth[month]?.rates?.[p.currency] ?? null);
-      if (p.currency !== 'EUR' && !fxRate) return null;
-      return fxRate ? div(dec(p.close), dec(fxRate)) : dec(p.close);
-    }
-    
     const priceNowByEtf: Record<string, Big> = {};
     let canProceed = true;
     for (const comp of components) {
@@ -128,6 +121,21 @@ export function simulatePlan(
             totalFeeThisMonth = add(totalFeeThisMonth, dec(plan.adminFee.fixedPerMonthEUR));
         }
     }
+    
+    // Front-load fee
+    if (plan.frontloadFee) {
+      const isFeeActive = !plan.frontloadFee.durationMonths || monthsElapsed < plan.frontloadFee.durationMonths;
+      if (isFeeActive) {
+        if (plan.frontloadFee.percentOfContribution) {
+          totalFeeThisMonth = add(totalFeeThisMonth, mul(dec(monthlyContribution), dec(plan.frontloadFee.percentOfContribution)));
+        }
+        if (plan.frontloadFee.fixedPerMonthEUR) {
+          totalFeeThisMonth = add(totalFeeThisMonth, dec(plan.frontloadFee.fixedPerMonthEUR));
+        }
+      }
+    }
+    
+    const cashToInvest = sub(dec(monthlyContribution), totalFeeThisMonth);
 
     const contribThisMonth: Record<string, Big> = {};
     for (const comp of components) contribThisMonth[comp.id] = dec(0);
