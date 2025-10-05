@@ -1,7 +1,7 @@
 
 // src/lib/etf/sim-summary.ts
 import { parseISO, getYear } from 'date-fns';
-import type { PlanRowDrift } from '@/lib/types.etf';
+import type { PlanRowDrift, ETFPlan } from '@/lib/types.etf';
 import { ENGINE_SCHEMA_VERSION } from './engine';
 
 export type EtfSimYearBucket = {
@@ -27,13 +27,13 @@ export type EtfSimSummary = {
     contrib: number;
     fees: number;
     marketValue: number;   // from last row
-    unrealizedPL: number;  // marketValue - total lifetime contrib
-    performance: number;   // unrealizedPL / max(contrib, 1)
+    unrealizedPL: number;  // marketValue - total lifetime contrib - total fees
+    performance: number;   // unrealizedPL / max(contrib + fees, 1)
   };
   byYear: EtfSimYearBucket[];
 };
 
-const round2 = (n: number) => Math.round(n * 100) / 100;
+const round2 = (x: number) => Math.round(x * 100) / 100;
 
 function monthsBetween(startYm: string, endYm: string) {
   let [ys, ms] = startYm.split('-').map(Number);
@@ -41,11 +41,7 @@ function monthsBetween(startYm: string, endYm: string) {
   return (ye - ys) * 12 + (me - ms) + 1; // inclusive
 }
 
-function computeFixedFeesFromPlan(plan: {
-  startMonth: string;
-  frontloadFee?: { fixedPerMonthEUR?: number|null; durationMonths?: number|null };
-  adminFee?: { fixedPerMonthEUR?: number|null };
-}, endMonth: string) {
+function computeFixedFeesFromPlan(plan: Pick<ETFPlan, 'startMonth' | 'frontloadFee' | 'adminFee'>, endMonth: string) {
   const totalMonths = monthsBetween(plan.startMonth, endMonth);
   const adminFixed = Number(plan.adminFee?.fixedPerMonthEUR ?? 0);
   const frontFixed = Number(plan.frontloadFee?.fixedPerMonthEUR ?? 0);
@@ -58,7 +54,7 @@ function computeFixedFeesFromPlan(plan: {
 
 export function buildSimSummary(
   rows: PlanRowDrift[],
-  plan: { startMonth: string; title: string; baseCurrency: 'EUR', planId: string, frontloadFee?: any; adminFee?: any }
+  plan: Pick<ETFPlan, 'planId'|'startMonth'|'title'|'baseCurrency'|'frontloadFee'|'adminFee'>
 ): EtfSimSummary {
   if (!rows.length) {
     return {

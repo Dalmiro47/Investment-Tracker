@@ -7,8 +7,6 @@ import type { SimulationRows } from '@/lib/types.etf';
 import { getStartMonth } from '@/lib/date-helpers';
 import { adminDb } from '@/lib/firebase-admin';
 import { buildSimSummary } from '@/lib/etf/sim-summary';
-import { doc, setDoc } from 'firebase/firestore'; // Note: using client SDK types for server is fine
-import { db } from '@/lib/firebase';
 
 export const runtime = 'nodejs'; // ensure Admin SDK works
 
@@ -117,27 +115,13 @@ export async function POST(req: Request) {
     const fx = needsFx ? await getFXRatesServer(uid, startISO, endISO) : {};
 
     const simulationResult: SimulationRows = simulatePlan(plan, components, perSymbol, fx, { endMonth: lastCommonMonth });
+    
+    const rowsFeeSum = simulationResult.drift.reduce((s, r) => s + (r.fees || 0), 0);
+    console.log('[ROUTE] rowsFeeSum =', rowsFeeSum);
 
-    const simStartMonth = startMonth;
-    const wireDrift = simulationResult.drift
-      .filter(row => row.date.slice(0, 7) >= simStartMonth);
-
-    if (wireDrift.length && wireDrift[0].date.slice(0,7) !== startMonth) {
-      console.warn('Invariant violation: first simulation row month does not match plan start month.', { 
-          planStartDate: plan.startDate,
-          planStartMonth: getStartMonth(plan),
-          derivedStartMonth: startMonth, 
-          firstRowMonth: wireDrift[0].date.slice(0,7) 
-      });
-    }
-
-    try {
-        const summary = buildSimSummary(wireDrift, plan);
-        const ref = adminDb.doc(`users/${uid}/etfPlans/${plan.id}/latest_sim_summary/latest`);
-        await ref.set(summary, { merge: false });
-    } catch (e) {
-        console.warn('Failed to persist latest ETF sim summary:', e);
-    }
+    const summary = buildSimSummary(simulationResult.drift, { ...plan, planId: plan.id });
+    const ref = adminDb.doc(`users/${uid}/etfPlans/${plan.id}/latest_sim_summary/latest`);
+    await ref.set(summary, { merge: false });
 
     return NextResponse.json({
         ok: true,
@@ -145,7 +129,7 @@ export async function POST(req: Request) {
         rows: simulationResult
     });
   } catch (e: any) {
-    console.error('simulate API error:', e);
+    console.error('[SIM ERROR]', e?.stack || e?.message || e);
     return NextResponse.json({ ok: false, error: String(e?.message ?? 'An unknown error occurred during simulation.') }, { status: 500 });
   }
 }
