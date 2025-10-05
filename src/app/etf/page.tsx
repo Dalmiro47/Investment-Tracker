@@ -359,7 +359,7 @@ export default function EtfPlansPage() {
                 onSubmit={handleFormSubmit}
                 onCancel={closeDialog}
                 isSubmitting={isSubmitting}
-                onOpenFeeHelp={() => setIsFeeInfoOpen(true)}
+                onOpenFeeHelp={() => setFeeInfoOpen(true)}
             />
 
             <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
