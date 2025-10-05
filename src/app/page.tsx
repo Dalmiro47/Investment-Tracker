@@ -111,10 +111,22 @@ function DashboardPageContent() {
 
       const yearSet = new Set<number>(years);
       for (const s of etfSums) {
-        Object.keys(s.byYear ?? {}).forEach(y => {
-          const n = parseInt(y, 10);
-          if (!Number.isNaN(n)) yearSet.add(n);
-        });
+        const byYear = (s as any).byYear;
+        if (!byYear) continue;
+
+        if (Array.isArray(byYear)) {
+          // New schema: array of year rows like [{ year: 2023, ... }, ...]
+          for (const row of byYear) {
+            const n = typeof row?.year === "number" ? row.year : parseInt(String(row?.year), 10);
+            if (!Number.isNaN(n)) yearSet.add(n);
+          }
+        } else {
+          // Old schema: object keyed by year {'2023': {...}, '2024': {...}}
+          for (const y of Object.keys(byYear)) {
+            const n = parseInt(y, 10);
+            if (!Number.isNaN(n)) yearSet.add(n);
+          }
+        }
       }
       yearSet.add(new Date().getFullYear());
       const unifiedYears = Array.from(yearSet).sort((a,b) => b - a);
