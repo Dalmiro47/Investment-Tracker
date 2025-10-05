@@ -102,6 +102,7 @@ export function simulatePlan(
     }
     if (!canProceed) continue;
 
+    // NAV before new contribution
     const preValue = components.reduce((s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))), dec(0));
     
     // ---------- 1) ADMIN FEE (reduces NAV) ----------
@@ -297,7 +298,7 @@ export function simulatePlan(
 
     driftRows.push({
       date: format(endOfMonth(parseISO(`${monthKey}-15`)), 'yyyy-MM-dd'),
-      contribution: Number(plannedContribution),
+      contribution: toNum(plannedContribution),
       fees: toNum(rowFees),
       portfolioValue: toNum(portfolioValue),
       positions: driftPositions.sort((a,b) => b.valueEUR - a.valueEUR),

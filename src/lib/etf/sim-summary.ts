@@ -1,3 +1,4 @@
+
 // src/lib/etf/sim-summary.ts
 import { parseISO, getYear } from 'date-fns';
 import type { PlanRowDrift } from '@/lib/types.etf';
@@ -65,13 +66,13 @@ export function buildSimSummary(rows: PlanRowDrift[], startMonth: string, planMe
   Object.keys(byYear).sort().forEach(y => {
     runningCum += byYear[y].contrib;
     byYear[y].cumContribToDate = runningCum;
-    byYear[y].unrealizedPL = byYear[y].endValue - byYear[y].cumContribToDate;
+    byYear[y].unrealizedPL = byYear[y].endValue - byYear[y].cumContribToDate - byYear[y].fees;
     byYear[y].performance = byYear[y].cumContribToDate > 0 ? byYear[y].unrealizedPL / byYear[y].cumContribToDate : 0;
   });
 
   const last = rows[rows.length - 1];
   totalContrib = runningCum;
-  const lifetimeUnrealized = last.portfolioValue - totalContrib;
+  const lifetimeUnrealized = last.portfolioValue - totalContrib - totalFees;
   const lifetimePerf = totalContrib > 0 ? lifetimeUnrealized / totalContrib : 0;
 
   return {
