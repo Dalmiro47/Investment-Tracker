@@ -10,5 +10,6 @@
   "ts-node": {
     "require": ["tsconfig-paths/register"]
   },
-  "include": ["scripts", "src"]
+  "include": ["scripts", "src"],
+  "exclude": ["node_modules", ".next", "out"]
 }
