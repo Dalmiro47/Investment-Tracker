@@ -1,4 +1,5 @@
 
+
 import { endOfMonth, parseISO, format, addMonths as addMonthsFns, subMonths as subMonthsFns } from 'date-fns';
 import type { ETFPlan, ETFComponent, ETFPricePoint, FXRatePoint, PlanRowDrift, SimulationRows, PlanRowPerformance } from '@/lib/types.etf';
 import { dec, add, sub, mul, div, toNum, EPS } from '@/lib/money';
@@ -87,7 +88,6 @@ export function simulatePlan(
     for (const comp of components) unitsStartByEtf[comp.id] = unitsByEtf[comp.id];
 
     let monthlyContribution = getContributionForMonth(plan, monthKey);
-    let totalFeeThisMonth = dec(0);
 
     const hasAllPrices = components.every(c => monthlyByMonth[c.ticker]?.[monthKey]);
     if (!hasAllPrices) continue;
@@ -111,31 +111,50 @@ export function simulatePlan(
       return { symbol: c.ticker, valueEUR };
     });
 
-    // Admin fee (on NAV before contribution)
+    // --- compute Admin fees ON NAV (before contribution), separate bucket ---
+    let adminFeeThisMonth = dec(0);
     if (plan.adminFee && preValue.gt(0)) {
         if (plan.adminFee.annualPercent) {
+            // annualPercent is stored as a FRACTION (e.g. 0.002 for 0.20%/yr)
             const monthlyRate = plan.adminFee.applyProRataMonthly === false ? 0 : plan.adminFee.annualPercent / 12;
-            totalFeeThisMonth = add(totalFeeThisMonth, mul(preValue, dec(monthlyRate)));
+            adminFeeThisMonth = add(adminFeeThisMonth, mul(preValue, dec(monthlyRate)));
         }
         if (plan.adminFee.fixedPerMonthEUR) {
-            totalFeeThisMonth = add(totalFeeThisMonth, dec(plan.adminFee.fixedPerMonthEUR));
+            adminFeeThisMonth = add(adminFeeThisMonth, dec(plan.adminFee.fixedPerMonthEUR));
         }
     }
-    
-    // Front-load fee
+
+    // --- SELL units pro-rata to pay Admin fees (reduce NAV) ---
+    if (adminFeeThisMonth.gt(0) && preValue.gt(0)) {
+        const feeRatio = div(adminFeeThisMonth, preValue); // 0..1
+        for (const c of components) {
+            const id = c.id;
+            const priceNow = priceNowByEtf[id];
+            if (priceNow.lte(0)) continue;
+
+            const valueEUR = mul(unitsByEtf[id], priceNow);
+            const valueToSell = mul(valueEUR, feeRatio);
+            const unitsToSell = div(valueToSell, priceNow);
+            // clamp
+            unitsByEtf[id] = unitsByEtf[id].gt(unitsToSell) ? sub(unitsByEtf[id], unitsToSell) : dec(0);
+        }
+    }
+
+    // --- Front-load (sales cost) on THIS MONTH's contribution only ---
+    let frontFeeThisMonth = dec(0);
     if (plan.frontloadFee) {
-      const isFeeActive = !plan.frontloadFee.durationMonths || monthsElapsed < plan.frontloadFee.durationMonths;
-      if (isFeeActive) {
-        if (plan.frontloadFee.percentOfContribution) {
-          totalFeeThisMonth = add(totalFeeThisMonth, mul(dec(monthlyContribution), dec(plan.frontloadFee.percentOfContribution)));
+        const isFeeActive = !plan.frontloadFee.durationMonths || monthsElapsed < plan.frontloadFee.durationMonths;
+        if (isFeeActive) {
+            if (plan.frontloadFee.percentOfContribution) {
+                frontFeeThisMonth = add(frontFeeThisMonth, mul(dec(monthlyContribution), dec(plan.frontloadFee.percentOfContribution)));
+            }
+            if (plan.frontloadFee.fixedPerMonthEUR) {
+                frontFeeThisMonth = add(frontFeeThisMonth, dec(plan.frontloadFee.fixedPerMonthEUR));
+            }
         }
-        if (plan.frontloadFee.fixedPerMonthEUR) {
-          totalFeeThisMonth = add(totalFeeThisMonth, dec(plan.frontloadFee.fixedPerMonthEUR));
-        }
-      }
     }
     
-    const cashToInvest = sub(dec(monthlyContribution), totalFeeThisMonth);
+    const cashToInvest = sub(dec(monthlyContribution), frontFeeThisMonth);
 
     const contribThisMonth: Record<string, Big> = {};
     for (const comp of components) contribThisMonth[comp.id] = dec(0);
@@ -258,6 +277,8 @@ export function simulatePlan(
       perEtf: perEtfSnapshots,
     });
     
+    const totalFeeThisMonth = add(adminFeeThisMonth, frontFeeThisMonth);
+
     driftRows.push({
       date: format(endOfMonth(parseISO(`${monthKey}-15`)), 'yyyy-MM-dd'),
       contribution: monthlyContribution,

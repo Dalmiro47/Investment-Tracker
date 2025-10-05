@@ -173,9 +173,10 @@ export default function PlanDetailPage() {
                 monthContribution: plan.monthContribution,
                 startDate: plan.startDate,
                 startMonth: plan.startMonth,
-                feePct: plan.feePct,
                 rebalanceOnContribution: plan.rebalanceOnContribution,
                 contributionSteps: plan.contributionSteps ?? [],
+                frontloadFee: plan.frontloadFee ?? {},
+                adminFee: plan.adminFee ?? {},
             };
             const res = await fetch('/api/simulate', {
                 method: 'POST',
@@ -258,8 +259,8 @@ export default function PlanDetailPage() {
       const totalFees = effectiveDriftRows.reduce((sum, row) => sum + row.fees, 0);
       const currentValue = lastRow.portfolioValue;
 
-      const gainLoss = currentValue - valueBeforePeriod - totalContributions;
-      const basis = valueBeforePeriod + totalContributions;
+      const gainLoss = currentValue - valueBeforePeriod - totalContributions - totalFees;
+      const basis = valueBeforePeriod + totalContributions + totalFees;
       const performance = basis > 0 ? gainLoss / basis : 0;
 
       // XIRR (money-weighted, annualized)
