@@ -146,9 +146,10 @@ export function simulatePlan(
       (Number(monthKey.slice(0,4)) - Number(getStartMonth(plan).slice(0,4))) * 12 +
       (Number(monthKey.slice(5,7)) - Number(getStartMonth(plan).slice(5,7)));
 
-    let contrib = dec(getContributionForMonth(plan, monthKey));
-    if (monthKey < getStartMonth(plan)) contrib = dec(0);
+    let plannedContribution = dec(getContributionForMonth(plan, monthKey));
+    if (monthKey < getStartMonth(plan)) plannedContribution = dec(0);
 
+    let contrib = plannedContribution;
     if (adminRemainder.gt(0)) {
       contrib = sub(contrib, adminRemainder);
       if (contrib.lt(0)) contrib = dec(0);
@@ -296,7 +297,7 @@ export function simulatePlan(
 
     driftRows.push({
       date: format(endOfMonth(parseISO(`${monthKey}-15`)), 'yyyy-MM-dd'),
-      contribution: getContributionForMonth(plan, monthKey),
+      contribution: Number(plannedContribution),
       fees: toNum(rowFees),
       portfolioValue: toNum(portfolioValue),
       positions: driftPositions.sort((a,b) => b.valueEUR - a.valueEUR),

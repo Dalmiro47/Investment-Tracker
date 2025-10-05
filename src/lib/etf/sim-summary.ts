@@ -1,4 +1,3 @@
-
 // src/lib/etf/sim-summary.ts
 import { parseISO, getYear } from 'date-fns';
 import type { PlanRowDrift } from '@/lib/types.etf';
