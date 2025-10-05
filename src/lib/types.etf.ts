@@ -1,3 +1,4 @@
+
 // src/lib/types.etf.ts
 import type { Timestamp } from 'firebase/firestore';
 
@@ -36,7 +37,6 @@ export interface ETFPlan {
   baseCurrency: 'EUR';
   monthContribution: number;
   contributionSteps?: ContributionStep[];
-  feePct?: number | null;
   rebalanceOnContribution?: boolean;
   startDate: string;
   startMonth: string;

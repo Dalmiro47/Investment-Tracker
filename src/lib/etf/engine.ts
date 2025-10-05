@@ -73,11 +73,6 @@ export function simulatePlan(
     let monthlyContribution = getContributionForMonth(plan, monthKey);
     let totalFeeThisMonth = dec(0);
     
-    // Legacy fee
-    if (plan.feePct) {
-      totalFeeThisMonth = add(totalFeeThisMonth, mul(dec(monthlyContribution), dec(plan.feePct)));
-    }
-
     // Front-load fee
     if (plan.frontloadFee) {
       const isFeeActive = !plan.frontloadFee.durationMonths || monthsElapsed < plan.frontloadFee.durationMonths;

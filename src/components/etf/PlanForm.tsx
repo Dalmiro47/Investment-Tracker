@@ -37,7 +37,6 @@ const planSchema = z.object({
   title: z.string().min(3, "Title must be at least 3 characters."),
   startDate: z.date(),
   monthContribution: z.coerce.number().positive("Contribution must be positive."),
-  feePct: z.coerce.number().min(0).max(1).optional().nullable(),
   rebalanceOnContribution: z.boolean().default(false),
   contributionSteps: z.array(z.object({
       month: z.string().regex(/^\d{4}-\d{2}$/, "Format must be YYYY-MM"),
@@ -99,7 +98,6 @@ export function PlanForm({
       title: "",
       startDate: new Date(),
       monthContribution: undefined as any,
-      feePct: undefined,
       rebalanceOnContribution: false,
       contributionSteps: [],
       frontloadFee: { percentOfContribution: null, fixedPerMonthEUR: null, durationMonths: null },
@@ -134,7 +132,6 @@ export function PlanForm({
       form.reset({
         ...plan,
         startDate: parseISO(plan.startDate),
-        feePct: plan.feePct ?? undefined,
         frontloadFee: plan.frontloadFee ?? { percentOfContribution: null, fixedPerMonthEUR: null, durationMonths: null },
         adminFee: plan.adminFee ?? { annualPercent: null, fixedPerMonthEUR: null, applyProRataMonthly: true },
         components: plan.components.map(c => ({...c, targetWeight: c.targetWeight ?? null}))
@@ -144,7 +141,6 @@ export function PlanForm({
             title: "",
             startDate: new Date(),
             monthContribution: undefined as any,
-            feePct: undefined,
             rebalanceOnContribution: false,
             contributionSteps: [],
             frontloadFee: { percentOfContribution: null, fixedPerMonthEUR: null, durationMonths: null },
@@ -288,27 +284,6 @@ export function PlanForm({
                     <Info className="h-4 w-4" />
                 </button>
             </div>
-              <div className="p-4 border rounded-lg">
-                <h4 className="font-medium mb-2">Legacy Fee (%)</h4>
-                <FormField
-                  control={form.control}
-                  name="feePct"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Fee per Contribution (%)</FormLabel>
-                      <FormControl>
-                        <NumericInput
-                          value={field.value == null ? null : field.value * 100}
-                          onCommit={(n) => field.onChange(n != null ? n / 100 : undefined)}
-                          placeholder="e.g., 0.1 for 0.1%"
-                        />
-                      </FormControl>
-                      <FormDescription>e.g., 0.1 for 0.1%</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
               <div className="p-4 border rounded-lg space-y-4">
                 <h4 className="font-medium">Front-load Fee (Agio)</h4>
                 <div className="grid grid-cols-2 gap-4">
