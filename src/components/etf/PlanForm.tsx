@@ -1,3 +1,4 @@
+
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,13 +25,12 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { PlusCircle, Trash2 } from "lucide-react";
+import { PlusCircle, Trash2, Info } from "lucide-react";
 import type { ETFPlan, ETFComponent, AdminFee, FrontloadFee } from "@/lib/types.etf";
 import React, { useEffect, useMemo } from "react";
 import AppDatePicker from "../ui/app-date-picker";
 import { parseISO } from 'date-fns';
 import { NumericInput } from "../ui/numeric-input";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 
 const planSchema = z.object({
@@ -76,23 +76,23 @@ const planSchema = z.object({
 
 export type PlanFormValues = z.infer<typeof planSchema>;
 
-interface PlanFormProps {
-  plan?: ETFPlan & { components: ETFComponent[] };
-  onSubmit: (values: PlanFormValues) => void;
-  onCancel: () => void;
-  isSubmitting?: boolean;
-  formId?: string;
-  useExternalFooter?: boolean;
-}
-
 export function PlanForm({
+  formId,
+  useExternalFooter,
   plan,
   onSubmit,
   onCancel,
   isSubmitting,
-  formId = "etf-plan-form",
-  useExternalFooter = false,
-}: PlanFormProps) {
+  onOpenFeeHelp,
+}: {
+  formId?: string;
+  useExternalFooter?: boolean;
+  plan?: ETFPlan & { components: ETFComponent[] };
+  onSubmit: (values: PlanFormValues) => void;
+  onCancel: () => void;
+  isSubmitting?: boolean;
+  onOpenFeeHelp?: () => void;
+}) {
   const form = useForm<PlanFormValues>({
     resolver: zodResolver(planSchema),
     defaultValues: {
@@ -271,11 +271,19 @@ export function PlanForm({
             </Button>
         </div>
         
-        <Collapsible>
-          <CollapsibleTrigger asChild>
-            <Button variant="link" className="p-0">Advanced Fees</Button>
-          </CollapsibleTrigger>
-          <CollapsibleContent className="space-y-4">
+        <div className="space-y-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-sm font-medium text-foreground">Fees (Optional)</span>
+              <button
+                type="button"
+                onClick={(e) => { e.preventDefault(); onOpenFeeHelp?.(); }}
+                className="inline-flex h-6 w-6 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                aria-label="Fees help"
+                title="How these fees are applied"
+              >
+                <Info className="h-4 w-4" />
+              </button>
+            </div>
               <div className="p-4 border rounded-lg">
                 <h4 className="font-medium mb-2">Legacy Fee (%)</h4>
                 <FormField
@@ -322,8 +330,7 @@ export function PlanForm({
                   )} />
                 </div>
               </div>
-          </CollapsibleContent>
-        </Collapsible>
+        </div>
 
 
         <div>

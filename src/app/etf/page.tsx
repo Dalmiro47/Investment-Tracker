@@ -25,6 +25,7 @@ function PlanModal({
   onSubmit,
   onCancel,
   isSubmitting,
+  onOpenFeeHelp,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -32,6 +33,7 @@ function PlanModal({
   onSubmit: (p: any) => void;
   onCancel: () => void;
   isSubmitting: boolean;
+  onOpenFeeHelp: () => void;
 }) {
   // Key forces React to remount when switching create/edit -> obliterates stale tree in Studio
   const dialogKey = editingPlan ? 'etf-dialog-edit-v5' : 'etf-dialog-create-v5';
@@ -77,6 +79,7 @@ function PlanModal({
             onSubmit={onSubmit}
             onCancel={onCancel}
             isSubmitting={isSubmitting}
+            onOpenFeeHelp={onOpenFeeHelp}
           />
         </div>
 
@@ -92,6 +95,37 @@ function PlanModal({
   );
 }
 
+function getAdvancedFeeChips(plan: ETFPlan): string[] {
+  const chips: string[] = [];
+  const fmt = (n: number) =>
+    n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 });
+
+  // Legacy fee (% per contribution)
+  const legacyPct = (plan.feePct ?? 0) * 100;
+  if (legacyPct > 0) chips.push(`Legacy ${legacyPct}%/contrib`);
+
+  // Front-load (sales)
+  const fl = plan.frontloadFee;
+  if (fl && (fl.percentOfContribution != null || fl.fixedPerMonthEUR != null || fl.durationMonths != null)) {
+    const parts: string[] = [];
+    if (fl.percentOfContribution != null) parts.push(`${(fl.percentOfContribution * 100).toFixed(2)}% contrib`);
+    if (fl.fixedPerMonthEUR != null) parts.push(`${fmt(fl.fixedPerMonthEUR)}/mo`);
+    if (fl.durationMonths != null) parts.push(`${fl.durationMonths} mo`);
+    chips.push(`Sales ${parts.join(' · ')}`);
+  }
+
+  // Admin
+  const af = plan.adminFee;
+  if (af && (af.annualPercent != null || af.fixedPerMonthEUR != null)) {
+    const parts: string[] = [];
+    if (af.annualPercent != null) parts.push(`${(af.annualPercent * 100).toFixed(2)}%/yr NAV`);
+    if (af.fixedPerMonthEUR != null) parts.push(`${fmt(af.fixedPerMonthEUR)}/mo`);
+    chips.push(`Admin ${parts.join(' · ')}`);
+  }
+
+  return chips;
+}
+
 
 export default function EtfPlansPage() {
     const { user } = useAuth();
@@ -103,6 +137,7 @@ export default function EtfPlansPage() {
     const [editingPlan, setEditingPlan] = useState<(ETFPlan & { components: ETFComponent[] }) | null>(null);
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
     const [infoDialogPlan, setInfoDialogPlan] = useState<ETFPlan | null>(null);
+    const [isFeeInfoOpen, setFeeInfoOpen] = useState(false);
 
     const fetchPlans = useCallback(async (uid: string) => {
         setLoading(true);
@@ -217,6 +252,8 @@ export default function EtfPlansPage() {
                         {plans.map(plan => {
                             const hasStepUps = plan.contributionSteps && plan.contributionSteps.length > 0;
                             const sortedSteps = hasStepUps ? [...plan.contributionSteps!].sort((a,b) => a.month.localeCompare(b.month)) : [];
+                            const chips = getAdvancedFeeChips(plan);
+                            const hasAdvanced = chips.length > 0;
                             
                             return (
                              <Card key={plan.id} className="flex flex-col">
@@ -260,25 +297,32 @@ export default function EtfPlansPage() {
                                                 </div>
                                             </div>
                                         )}
-                                        <div className="flex justify-between">
-                                            {(plan.frontloadFee || plan.adminFee) ? (
+                                        <div className="flex justify-between items-start">
+                                            <span className="pt-px">{hasAdvanced ? 'Fees:' : 'Broker Fee:'}</span>
+                                            <div className="flex items-center gap-2 flex-wrap justify-end max-w-[70%]">
+                                                {hasAdvanced ? (
                                                 <>
-                                                <span>Advanced Fees:</span>
-                                                <span className="font-medium text-foreground">
-                                                    {[
-                                                        plan.frontloadFee?.percentOfContribution != null ? `${(plan.frontloadFee.percentOfContribution*100).toFixed(2)}% sales` : null,
-                                                        plan.frontloadFee?.fixedPerMonthEUR ? `€${plan.frontloadFee.fixedPerMonthEUR}/mo sales` : null,
-                                                        plan.adminFee?.annualPercent != null ? `${(plan.adminFee.annualPercent*100).toFixed(2)}% admin` : null,
-                                                        plan.adminFee?.fixedPerMonthEUR ? `€${plan.adminFee.fixedPerMonthEUR}/mo admin` : null,
-                                                    ].filter(Boolean).join(' · ')}
-                                                </span>
+                                                    {chips.map((c, i) => (
+                                                    <span
+                                                        key={i}
+                                                        className="inline-flex items-center rounded-md bg-muted/60 px-2 py-0.5 text-xs font-medium text-foreground"
+                                                    >
+                                                        {c}
+                                                    </span>
+                                                    ))}
+                                                    <button
+                                                    type="button"
+                                                    aria-label="Advanced fee details"
+                                                    onClick={() => setFeeInfoOpen(true)}
+                                                    className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                                                    >
+                                                    <Info className="h-4 w-4" />
+                                                    </button>
                                                 </>
-                                            ) : (
-                                                <>
-                                                <span>Broker Fee:</span> 
+                                                ) : (
                                                 <span className="font-medium text-foreground">{((plan.feePct ?? 0) * 100).toFixed(2)}%</span>
-                                                </>
-                                            )}
+                                                )}
+                                            </div>
                                         </div>
                                         <div className="flex justify-between">
                                             <span>Rebalancing Strategy:</span> <span className="font-medium text-foreground">{plan.rebalanceOnContribution ? 'On Contribution' : 'None'}</span>
@@ -315,6 +359,7 @@ export default function EtfPlansPage() {
                 onSubmit={handleFormSubmit}
                 onCancel={closeDialog}
                 isSubmitting={isSubmitting}
+                onOpenFeeHelp={() => setIsFeeInfoOpen(true)}
             />
 
             <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
@@ -338,6 +383,50 @@ export default function EtfPlansPage() {
                             ))}
                         </TableBody>
                     </Table>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isFeeInfoOpen} onOpenChange={setFeeInfoOpen}>
+                <DialogContent className="w-[96vw] max-w-3xl p-0">
+                    <DialogHeader className="px-6 pt-6 pb-2">
+                    <DialogTitle>Advanced Fees — How they are applied</DialogTitle>
+                    <DialogDescription>
+                        These fees affect the ETF simulation each month.
+                    </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="px-6 pb-6 max-h-[65vh] overflow-y-auto space-y-6 text-[0.95rem] leading-7">
+                    <section className="space-y-2">
+                        <h4 className="font-semibold">Legacy Fee (%)</h4>
+                        <p>
+                        A per-contribution brokerage fee as a percentage. Applied <em>each time</em> your monthly
+                        contribution is invested. Example: <code>0.1%</code> → €0.10 taken out of every €100 contributed.
+                        </p>
+                    </section>
+
+                    <section className="space-y-2">
+                        <h4 className="font-semibold">Front-load Fee (Sales Cost)</h4>
+                        <ul className="list-disc pl-6 space-y-1">
+                        <li><strong>% of Contribution</strong> — percentage taken from each monthly contribution.</li>
+                        <li><strong>Fixed per Month (€)</strong> — flat amount charged monthly (usually for a limited <em>Duration (months)</em>).</li>
+                        <li>If both are set, both apply. The fixed amount stops after the configured duration.</li>
+                        </ul>
+                        <p className="text-muted-foreground">These costs are deducted from the cash before buying ETFs.</p>
+                    </section>
+
+                    <section className="space-y-2">
+                        <h4 className="font-semibold">Admin Fee (Management/Platform)</h4>
+                        <ul className="list-disc pl-6 space-y-1">
+                        <li><strong>Annual % of NAV</strong> — converted to a monthly rate and applied to portfolio value (NAV) each month.</li>
+                        <li><strong>Fixed per Month (€)</strong> — flat monthly charge.</li>
+                        <li>If both are set, both apply.</li>
+                        </ul>
+                    </section>
+
+                    <p className="text-muted-foreground">
+                        Notes: Prices use Yahoo <em>adjusted close</em> (dividends reinvested). Taxes and spreads are not modeled.
+                    </p>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>
