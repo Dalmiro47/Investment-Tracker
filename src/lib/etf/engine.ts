@@ -8,16 +8,10 @@ import { getStartMonth } from '@/lib/date-helpers';
 
 export const ENGINE_SCHEMA_VERSION = 3;
 
-type PriceMap = Record<string, Record<string, ETFPricePoint>>;
-type FXMap = Record<string, FXRatePoint>;
-type EngineOptions = { 
-  allocationMode?: 'fixed' | 'rebalance';
-  endMonth?: string;
-};
-
 function ym(dateStr: string) { return dateStr.slice(0,7); }
 function yOf(ymKey: string) { return Number(ymKey.slice(0,4)); }
 function mOf(ymKey: string) { return Number(ymKey.slice(5,7)); } // 1..12
+
 
 const monthsBetweenInclusive = (start: string, end: string) => {
   const out: string[] = [];
@@ -98,6 +92,12 @@ export function simulatePlan(
   for (const monthKey of months) {
     if (monthKey < planStartMonth) continue;
 
+    if (yOf(monthKey) !== currentYear) {
+      currentYear = yOf(monthKey);
+      adminYtdFixed = 0;
+      frontYtdFixed = 0;
+    }
+
     const unitsStartByEtf: Record<string, Big> = {};
     for (const comp of components) unitsStartByEtf[comp.id] = unitsByEtf[comp.id];
 
@@ -116,75 +116,25 @@ export function simulatePlan(
     }
     if (!canProceed) continue;
 
-    // NAV before new contribution
+    // ----- 1) Accrue fixed fees this month (do NOT deduct yet) -----
+    if (adminFixedPerMonth > 0) adminYtdFixed += adminFixedPerMonth;
+
+    if (frontFixedPerMonth > 0 && (frontDuration === 0 || frontMonthsUsed < frontDuration)) {
+      frontYtdFixed += frontFixedPerMonth;
+      frontMonthsUsed += 1;
+    }
+
     const preValue = components.reduce(
       (s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))),
       dec(0)
     );
-
-    // --- ADMIN FEE (fixed €/mo + annual % / 12)  — reduces NAV (sell units pro-rata)
-    const admin = plan.adminFee ?? {};
-    const adminFixed = Number(admin.fixedPerMonthEUR ?? 0);
-    const annualPctRaw = Number(admin.annualPercent ?? 0);
-    const annualPct = annualPctRaw > 1 ? annualPctRaw / 100 : annualPctRaw; // accept 2 or 0.02
-    const monthlyPct = admin.applyProRataMonthly === false ? 0 : (annualPct / 12);
-
-    let adminFeeThisMonth = dec(0);
-    if (monthlyPct > 0 && preValue.gt(0)) adminFeeThisMonth = add(adminFeeThisMonth, mul(preValue, dec(monthlyPct)));
-    if (adminFixed > 0)                   adminFeeThisMonth = add(adminFeeThisMonth, dec(adminFixed));
-
-    // pay admin fee by SELLING units pro-rata; remainder hits contribution
-    let adminRemainder = dec(0);
-    if (adminFeeThisMonth.gt(0)) {
-      if (preValue.gt(0)) {
-        const takeFromNav = preValue.gte(adminFeeThisMonth) ? adminFeeThisMonth : preValue;
-        const ratio = div(takeFromNav, preValue); // 0..1
-        for (const c of components) {
-          const id = c.id;
-          const px = priceNowByEtf[id];
-          if (!px || px.lte(0)) continue;
-          const val   = mul(unitsByEtf[id], px);
-          const sellV = mul(val, ratio);
-          const sellU = div(sellV, px);
-          unitsByEtf[id] = unitsByEtf[id].gt(sellU) ? sub(unitsByEtf[id], sellU) : dec(0);
-        }
-        adminRemainder = sub(adminFeeThisMonth, takeFromNav);
-      } else {
-        adminRemainder = adminFeeThisMonth; // no holdings yet
-      }
-    }
-
-    // --- FRONT-LOAD on contribution ONLY (within duration) ---
-    const fl = plan.frontloadFee ?? {};
-    const monthsElapsed =
-      (Number(monthKey.slice(0,4)) - Number(planStartMonth.slice(0,4))) * 12 +
-      (Number(monthKey.slice(5,7)) - Number(planStartMonth.slice(5,7)));
-
+    
     let plannedContribution = dec(getContributionForMonth(plan, monthKey));
     if (monthKey < planStartMonth) plannedContribution = dec(0);
 
-    // admin remainder eats the cash first
-    let contrib = plannedContribution;
-    if (adminRemainder.gt(0)) {
-      contrib = sub(contrib, adminRemainder);
-      if (contrib.lt(0)) contrib = dec(0);
-    }
-
-    let frontFeeThisMonth = dec(0);
-    const inWindow = fl.durationMonths == null ? true : (monthsElapsed < fl.durationMonths);
-    const pctRaw = Number(fl.percentOfContribution ?? 0);
-    const pct    = pctRaw > 1 ? pctRaw / 100 : pctRaw;
-
-    if (inWindow) {
-      if (pct > 0) frontFeeThisMonth = add(frontFeeThisMonth, mul(contrib, dec(pct)));
-      if (Number(fl.fixedPerMonthEUR ?? 0) > 0)
-        frontFeeThisMonth = add(frontFeeThisMonth, dec(fl.fixedPerMonthEUR!));
-    }
-    
-    // cash to invest this month (>= 0)
-    let cashToInvest = sub(contrib, frontFeeThisMonth);
+    let cashToInvest = plannedContribution;
     if (cashToInvest.lt(0)) cashToInvest = dec(0);
-    
+
     const contribThisMonth: Record<string, Big> = {};
     for (const comp of components) contribThisMonth[comp.id] = dec(0);
     
@@ -219,7 +169,7 @@ export function simulatePlan(
                 const priceNow = priceNowByEtf[c.id];
                 if (priceNow.gt(0)) {
                     const buyUnits = div(cashForSymbol, priceNow);
-                    unitsByEtf[c.id] = add(unitsByEtf[c.id], buyUnits);
+                    unitsByEtf[n.id] = add(unitsByEtf[n.id], buyUnits);
                 }
             });
         }
@@ -230,9 +180,47 @@ export function simulatePlan(
             const priceNow = priceNowByEtf[c.id];
             if (priceNow.gt(0)) {
                 const buyUnits = div(cashForSymbol, priceNow);
-                unitsByEtf[c.id] = add(unitsByEtf[c.id], buyUnits);
+                unitsByEtf[n.id] = add(unitsByEtf[n.id], buyUnits);
             }
         });
+    }
+
+
+    // ----- 2) If this is December OR last simulated month -> APPLY the YTD fees -----
+    const isDecember = mOf(monthKey) === 12;
+    const isLastMonth = monthKey === months[months.length - 1];
+    let feesAppliedThisMonth = 0;
+
+    if (isDecember || isLastMonth) {
+      const ytdTotal = adminYtdFixed + frontYtdFixed;
+
+      if (ytdTotal > 0) {
+        // Sell units pro-rata to pay the ytd fees
+        const valueNow = components.reduce((sum, c) => {
+          const px = priceNowByEtf[c.id] ?? dec(0);
+          return add(sum, mul(unitsByEtf[c.id], px));
+        }, dec(0));
+
+        // Pay from NAV up to available value
+        const payFromNav = Math.min(Number(valueNow), ytdTotal);
+        if (payFromNav > 0 && Number(valueNow) > 0) {
+          const ratio = payFromNav / Number(valueNow); // 0..1
+          for (const c of components) {
+            const px = Number(priceNowByEtf[c.id] ?? dec(0));
+            if (px <= 0) continue;
+            const holdingVal = Number(unitsByEtf[c.id]) * px;
+            const sellVal = holdingVal * ratio;
+            const sellUnits = sellVal / px;
+            const newUnits = Math.max(0, Number(unitsByEtf[c.id]) - sellUnits);
+            (unitsByEtf as any)[c.id] = dec(newUnits);
+          }
+          feesAppliedThisMonth += payFromNav;
+        }
+
+        // Reset YTD buckets for the new year
+        adminYtdFixed = 0;
+        frontYtdFixed = 0;
+      }
     }
 
 
@@ -280,8 +268,6 @@ export function simulatePlan(
       prevPriceByEtf[id] = priceNow;
     }
     
-    // Row output: plain numbers (no Big/Decimal)
-    const totalFeesThisMonth = add(adminFeeThisMonth, frontFeeThisMonth);
     const portfolioValue = components.reduce(
       (s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))),
       dec(0)
@@ -314,17 +300,36 @@ export function simulatePlan(
       perEtf: perEtfSnapshots,
     });
     
+    const monthFees = Number(feesAppliedThisMonth);
+    const nav = Number(portfolioValue);
+
+    // --- DEBUG: assert boundary month has fees if plan has fixed fees ---
+    const hasFixedFees = Number(plan.adminFee?.fixedPerMonthEUR ?? 0) > 0
+      || Number(plan.frontloadFee?.fixedPerMonthEUR ?? 0) > 0;
+    
+    if (isBoundary && hasFixedFees && monthFees === 0) {
+      console.error('[SIM][BUG] Boundary month has 0 fees', {
+        monthKey, adminFixed: plan.adminFee?.fixedPerMonthEUR ?? 0,
+        frontFixed: plan.frontloadFee?.fixedPerMonthEUR ?? 0
+      });
+    }
+
     driftRows.push({
       date: format(endOfMonth(parseISO(`${monthKey}-15`)), 'yyyy-MM-dd'),
       contribution: Number(plannedContribution),
-      fees: Number(totalFeesThisMonth),
-      portfolioValue: Number(portfolioValue),
+      fees: monthFees,
+      portfolioValue: nav,
       positions: driftPositions.sort((a,b) => b.valueEUR - a.valueEUR),
     });
   }
+
+  const sumRowFees = driftRows.reduce((s, r) => s + (r.fees || 0), 0);
+  console.log('[SIM] rows fee sum =', sumRowFees.toFixed(2));
   
   return {
     performance: performanceRows.filter(r => r.dateKey >= planStartMonth),
     drift: driftRows.filter(r => r.date.slice(0,7) >= planStartMonth),
   };
 }
+
+    
