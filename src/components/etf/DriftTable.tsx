@@ -20,6 +20,8 @@ type DriftTableProps = {
   onYearFilterChange: (year: string) => void;
 };
 
+const sumBy = <T,>(arr: T[], f: (x: T) => number) => arr.reduce((s, x) => s + (f(x) || 0), 0);
+
 export default function DriftTable({ rows, components, availableYears, yearFilter, onYearFilterChange }: DriftTableProps) {
   const [etfFilter, setEtfFilter] = useState<string>('ALL');
 
@@ -27,6 +29,12 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
     () => [...rows].sort((a, b) => b.date.localeCompare(a.date)),
     [rows]
   );
+
+  const driftTotals = useMemo(() => ({
+    contribution: sumBy(rowsDesc, r => r.contribution),
+    fees: sumBy(rowsDesc, r => r.fees),
+    value: rowsDesc.length > 0 ? rowsDesc[0].portfolioValue : 0,
+  }), [rowsDesc]);
   
   const rowsForCsv = rowsDesc;
 
@@ -37,15 +45,16 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
 
   const handleExportCsv = useCallback(() => {
     const headers = [
-      'Date','Contribution(EUR)','PortfolioValue(EUR)',
+      'Date','Contribution(EUR)', 'Fees(EUR)', 'PortfolioValue(EUR)',
       ...visibleComponents.map(c => `${c.name} Value(EUR)`),
       ...visibleComponents.map(c => `${c.name} Drift(%)`),
     ];
   
-    const rowsOut: (string|number)[][] = rowsForCsv.map(row => {
+    const dataRows: (string|number)[][] = rowsForCsv.map(row => {
       const vals: (string|number)[] = [
         row.date.slice(0,10),
         row.contribution.toFixed(2),
+        (row.fees ?? 0).toFixed(2),
         row.portfolioValue.toFixed(2),
       ];
       visibleComponents.forEach(c => {
@@ -54,15 +63,22 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
       });
       visibleComponents.forEach(c => {
         const pos = row.positions.find(p => p.symbol === c.ticker);
-        // convert to percentage points for the CSV
         const driftPct = (pos?.driftPct ?? 0) * 100;
         vals.push(driftPct.toFixed(4));
       });
       return vals;
     });
+
+    dataRows.push([
+        'TOTAL',
+        driftTotals.contribution.toFixed(2),
+        driftTotals.fees.toFixed(2),
+        driftTotals.value.toFixed(2),
+        ...Array(visibleComponents.length * 2).fill('')
+    ]);
   
-    downloadCSV('drift.csv', headers, rowsOut);
-  }, [rowsForCsv, visibleComponents]);
+    downloadCSV('drift.csv', headers, dataRows);
+  }, [rowsForCsv, visibleComponents, driftTotals]);
 
   if (rows.length === 0) {
     return (
@@ -92,6 +108,7 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
                         <div className="text-sm space-y-3 py-4">
                             <div><h4 className="font-semibold">Date</h4><p className="text-muted-foreground">The end of each month in the simulation period.</p></div>
                             <div><h4 className="font-semibold">Contribution</h4><p className="text-muted-foreground">The fixed amount invested that month before any fees.</p></div>
+                            <div><h4 className="font-semibold">Fees (€)</h4><p className="text-muted-foreground">Total fees applied for the period. In this model, fees are accrued and applied at year-end, so this will only be non-zero in December or the final month of a partial year.</p></div>
                             <div><h4 className="font-semibold">Value</h4><p className="text-muted-foreground">The total market value of your entire portfolio at the end of the month.</p></div>
                             <div><h4 className="font-semibold">[ETF] Value</h4><p className="text-muted-foreground">The portion of your total portfolio value held in that specific ETF.</p></div>
                             <div><h4 className="font-semibold">[ETF] Drift</h4><p className="text-muted-foreground">How far the ETF&apos;s actual weight is from its target weight. A positive (green) drift means it&apos;s overweight; a negative (red) drift means it&apos;s underweight.</p></div>
@@ -128,6 +145,7 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
                         <TableRow>
                             <TableHead>Date</TableHead>
                             <TableHead className="text-right">Contribution</TableHead>
+                            <TableHead className="text-right">Fees (€)</TableHead>
                             <TableHead className="text-right">Value</TableHead>
                             {visibleComponents.map(c => <TableHead key={`v-${c.id}`} className="text-right">{c.name} Value</TableHead>)}
                             {visibleComponents.map(c => <TableHead key={`d-${c.id}`} className="text-right">{c.name} Drift</TableHead>)}
@@ -138,6 +156,11 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
                             <TableRow key={row.date}>
                                 <TableCell>{format(parseISO(row.date), 'MMM yyyy')}</TableCell>
                                 <TableCell className="text-right font-mono">{formatCurrency(row.contribution)}</TableCell>
+                                <TableCell className="text-right font-mono">
+                                    {(row.fees ?? 0) > 0 
+                                      ? <span className="text-red-500 font-medium">{formatCurrency(row.fees)}</span>
+                                      : '—'}
+                                </TableCell>
                                 <TableCell className="text-right font-mono font-bold">{formatCurrency(row.portfolioValue)}</TableCell>
                                 {visibleComponents.map(comp => {
                                     const pos = row.positions.find(p => p.symbol === comp.ticker);
@@ -151,11 +174,18 @@ export default function DriftTable({ rows, components, availableYears, yearFilte
                             </TableRow>
                         ))}
                     </TableBody>
+                     <tfoot className="sticky bottom-0 bg-muted/30">
+                        <tr className="border-t font-medium">
+                            <td className="p-2">Total ({yearFilter === 'all' ? 'All Time' : yearFilter})</td>
+                            <td className="p-2 text-right font-mono">{formatCurrency(driftTotals.contribution)}</td>
+                            <td className="p-2 text-right font-mono">{formatCurrency(driftTotals.fees)}</td>
+                            <td className="p-2 text-right font-mono">{formatCurrency(driftTotals.value)}</td>
+                            <td colSpan={visibleComponents.length * 2}></td>
+                        </tr>
+                    </tfoot>
                 </Table>
             </div>
         </CardContent>
     </Card>
   );
 }
-
-    

@@ -181,6 +181,9 @@ export function PerformanceTable({ rows, components, availableYears, yearFilter,
             </tbody>
           </table>
         </div>
+         <p className="mt-2 text-xs text-muted-foreground">
+          Prices are “adjusted close” (dividends reinvested). Fees are not shown here; they’re applied in <b>Drift</b> at year-end and reflected in the <b>End of Period Value</b>.
+        </p>
       </CardContent>
     </Card>
   );
