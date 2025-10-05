@@ -434,7 +434,17 @@ function PortfolioSummaryImpl({
                         <CardDescription>{description}</CardDescription>
                     </div>
                     <div className="flex items-center gap-2">
-                         <Select onValueChange={handleYearChange} value={yearFilter.kind === 'year' ? String(yearFilter.year) : 'all'}>
+                         <Select
+                          value={yearFilter.kind === 'year' ? String(yearFilter.year) : 'all'}
+                          onValueChange={(val) => {
+                            if (val === 'all') {
+                              onYearFilterChange({ kind: 'all', mode: yearFilter.mode });
+                            } else {
+                              const yr = Number(val);
+                              onYearFilterChange({ kind: 'year', year: yr, mode: yearFilter.mode });
+                            }
+                          }}
+                        >
                             <SelectTrigger className="w-[180px]">
                                 <SelectValue placeholder="Select Tax Year" />
                             </SelectTrigger>
@@ -641,7 +651,3 @@ function PortfolioSummaryImpl({
 }
 
 export default forwardRef(PortfolioSummaryImpl);
-
-    
-    
-    
