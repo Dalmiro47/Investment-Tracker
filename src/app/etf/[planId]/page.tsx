@@ -31,7 +31,6 @@ import PerformanceSummary from '@/components/etf/PerformanceSummary';
 import AggregatedPerformanceTable from '@/components/etf/AggregatedPerformanceTable';
 import { cn } from '@/lib/utils';
 
-export const runtime = 'nodejs';
 
 interface MissingPrice {
     month: string;
@@ -175,8 +174,8 @@ export default function PlanDetailPage() {
                 startMonth: plan.startMonth,
                 rebalanceOnContribution: plan.rebalanceOnContribution,
                 contributionSteps: plan.contributionSteps ?? [],
-                frontloadFee: plan.frontloadFee ?? {},
-                adminFee: plan.adminFee ?? {},
+                frontloadFee: plan.frontloadFee,
+                adminFee: plan.adminFee,
             };
             const res = await fetch('/api/simulate', {
                 method: 'POST',
@@ -247,38 +246,42 @@ export default function PlanDetailPage() {
     }, [simData, yearFilter]);
 
     const kpis = useMemo(() => {
-      if (effectiveDriftRows.length === 0 || !simData || perfRowsPeriod.length === 0) return null;
+        if (effectiveDriftRows.length === 0 || !simData) return null;
 
-      const firstRowInPeriod = effectiveDriftRows[0];
-      const before = simData.drift.filter(row => row.date < firstRowInPeriod.date);
-      const valueBeforePeriod = before[before.length - 1]?.portfolioValue ?? 0;
+        const firstRowInPeriod = effectiveDriftRows[0];
+        const before = simData.drift.filter(row => row.date < firstRowInPeriod.date);
+        const valueBeforePeriod = before[before.length - 1]?.portfolioValue ?? 0;
 
-      const lastRow = effectiveDriftRows[effectiveDriftRows.length - 1];
-      const totalContributions = effectiveDriftRows.reduce((sum, row) => sum + row.contribution, 0);
-      const totalFees = effectiveDriftRows.reduce((sum, row) => sum + row.fees, 0);
-      const currentValue = lastRow.portfolioValue;
+        const lastRow = effectiveDriftRows[effectiveDriftRows.length - 1];
+        const totalContributions = effectiveDriftRows.reduce((sum, row) => sum + (row.contribution ?? 0), 0);
+        const totalFees = effectiveDriftRows.reduce((sum, row) => sum + (row.fees ?? 0), 0);
+        const currentValue = lastRow.portfolioValue;
 
-      const gainLoss = currentValue - valueBeforePeriod - totalContributions - totalFees;
-      const basis = valueBeforePeriod + totalContributions + totalFees;
-      const performance = basis > 0 ? gainLoss / basis : 0;
+        // Fees are already taken out of NAV. Gain/Loss is vs. invested capital.
+        const gainLoss = currentValue - valueBeforePeriod - totalContributions;
 
-      const feesByMonth = new Map<string, number>();
-      effectiveDriftRows.forEach(dr => {
-        const m = dr.date.slice(0,7);
-        feesByMonth.set(m, (feesByMonth.get(m) ?? 0) + (dr.fees ?? 0));
-      });
+        // Basis is invested capital, not net of fees.
+        const basis = valueBeforePeriod + totalContributions;
+        
+        const performance = basis > 0 ? gainLoss / basis : 0;
+        
+        const cashflows: { date: Date; amount: number }[] = [];
+        for (const r of effectiveDriftRows) {
+            if ((r.contribution ?? 0) > 0) {
+                cashflows.push({ date: new Date(r.date), amount: -(r.contribution ?? 0) });
+            }
+        }
+        if (currentValue > 0) {
+          cashflows.push({ date: new Date(lastRow.date), amount: currentValue });
+        }
 
-      const cf = perfRowsPeriod.map(r => {
-        const contrib = r.perEtf.reduce((s, e) => s + Number(e.contribThisMonth), 0);
-        const fees = feesByMonth.get(r.dateKey) ?? 0;
-        return { date: new Date(`${r.dateKey}-28`), amount: -(contrib + fees) };
-      });
-      if (currentValue > 0) cf.push({ date: new Date(`${lastRow.date.slice(0,10)}`), amount: currentValue });
-      const xirrValue =
-        (cf.some(c => c.amount < 0) && cf.some(c => c.amount > 0)) ? xirr(cf) : null;
+        const xirrValue =
+            (cashflows.some(c => c.amount < 0) && cashflows.some(c => c.amount > 0))
+            ? xirr(cashflows)
+            : null;
 
-      return { totalContributions, totalFees, currentValue, gainLoss, performance, xirrValue };
-    }, [effectiveDriftRows, simData, perfRowsPeriod]);
+        return { totalContributions, totalFees, currentValue, gainLoss, performance, xirrValue };
+    }, [effectiveDriftRows, simData]);
 
 
     const availableYears = useMemo(() => {
@@ -351,10 +354,10 @@ export default function PlanDetailPage() {
                                   <DialogTitle>Simple % vs XIRR — what’s the difference?</DialogTitle>
                                 </DialogHeader>
                                 <div className="space-y-3 text-sm">
-                                  <p><b>Simple %</b> = (End Value − (Contributions + Fees)) ÷ (Contributions + Fees) for the selected period.</p>
-                                  <p><b>XIRR</b> is the money-weighted, annualized return that accounts for <i>when</i> each contribution/fee happened. We build monthly cash flows
-                                     as outflows (contribution + fee) and a final inflow equal to the end value.</p>
-                                  <p>They differ whenever contributions are spread over time (i.e., regular investing). XIRR captures compounding with cash-flow timing; Simple % is a quick ratio.</p>
+                                   <p><b>Simple %</b> = (End Value − Contributions) ÷ Contributions for the selected period.</p>
+                                   <p><b>XIRR</b> is the money-weighted, annualized return based on cash-flow timing.
+                                      We build monthly cash flows using <i>contributions only</i> (outflows) and a final inflow equal to the end value.</p>
+                                   <p>Fees are deducted from NAV inside the simulation, so they are already reflected in End Value.</p>
                                 </div>
                               </DialogContent>
                             </Dialog>

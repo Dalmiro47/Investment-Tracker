@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import { getPricePointsServer, getFXRatesServer } from '@/lib/firestore.etf.server';
-import { simulatePlan } from '@/lib/etf/engine';
+import { simulatePlan, ENGINE_SCHEMA_VERSION } from '@/lib/etf/engine';
 import type { SimulationRows } from '@/lib/types.etf';
 import { getStartMonth } from '@/lib/date-helpers';
 import { adminDb } from '@/lib/firebase-admin';
@@ -115,28 +115,13 @@ export async function POST(req: Request) {
     const fx = needsFx ? await getFXRatesServer(uid, startISO, endISO) : {};
 
     const simulationResult: SimulationRows = simulatePlan(plan, components, perSymbol, fx, { endMonth: lastCommonMonth });
+    
+    const rowsFeeSum = simulationResult.drift.reduce((s, r) => s + (r.fees || 0), 0);
+    console.log('[ROUTE] rowsFeeSum =', rowsFeeSum);
 
-    const simStartMonth = startMonth;
-    const wireDrift = simulationResult.drift
-      .filter(row => row.date.slice(0, 7) >= simStartMonth)
-      .map(row => JSON.parse(JSON.stringify(row)));
-
-    if (wireDrift.length && wireDrift[0].date.slice(0,7) !== startMonth) {
-      console.warn('Invariant violation: first simulation row month does not match plan start month.', { 
-          planStartDate: plan.startDate,
-          planStartMonth: getStartMonth(plan),
-          derivedStartMonth: startMonth, 
-          firstRowMonth: wireDrift[0].date.slice(0,7) 
-      });
-    }
-
-    try {
-        const summary = buildSimSummary(wireDrift, startMonth, { planId: plan.id, title: plan.title, baseCurrency: plan.baseCurrency });
-        const ref = adminDb.doc(`users/${uid}/etfPlans/${plan.id}/latest_sim_summary/latest`);
-        await ref.set(summary, { merge: true });
-    } catch (e) {
-        console.warn('Failed to persist latest ETF sim summary:', e);
-    }
+    const summary = buildSimSummary(simulationResult.drift, { ...plan, planId: plan.id });
+    const ref = adminDb.doc(`users/${uid}/etfPlans/${plan.id}/latest_sim_summary/latest`);
+    await ref.set(summary, { merge: false });
 
     return NextResponse.json({
         ok: true,
@@ -144,7 +129,7 @@ export async function POST(req: Request) {
         rows: simulationResult
     });
   } catch (e: any) {
-    console.error('simulate API error:', e);
+    console.error('[SIM ERROR]', e?.stack || e?.message || e);
     return NextResponse.json({ ok: false, error: String(e?.message ?? 'An unknown error occurred during simulation.') }, { status: 500 });
   }
 }

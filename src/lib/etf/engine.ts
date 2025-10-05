@@ -6,12 +6,12 @@ import { dec, add, sub, mul, div, toNum, EPS } from '@/lib/money';
 import Big from 'big.js';
 import { getStartMonth } from '@/lib/date-helpers';
 
-type PriceMap = Record<string, Record<string, ETFPricePoint>>;
-type FXMap = Record<string, FXRatePoint>;
-type EngineOptions = { 
-  allocationMode?: 'fixed' | 'rebalance';
-  endMonth?: string;
-};
+export const ENGINE_SCHEMA_VERSION = 3;
+
+function ym(dateStr: string) { return dateStr.slice(0,7); }
+function yOf(ymKey: string) { return Number(ymKey.slice(0,4)); }
+function mOf(ymKey: string) { return Number(ymKey.slice(5,7)); } // 1..12
+
 
 const monthsBetweenInclusive = (start: string, end: string) => {
   const out: string[] = [];
@@ -23,6 +23,7 @@ const monthsBetweenInclusive = (start: string, end: string) => {
   }
   return out;
 };
+
 
 export function getContributionForMonth(plan: ETFPlan, month: string): number {
   if (month < getStartMonth(plan)) return 0;
@@ -41,11 +42,11 @@ export function getContributionForMonth(plan: ETFPlan, month: string): number {
 export function simulatePlan(
   plan: ETFPlan,
   components: ETFComponent[],
-  monthlyByMonth: PriceMap, 
-  fxByMonth: FXMap,         
-  options: EngineOptions = {}
+  monthlyByMonth: Record<string, Record<string, ETFPricePoint>>, 
+  fxByMonth: Record<string, FXRatePoint>,         
+  options: { endMonth?: string; } = {}
 ): SimulationRows {
-  const allocationMode = options.allocationMode ?? (plan.rebalanceOnContribution ? 'rebalance' : 'fixed');
+  const allocationMode = plan.rebalanceOnContribution ? 'rebalance' : 'fixed';
   
   const planStartMonth = getStartMonth(plan);
   const endMonth = options.endMonth ?? new Date().toISOString().slice(0,7);
@@ -59,12 +60,19 @@ export function simulatePlan(
   const cumContribByEtf: Record<string, Big> = {};
   const prevPriceByEtf: Record<string, Big | undefined> = {};
 
+  let adminYtdFixed = 0;
+  let frontYtdFixed = 0;
+  let frontMonthsUsed = 0;
+  const frontDuration = Number(plan.frontloadFee?.durationMonths ?? 0);
+  const adminFixedPerMonth = Number(plan.adminFee?.fixedPerMonthEUR ?? 0);
+  const frontFixedPerMonth = Number(plan.frontloadFee?.fixedPerMonthEUR ?? 0);
+  let currentYear = yOf(planStartMonth);
+
   components.forEach(c => {
     unitsByEtf[c.id] = dec(0);
     cumContribByEtf[c.id] = dec(0);
     prevPriceByEtf[c.id] = undefined;
 
-    // Preload previous month's price if available for first month return calc
     const prevMonthDate = subMonthsFns(parseISO(`${planStartMonth}-01`), 1);
     const prevMonthStr = format(prevMonthDate, 'yyyy-MM');
     const basePrice = getBasePrice(c.ticker, prevMonthStr);
@@ -82,7 +90,11 @@ export function simulatePlan(
   }
 
   for (const monthKey of months) {
-    if (monthKey < planStartMonth) continue;
+    if (yOf(monthKey) !== currentYear) {
+      currentYear = yOf(monthKey);
+      adminYtdFixed = 0;
+      frontYtdFixed = 0;
+    }
 
     const unitsStartByEtf: Record<string, Big> = {};
     for (const comp of components) unitsStartByEtf[comp.id] = unitsByEtf[comp.id];
@@ -101,132 +113,101 @@ export function simulatePlan(
       priceNowByEtf[comp.id] = price;
     }
     if (!canProceed) continue;
-
-    // NAV before new contribution
-    const preValue = components.reduce((s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))), dec(0));
     
-    // ---------- 1) ADMIN FEE (reduces NAV) ----------
-    const admin = plan.adminFee ?? {};
-    const adminFixed = Number(admin.fixedPerMonthEUR ?? 0);
-
-    const annualPctRaw = Number(admin.annualPercent ?? 0);
-    const annualPct = annualPctRaw > 1 ? annualPctRaw / 100 : annualPctRaw;
-    const monthlyPct = admin.applyProRataMonthly === false ? 0 : (annualPct / 12);
-
-    let adminFeeThisMonth = dec(0);
-    if (monthlyPct > 0 && preValue.gt(0)) {
-      adminFeeThisMonth = add(adminFeeThisMonth, mul(preValue, dec(monthlyPct)));
-    }
-    if (adminFixed > 0) {
-      adminFeeThisMonth = add(adminFeeThisMonth, dec(adminFixed));
-    }
-
-    let adminRemainder = dec(0);
-    if (adminFeeThisMonth.gt(0)) {
-      if (preValue.gt(0)) {
-        const takeFromNav = preValue.gte(adminFeeThisMonth) ? adminFeeThisMonth : preValue;
-        const ratio = div(takeFromNav, preValue);
-        for (const c of components) {
-          const id = c.id;
-          const px = priceNowByEtf[id];
-          if (!px || px.lte(0)) continue;
-          const val   = mul(unitsByEtf[id], px);
-          const sellV = mul(val, ratio);
-          const sellU = div(sellV, px);
-          unitsByEtf[id] = unitsByEtf[id].gt(sellU) ? sub(unitsByEtf[id], sellU) : dec(0);
-        }
-        adminRemainder = sub(adminFeeThisMonth, takeFromNav);
-      } else {
-        adminRemainder = adminFeeThisMonth;
-      }
+    // Accrue fixed fees for the month
+    if (adminFixedPerMonth > 0) adminYtdFixed += adminFixedPerMonth;
+    if (frontFixedPerMonth > 0 && (frontDuration === 0 || frontMonthsUsed < frontDuration)) {
+      frontYtdFixed += frontFixedPerMonth;
+      frontMonthsUsed += 1;
     }
     
-    // ---------- 2) FRONT-LOAD on contribution ONLY ----------
-    const fl = plan.frontloadFee ?? {};
-    const monthsElapsed =
-      (Number(monthKey.slice(0,4)) - Number(getStartMonth(plan).slice(0,4))) * 12 +
-      (Number(monthKey.slice(5,7)) - Number(getStartMonth(plan).slice(5,7)));
-
     let plannedContribution = dec(getContributionForMonth(plan, monthKey));
-    if (monthKey < getStartMonth(plan)) plannedContribution = dec(0);
-
-    let contrib = plannedContribution;
-    if (adminRemainder.gt(0)) {
-      contrib = sub(contrib, adminRemainder);
-      if (contrib.lt(0)) contrib = dec(0);
-    }
-    
-    let frontFeeThisMonth = dec(0);
-    const inWindow = fl.durationMonths == null ? true : (monthsElapsed < fl.durationMonths);
-
-    if (inWindow) {
-      const pctRaw = Number(fl.percentOfContribution ?? 0);
-      const pct = pctRaw > 1 ? pctRaw / 100 : pctRaw;
-      if (pct > 0) frontFeeThisMonth = add(frontFeeThisMonth, mul(contrib, dec(pct)));
-      if (Number(fl.fixedPerMonthEUR ?? 0) > 0) {
-        frontFeeThisMonth = add(frontFeeThisMonth, dec(fl.fixedPerMonthEUR!));
-      }
-    }
-    
-    let cashToInvest = sub(contrib, frontFeeThisMonth);
-    if (cashToInvest.lt(0)) cashToInvest = dec(0);
-
+    let cashToInvest = plannedContribution;
+    if (monthKey < planStartMonth) cashToInvest = dec(0);
 
     const contribThisMonth: Record<string, Big> = {};
     for (const comp of components) contribThisMonth[comp.id] = dec(0);
-
-    const portfolioValueAfterAdminFee = components.reduce((s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))), dec(0));
-
-    if (allocationMode === 'rebalance' && portfolioValueAfterAdminFee.gt(0)) {
-      const needs = components.map(c => {
-        const currentVal = mul(unitsByEtf[c.id], priceNowByEtf[c.id]);
-        const currentWeight = portfolioValueAfterAdminFee.gt(0) ? div(currentVal, portfolioValueAfterAdminFee) : dec(0);
-        return { id: c.id, need: sub(dec(c.targetWeight), currentWeight) };
-      });
-
-      const positiveNeeds = needs.filter(n => n.need.gt(0));
-      const totalPositiveNeed = positiveNeeds.reduce((sum, n) => add(sum, n.need), dec(0));
-
-      if (totalPositiveNeed.gt(EPS)) {
-        positiveNeeds.forEach(n => {
-          const allocShare = div(n.need, totalPositiveNeed);
-          const cashForSymbol = mul(cashToInvest, allocShare);
-          contribThisMonth[n.id] = add(contribThisMonth[n.id], cashForSymbol);
-          const priceNow = priceNowByEtf[n.id];
-          if (priceNow.gt(0)) {
-            const buyUnits = div(cashForSymbol, priceNow);
-            unitsByEtf[n.id] = add(unitsByEtf[n.id], buyUnits);
-          }
+    
+    const navAfterAdmin = components.reduce((s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))), dec(0));
+    
+    if (allocationMode === 'rebalance' && navAfterAdmin.gt(0)) {
+        const needs = components.map(c => {
+            const currentVal = mul(unitsByEtf[c.id], priceNowByEtf[c.id]);
+            const currentWeight = navAfterAdmin.gt(0) ? div(currentVal, navAfterAdmin) : dec(0);
+            return { id: c.id, need: sub(dec(c.targetWeight), currentWeight) };
         });
-      } else {
-        components.forEach(c => {
-          const allocShare = dec(c.targetWeight);
-          const cashForSymbol = mul(cashToInvest, allocShare);
-          contribThisMonth[c.id] = add(contribThisMonth[c.id], cashForSymbol);
-          const priceNow = priceNowByEtf[c.id];
-          if (priceNow.gt(0)) {
-            const buyUnits = div(cashForSymbol, priceNow);
-            unitsByEtf[c.id] = add(unitsByEtf[c.id], buyUnits);
-          }
-        });
-      }
-    } else {
-      components.forEach(c => {
-        const cashForSymbol = mul(cashToInvest, dec(c.targetWeight));
-        contribThisMonth[c.id] = add(contribThisMonth[c.id], cashForSymbol);
-        const priceNow = priceNowByEtf[c.id];
-        if (priceNow.gt(0)) {
-            const buyUnits = div(cashForSymbol, priceNow);
-            unitsByEtf[c.id] = add(unitsByEtf[c.id], buyUnits);
+
+        const positiveNeeds = needs.filter(n => n.need.gt(0));
+        const totalPositiveNeed = positiveNeeds.reduce((sum, n) => add(sum, n.need), dec(0));
+
+        if (totalPositiveNeed.gt(EPS)) {
+            positiveNeeds.forEach(n => {
+                const allocShare = div(n.need, totalPositiveNeed);
+                const cashForSymbol = mul(cashToInvest, allocShare);
+                contribThisMonth[n.id] = add(contribThisMonth[n.id], cashForSymbol);
+                const priceNow = priceNowByEtf[n.id];
+                if (priceNow.gt(0)) {
+                    const buyUnits = div(cashForSymbol, priceNow);
+                    unitsByEtf[n.id] = add(unitsByEtf[n.id], buyUnits);
+                }
+            });
+        } else {
+            components.forEach(c => {
+                const allocShare = dec(c.targetWeight);
+                const cashForSymbol = mul(cashToInvest, allocShare);
+                contribThisMonth[c.id] = add(contribThisMonth[c.id], cashForSymbol);
+                const priceNow = priceNowByEtf[c.id];
+                if (priceNow.gt(0)) {
+                    const buyUnits = div(cashForSymbol, priceNow);
+                    unitsByEtf[c.id] = add(unitsByEtf[c.id], buyUnits);
+                }
+            });
         }
-      });
+    } else { // Fixed allocation
+        components.forEach(c => {
+            const cashForSymbol = mul(cashToInvest, dec(c.targetWeight));
+            contribThisMonth[c.id] = add(contribThisMonth[c.id], cashForSymbol);
+            const priceNow = priceNowByEtf[c.id];
+            if (priceNow.gt(0)) {
+                const buyUnits = div(cashForSymbol, priceNow);
+                unitsByEtf[c.id] = add(unitsByEtf[c.id], buyUnits);
+            }
+        });
     }
+    
+    // --- Apply YTD fees at year-end or final month ---
+    const isDecember = mOf(monthKey) === 12;
+    const isLastMonth = monthKey === months[months.length - 1];
+    let feesAppliedThisMonth = 0;
+
+    if (isDecember || isLastMonth) {
+        const ytdTotal = adminYtdFixed + frontYtdFixed;
+        if (ytdTotal > 0) {
+            const preFeeValue = components.reduce((s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))), dec(0));
+            const payFromNav = Math.min(Number(preFeeValue), ytdTotal);
+            if (payFromNav > 0 && Number(preFeeValue) > 0) {
+                const ratio = payFromNav / Number(preFeeValue);
+                for (const c of components) {
+                    const px = Number(priceNowByEtf[c.id] ?? dec(0));
+                    if (px <= 0) continue;
+                    const holdingVal = Number(unitsByEtf[c.id]) * px;
+                    const sellVal = holdingVal * ratio;
+                    const sellUnits = sellVal / px;
+                    const newUnits = Math.max(0, Number(unitsByEtf[c.id]) - sellUnits);
+                    (unitsByEtf as any)[c.id] = dec(newUnits);
+                }
+                feesAppliedThisMonth += payFromNav;
+            }
+            adminYtdFixed = 0;
+            frontYtdFixed = 0;
+        }
+    }
+
 
     for (const comp of components) {
       cumContribByEtf[comp.id] = add(cumContribByEtf[comp.id], contribThisMonth[comp.id]);
     }
-    
-    const portfolioValue = components.reduce((s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))), dec(0));
+
     const perEtfSnapshots: any[] = [];
     const driftPositions: PlanRowDrift['positions'] = [];
 
@@ -267,6 +248,11 @@ export function simulatePlan(
       prevPriceByEtf[id] = priceNow;
     }
     
+    const portfolioValue = components.reduce(
+      (s, c) => add(s, mul(unitsByEtf[c.id], priceNowByEtf[c.id] ?? dec(0))),
+      dec(0)
+    );
+    
     perEtfSnapshots.forEach(snap => {
         const valueEUR = dec(snap.valueNow);
         const actualWeight = portfolioValue.gt(0) ? div(valueEUR, portfolioValue) : dec(0);
@@ -294,20 +280,26 @@ export function simulatePlan(
       perEtf: perEtfSnapshots,
     });
     
-    const rowFees = add(adminFeeThisMonth, frontFeeThisMonth);
+    const nav = Number(portfolioValue);
+
+    if (monthKey.endsWith('-12') || monthKey === months[months.length - 1]) {
+      console.log('[SIM]', monthKey, 'monthFees=', feesAppliedThisMonth.toFixed(2));
+    }
 
     driftRows.push({
       date: format(endOfMonth(parseISO(`${monthKey}-15`)), 'yyyy-MM-dd'),
-      contribution: toNum(plannedContribution),
-      fees: toNum(rowFees),
-      portfolioValue: toNum(portfolioValue),
+      contribution: Number(getContributionForMonth(plan, monthKey)),
+      fees: Number(feesAppliedThisMonth),
+      portfolioValue: nav,
       positions: driftPositions.sort((a,b) => b.valueEUR - a.valueEUR),
     });
-
   }
+
+  const sumRowFees = driftRows.reduce((s, r) => s + (r.fees || 0), 0);
+  console.log('[SIM] rows fee sum =', sumRowFees.toFixed(2));
   
   return {
-    performance: performanceRows.filter(r => r.dateKey >= planStartMonth),
-    drift: driftRows.filter(r => r.date.slice(0,7) >= planStartMonth),
+    performance: performanceRows,
+    drift: driftRows,
   };
 }

@@ -1,17 +1,19 @@
 
+
 // src/lib/etf/sim-summary.ts
 import { parseISO, getYear } from 'date-fns';
-import type { PlanRowDrift } from '@/lib/types.etf';
+import type { PlanRowDrift, ETFPlan } from '@/lib/types.etf';
+import { ENGINE_SCHEMA_VERSION } from './engine';
 
 export type EtfSimYearBucket = {
   year: number;
-  contrib: number;        // contributions during that year
-  fees: number;           // fees during that year
-  endValue: number;       // portfolio value at last month of that year
-  endDate: string | null; // ISO yyyy-MM-dd of that last row
-  cumContribToDate: number; // lifetime contributions up to end of that year
-  unrealizedPL: number;     // endValue - cumContribToDate
-  performance: number;      // unrealizedPL / max(cumContribToDate, 1)
+  contrib: number;
+  fees: number;
+  endValue: number;
+  endDate: string;
+  cumContribToDate: number;
+  unrealizedPL: number;
+  performance: number;
 };
 
 export type EtfSimSummary = {
@@ -21,6 +23,7 @@ export type EtfSimSummary = {
   startMonth: string;
   endMonth: string;
   lastRunAt: string; // ISO
+  engineVersion: number;
   lifetime: {
     contrib: number;
     fees: number;
@@ -28,67 +31,108 @@ export type EtfSimSummary = {
     unrealizedPL: number;  // marketValue - total lifetime contrib
     performance: number;   // unrealizedPL / max(contrib, 1)
   };
-  byYear: Record<string, EtfSimYearBucket>;
+  byYear: EtfSimYearBucket[];
 };
 
-export function buildSimSummary(rows: PlanRowDrift[], startMonth: string, planMeta: { planId: string; title: string; baseCurrency: 'EUR' }): EtfSimSummary {
+const round2 = (x: number) => Math.round(x * 100) / 100;
+
+function monthsBetween(startYm: string, endYm: string) {
+  let [ys, ms] = startYm.split('-').map(Number);
+  let [ye, me] = endYm.split('-').map(Number);
+  return (ye - ys) * 12 + (me - ms) + 1; // inclusive
+}
+
+function computeFixedFeesFromPlan(plan: Pick<ETFPlan, 'startMonth' | 'frontloadFee' | 'adminFee'>, endMonth: string) {
+  const totalMonths = monthsBetween(plan.startMonth, endMonth);
+  const adminFixed = Number(plan.adminFee?.fixedPerMonthEUR ?? 0);
+  const frontFixed = Number(plan.frontloadFee?.fixedPerMonthEUR ?? 0);
+  const frontDur   = Number(plan.frontloadFee?.durationMonths ?? 0);
+
+  const adminTotal = adminFixed * totalMonths;
+  const frontTotal = frontFixed * (frontDur > 0 ? Math.min(frontDur, totalMonths) : totalMonths);
+  return adminTotal + frontTotal;
+}
+
+export function buildSimSummary(
+  rows: PlanRowDrift[],
+  plan: Pick<ETFPlan, 'planId'|'startMonth'|'title'|'baseCurrency'|'frontloadFee'|'adminFee'>
+): EtfSimSummary {
   if (!rows.length) {
     return {
-      planId: planMeta.planId,
-      title: planMeta.title,
-      baseCurrency: planMeta.baseCurrency,
-      startMonth,
-      endMonth: startMonth,
+      planId: plan.planId,
+      title: plan.title,
+      baseCurrency: plan.baseCurrency,
+      startMonth: plan.startMonth,
+      endMonth: plan.startMonth,
       lastRunAt: new Date().toISOString(),
+      engineVersion: ENGINE_SCHEMA_VERSION,
       lifetime: { contrib: 0, fees: 0, marketValue: 0, unrealizedPL: 0, performance: 0 },
-      byYear: {}
+      byYear: []
     };
   }
+  
+  const endValue  = rows.at(-1)?.portfolioValue ?? 0;
+  const endMonth  = rows.at(-1)?.date.slice(0,7) ?? plan.startMonth;
 
-  const byYear: Record<string, EtfSimYearBucket> = {};
-  let totalContrib = 0;
-  let totalFees = 0;
+  const contrib = rows.reduce((s, r) => s + (r.contribution || 0), 0);
+  const feesFromRows = rows.reduce((s, r) => s + (r.fees || 0), 0);
+  
+  const totalFees = feesFromRows > 0 ? feesFromRows : computeFixedFeesFromPlan(plan, endMonth);
 
+  // End value is net of fees -> add fees back for profit.
+  const gainLoss  = endValue - contrib;
+  // Basis = contributions
+  const basis     = contrib;
+  const simplePct = basis > 0 ? (gainLoss / basis) : 0;
+
+  const byYearMap = new Map<number, {
+    contrib: number; fees: number; lastValue: number; lastDate: string; cumContrib: number;
+  }>();
+
+  let runningContrib = 0;
   for (const r of rows) {
-    const y = String(getYear(parseISO(r.date)));
-    if (!byYear[y]) byYear[y] = { year: parseInt(y), contrib: 0, fees: 0, endValue: 0, endDate: null, cumContribToDate: 0, unrealizedPL: 0, performance: 0 };
-    byYear[y].contrib += r.contribution;
-    byYear[y].fees += r.fees;
-    totalFees += r.fees;
-    // overwrite so the last row in the year wins
-    byYear[y].endValue = r.portfolioValue;
-    byYear[y].endDate = r.date;
+    const y = Number(r.date.slice(0, 4));
+    runningContrib += r.contribution || 0;
+    const m = byYearMap.get(y) ?? { contrib: 0, fees: 0, lastValue: 0, lastDate: `${y}-12-31`, cumContrib: 0 };
+    m.contrib += r.contribution || 0;
+    m.fees    += r.fees || 0;
+    m.lastValue = r.portfolioValue;
+    m.lastDate = r.date;
+    m.cumContrib = runningContrib;
+    byYearMap.set(y, m);
   }
 
-  // Convert cumContribToDate to *true* lifetime cum through that year
-  // (walk years in ascending order)
-  let runningCum = 0;
-  Object.keys(byYear).sort().forEach(y => {
-    runningCum += byYear[y].contrib;
-    byYear[y].cumContribToDate = runningCum;
-    byYear[y].unrealizedPL = byYear[y].endValue - byYear[y].cumContribToDate - byYear[y].fees;
-    byYear[y].performance = byYear[y].cumContribToDate > 0 ? byYear[y].unrealizedPL / byYear[y].cumContribToDate : 0;
-  });
-
-  const last = rows[rows.length - 1];
-  totalContrib = runningCum;
-  const lifetimeUnrealized = last.portfolioValue - totalContrib - totalFees;
-  const lifetimePerf = totalContrib > 0 ? lifetimeUnrealized / totalContrib : 0;
+  const byYear = Array.from(byYearMap.entries()).map(([year, m]) => {
+    const gl = m.lastValue - m.cumContrib;
+    const base = m.cumContrib;
+    const perf = base > 0 ? gl / base : 0;
+    return {
+      year,
+      contrib: round2(m.contrib),
+      fees: round2(m.fees),
+      endValue: round2(m.lastValue),
+      performance: perf,
+      unrealizedPL: round2(gl),
+      endDate: m.lastDate,
+      cumContribToDate: round2(m.cumContrib),
+    };
+  }).sort((a, b) => a.year - b.year);
 
   return {
-    planId: planMeta.planId,
-    title: planMeta.title,
-    baseCurrency: planMeta.baseCurrency,
-    startMonth,
-    endMonth: last.date.slice(0, 7),
+    planId: plan.planId,
+    title: plan.title,
+    baseCurrency: plan.baseCurrency,
+    startMonth: plan.startMonth,
+    endMonth,
+    engineVersion: ENGINE_SCHEMA_VERSION,
     lastRunAt: new Date().toISOString(),
     lifetime: {
-      contrib: totalContrib,
-      fees: totalFees,
-      marketValue: last.portfolioValue,
-      unrealizedPL: lifetimeUnrealized,
-      performance: lifetimePerf
+      contrib: round2(contrib),
+      fees: round2(totalFees),
+      marketValue: round2(endValue),
+      performance: simplePct,
+      unrealizedPL: round2(gainLoss),
     },
-    byYear
+    byYear,
   };
 }
