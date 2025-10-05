@@ -25,6 +25,7 @@ function PlanModal({
   onSubmit,
   onCancel,
   isSubmitting,
+  onOpenFeeHelp,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
@@ -32,6 +33,7 @@ function PlanModal({
   onSubmit: (p: any) => void;
   onCancel: () => void;
   isSubmitting: boolean;
+  onOpenFeeHelp: () => void;
 }) {
   // Key forces React to remount when switching create/edit -> obliterates stale tree in Studio
   const dialogKey = editingPlan ? 'etf-dialog-edit-v5' : 'etf-dialog-create-v5';
@@ -77,7 +79,7 @@ function PlanModal({
             onSubmit={onSubmit}
             onCancel={onCancel}
             isSubmitting={isSubmitting}
-            onOpenFeeHelp={() => (onOpenChange as any)(true)}
+            onOpenFeeHelp={onOpenFeeHelp}
           />
         </div>
 
@@ -357,6 +359,7 @@ export default function EtfPlansPage() {
                 onSubmit={handleFormSubmit}
                 onCancel={closeDialog}
                 isSubmitting={isSubmitting}
+                onOpenFeeHelp={() => setIsFeeInfoOpen(true)}
             />
 
             <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
