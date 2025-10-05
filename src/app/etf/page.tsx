@@ -18,6 +18,80 @@ import { format, parseISO } from 'date-fns';
 import { formatCurrency } from '@/lib/money';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 
+function PlanModal({
+  open,
+  onOpenChange,
+  editingPlan,
+  onSubmit,
+  onCancel,
+  isSubmitting,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  editingPlan?: ETFPlan | null;
+  onSubmit: (p: any) => void;
+  onCancel: () => void;
+  isSubmitting: boolean;
+}) {
+  // Key forces React to remount when switching create/edit -> obliterates stale tree in Studio
+  const dialogKey = editingPlan ? 'etf-dialog-edit-v5' : 'etf-dialog-create-v5';
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        key={dialogKey}
+        data-testid="etf-dialog-v5"
+        className="max-w-4xl w-[96vw] p-0 grid grid-rows-[auto,1fr,auto] overflow-hidden"
+        style={{ height: 'min(90dvh, 820px)' }}
+      >
+        {/* Header (fixed) */}
+        <DialogHeader className="p-6 pb-2">
+          <div className="flex items-center gap-2">
+            <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
+            <span className="text-xs text-muted-foreground">·v5</span>
+          </div>
+          <DialogDescription>
+            {editingPlan
+              ? 'Update your automated savings plan.'
+              : 'Define your automated savings plan details and components.'}
+          </DialogDescription>
+        </DialogHeader>
+
+        {/* Body (the ONLY scroller) */}
+        <div
+          data-testid="etf-dialog-body"
+          className="
+            min-h-0 px-6 pb-6 pr-3
+            etf-dialog-scroll etf-dialog-scroll-v2 etf-dialog-scroll-v3 etf-dialog-scroll-v4 etf-dialog-scroll-v5
+          "
+          style={{
+            overflowY: 'scroll',
+            overscrollBehavior: 'contain',
+            scrollbarGutter: 'stable',
+          }}
+        >
+          <PlanForm
+            formId="etf-plan-form"
+            useExternalFooter
+            plan={editingPlan ?? undefined}
+            onSubmit={onSubmit}
+            onCancel={onCancel}
+            isSubmitting={isSubmitting}
+          />
+        </div>
+
+        {/* Footer (fixed) */}
+        <div className="px-6 py-4 border-t bg-background flex justify-end gap-2">
+          <Button type="button" variant="ghost" onClick={onCancel} disabled={isSubmitting}>Cancel</Button>
+          <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
+            {isSubmitting ? 'Saving…' : 'Save Plan'}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 
 export default function EtfPlansPage() {
     const { user } = useAuth();
@@ -176,7 +250,7 @@ export default function EtfPlansPage() {
                                             <span className="font-medium text-foreground">{formatCurrency(plan.monthContribution)}</span>
                                         </div>
                                         {hasStepUps && (
-                                             <div className="flex justify-between items-center">
+                                            <div className="flex justify-between items-center">
                                                 <span>Contribution Step-ups:</span>
                                                 <div className="flex items-center gap-1">
                                                     <span className="font-medium text-foreground">Yes</span>
@@ -234,80 +308,38 @@ export default function EtfPlansPage() {
                 )}
             </main>
 
-            <Dialog open={isFormOpen} onOpenChange={closeDialog}>
-              <DialogContent className="max-w-4xl w-[96vw] p-0">
-                {/* Fixed-height flex shell INSIDE the dialog so the body can scroll */}
-                <div
-                  className="flex flex-col overflow-hidden"
-                  style={{ height: 'min(88vh, 780px)' }}    // inline style = bullet-proof in Studio
-                >
-                  {/* HEADER (fixed) */}
-                  <div className="p-6 pb-2 border-b">
-                    <DialogTitle>{editingPlan ? 'Edit ETF Plan' : 'Create New ETF Plan'}</DialogTitle>
-                    <DialogDescription>
-                      {editingPlan
-                        ? 'Update your automated savings plan.'
-                        : 'Define your automated savings plan details and components.'}
-                    </DialogDescription>
-                  </div>
+            <PlanModal
+                open={isFormOpen}
+                onOpenChange={closeDialog}
+                editingPlan={editingPlan}
+                onSubmit={handleFormSubmit}
+                onCancel={closeDialog}
+                isSubmitting={isSubmitting}
+            />
 
-                  {/* BODY — the ONLY scroller */}
-                  <div
-                    role="region"
-                    aria-label="ETF plan form"
-                    className="flex-1 min-h-0 px-6 pb-6 pr-3 etf-dialog-scroll"
-                    style={{
-                      overflowY: 'scroll',              // force visible track on Windows
-                      overscrollBehavior: 'contain',
-                      scrollbarGutter: 'stable',        // keeps content from jumping
-                    }}
-                  >
-                    <PlanForm
-                      formId="etf-plan-form"
-                      useExternalFooter
-                      plan={editingPlan ?? undefined}
-                      onSubmit={handleFormSubmit}
-                      onCancel={closeDialog}
-                      isSubmitting={isSubmitting}
-                    />
-                  </div>
-
-                  {/* FOOTER (fixed) */}
-                  <div className="px-6 py-4 border-t bg-background flex justify-end gap-2">
-                    <Button type="button" variant="ghost" onClick={closeDialog} disabled={isSubmitting}>Cancel</Button>
-                    <Button type="submit" form="etf-plan-form" disabled={isSubmitting}>
-                      {isSubmitting ? 'Saving…' : 'Save Plan'}
-                    </Button>
-                  </div>
-                </div>
-              </DialogContent>
-            </Dialog>
-
-            {infoDialogPlan && (
-                <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Contribution Schedule for {infoDialogPlan.title}</DialogTitle>
-                        </DialogHeader>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Effective Month</TableHead>
-                                    <TableHead className="text-right">New Monthly Amount</TableHead>
+            <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Contribution Schedule for {infoDialogPlan?.title}</DialogTitle>
+                    </DialogHeader>
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Effective Month</TableHead>
+                                <TableHead className="text-right">New Monthly Amount</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {(infoDialogPlan?.contributionSteps ?? []).slice().sort((a,b) => a.month.localeCompare(b.month)).map(step => (
+                                <TableRow key={step.month}>
+                                    <TableCell>{format(parseISO(`${step.month}-01`), 'MMM yyyy')}</TableCell>
+                                    <TableCell className="text-right font-mono">{formatCurrency(step.amount)}</TableCell>
                                 </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {(infoDialogPlan.contributionSteps ?? []).slice().sort((a,b) => a.month.localeCompare(b.month)).map(step => (
-                                    <TableRow key={step.month}>
-                                        <TableCell>{format(parseISO(`${step.month}-01`), 'MMM yyyy')}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(step.amount)}</TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </DialogContent>
-                </Dialog>
-            )}
+                            ))}
+                        </TableBody>
+                    </Table>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

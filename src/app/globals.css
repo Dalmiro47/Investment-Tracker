@@ -139,3 +139,80 @@ body {
 .etf-dialog-scroll::-webkit-scrollbar-track {
   background: transparent;                        /* keep it clean on dark UI */
 }
+
+/* v2 — dark, thin scrollbar for ETF dialog body */
+.etf-dialog-scroll-v2 {
+  scrollbar-width: thin;                          /* Firefox */
+  scrollbar-color: hsl(var(--muted-foreground)) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+.etf-dialog-scroll-v2::-webkit-scrollbar { width: 10px; }
+.etf-dialog-scroll-v2::-webkit-scrollbar-thumb {
+  background-color: hsl(var(--muted-foreground));
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v2::-webkit-scrollbar-thumb:hover {
+  background-color: hsl(var(--border));
+}
+.etf-dialog-scroll-v2::-webkit-scrollbar-track { background: transparent; }
+
+/* v3 — definitive dark scrollbar for ETF dialog body */
+.etf-dialog-scroll-v3 {
+  /* Firefox */
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.7) hsl(var(--background) / 0.2);
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Chromium / WebKit */
+.etf-dialog-scroll-v3::-webkit-scrollbar { width: 10px; }
+.etf-dialog-scroll-v3::-webkit-scrollbar-track {
+  background: hsl(var(--background) / 0.2);   /* subtle dark track */
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v3::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.75); /* dark thumb */
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v3::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--border));            /* slightly brighter on hover */
+}
+.etf-dialog-scroll-v3::-webkit-scrollbar-corner { background: transparent; }
+
+/* v4 — dark scrollbar for dialog body (cache-busting class name) */
+.etf-dialog-scroll-v4 {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.75) hsl(var(--background) / 0.25);
+  -webkit-overflow-scrolling: touch;
+}
+.etf-dialog-scroll-v4::-webkit-scrollbar { width: 10px; }
+.etf-dialog-scroll-v4::-webkit-scrollbar-track {
+  background: hsl(var(--background) / 0.25);
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v4::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.8);
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v4::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--border));
+}
+
+/* v5 — dark scrollbar for dialog body (cache-busting) */
+.etf-dialog-scroll-v5 {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--muted-foreground) / 0.8) hsl(var(--background) / 0.3);
+  -webkit-overflow-scrolling: touch;
+}
+.etf-dialog-scroll-v5::-webkit-scrollbar { width: 10px; }
+.etf-dialog-scroll-v5::-webkit-scrollbar-track {
+  background: hsl(var(--background) / 0.3);
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v5::-webkit-scrollbar-thumb {
+  background: hsl(var(--muted-foreground) / 0.85);
+  border-radius: 9999px;
+}
+.etf-dialog-scroll-v5::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--border));
+}
