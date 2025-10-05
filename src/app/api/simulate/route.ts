@@ -2,7 +2,7 @@
 import { NextResponse } from 'next/server';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 import { getPricePointsServer, getFXRatesServer } from '@/lib/firestore.etf.server';
-import { simulatePlan } from '@/lib/etf/engine';
+import { simulatePlan, ENGINE_SCHEMA_VERSION } from '@/lib/etf/engine';
 import type { SimulationRows } from '@/lib/types.etf';
 import { getStartMonth } from '@/lib/date-helpers';
 import { adminDb } from '@/lib/firebase-admin';
@@ -132,7 +132,7 @@ export async function POST(req: Request) {
     }
 
     try {
-        const summary = buildSimSummary(wireDrift, startMonth, { planId: plan.id, title: plan.title, baseCurrency: plan.baseCurrency });
+        const summary = buildSimSummary(wireDrift, plan);
         const ref = adminDb.doc(`users/${uid}/etfPlans/${plan.id}/latest_sim_summary/latest`);
         await ref.set(summary, { merge: false });
     } catch (e) {

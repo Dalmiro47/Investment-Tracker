@@ -1,3 +1,4 @@
+
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
@@ -11,5 +12,5 @@
     "require": ["tsconfig-paths/register"]
   },
   "include": ["scripts", "src"],
-  "exclude": ["node_modules", ".next", "out"]
+  "exclude": ["node_modules", ".next", "out", "src/app", "src/components", "src/hooks", "src/ai", "public"]
 }

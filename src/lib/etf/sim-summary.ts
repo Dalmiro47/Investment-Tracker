@@ -35,18 +35,38 @@ export type EtfSimSummary = {
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
+function monthsBetween(startYm: string, endYm: string) {
+  let [ys, ms] = startYm.split('-').map(Number);
+  let [ye, me] = endYm.split('-').map(Number);
+  return (ye - ys) * 12 + (me - ms) + 1; // inclusive
+}
+
+function computeFixedFeesFromPlan(plan: {
+  startMonth: string;
+  frontloadFee?: { fixedPerMonthEUR?: number|null; durationMonths?: number|null };
+  adminFee?: { fixedPerMonthEUR?: number|null };
+}, endMonth: string) {
+  const totalMonths = monthsBetween(plan.startMonth, endMonth);
+  const adminFixed = Number(plan.adminFee?.fixedPerMonthEUR ?? 0);
+  const frontFixed = Number(plan.frontloadFee?.fixedPerMonthEUR ?? 0);
+  const frontDur   = Number(plan.frontloadFee?.durationMonths ?? 0);
+
+  const adminTotal = adminFixed * totalMonths;
+  const frontTotal = frontFixed * (frontDur > 0 ? Math.min(frontDur, totalMonths) : totalMonths);
+  return adminTotal + frontTotal;
+}
+
 export function buildSimSummary(
   rows: PlanRowDrift[],
-  startMonth: string,
-  planMeta: { planId: string; title: string; baseCurrency: 'EUR' }
+  plan: { startMonth: string; title: string; baseCurrency: 'EUR', planId: string, frontloadFee?: any; adminFee?: any }
 ): EtfSimSummary {
   if (!rows.length) {
     return {
-      planId: planMeta.planId,
-      title: planMeta.title,
-      baseCurrency: planMeta.baseCurrency,
-      startMonth,
-      endMonth: startMonth,
+      planId: plan.planId,
+      title: plan.title,
+      baseCurrency: plan.baseCurrency,
+      startMonth: plan.startMonth,
+      endMonth: plan.startMonth,
       lastRunAt: new Date().toISOString(),
       engineVersion: ENGINE_SCHEMA_VERSION,
       lifetime: { contrib: 0, fees: 0, marketValue: 0, unrealizedPL: 0, performance: 0 },
@@ -54,13 +74,16 @@ export function buildSimSummary(
     };
   }
   
-  const endMonth = rows.length ? rows[rows.length - 1].date.slice(0, 7) : startMonth;
-  const totalContrib = rows.reduce((s, r) => s + (r.contribution || 0), 0);
-  const totalFees = rows.reduce((s, r) => s + (r.fees || 0), 0);
-  const endValue = rows.length ? rows[rows.length - 1].portfolioValue : 0;
+  const endValue  = rows.at(-1)?.portfolioValue ?? 0;
+  const endMonth  = rows.at(-1)?.date.slice(0,7) ?? plan.startMonth;
 
-  const gainLoss = endValue - totalContrib - totalFees;
-  const basis = totalContrib + totalFees;
+  const contrib = rows.reduce((s, r) => s + (r.contribution || 0), 0);
+  const feesFromRows = rows.reduce((s, r) => s + (r.fees || 0), 0);
+  
+  const totalFees = feesFromRows > 0 ? feesFromRows : computeFixedFeesFromPlan(plan, endMonth);
+
+  const gainLoss  = endValue - contrib - totalFees;
+  const basis     = contrib + totalFees;
   const simplePct = basis > 0 ? (gainLoss / basis) : 0;
 
   const byYearMap = new Map<number, {
@@ -73,7 +96,7 @@ export function buildSimSummary(
     runningContrib += r.contribution || 0;
     const m = byYearMap.get(y) ?? { contrib: 0, fees: 0, lastValue: 0, lastDate: `${y}-12-31`, cumContrib: 0 };
     m.contrib += r.contribution || 0;
-    m.fees += r.fees || 0;
+    m.fees    += r.fees || 0;
     m.lastValue = r.portfolioValue;
     m.lastDate = r.date;
     m.cumContrib = runningContrib;
@@ -81,7 +104,7 @@ export function buildSimSummary(
   }
 
   const byYear = Array.from(byYearMap.entries()).map(([year, m]) => {
-    const gl = m.lastValue - m.cumContrib - m.fees; // unrealized PL up to year-end based on lifetime contrib
+    const gl = m.lastValue - m.cumContrib - m.fees;
     const perf = m.cumContrib > 0 ? (gl / m.cumContrib) : 0;
     return {
       year,
@@ -96,15 +119,15 @@ export function buildSimSummary(
   }).sort((a, b) => a.year - b.year);
 
   return {
-    planId: planMeta.planId,
-    title: planMeta.title,
-    baseCurrency: planMeta.baseCurrency,
-    startMonth,
+    planId: plan.planId,
+    title: plan.title,
+    baseCurrency: plan.baseCurrency,
+    startMonth: plan.startMonth,
     endMonth,
     engineVersion: ENGINE_SCHEMA_VERSION,
     lastRunAt: new Date().toISOString(),
     lifetime: {
-      contrib: round2(totalContrib),
+      contrib: round2(contrib),
       fees: round2(totalFees),
       marketValue: round2(endValue),
       performance: simplePct,
