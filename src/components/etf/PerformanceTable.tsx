@@ -7,9 +7,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Info, Download } from 'lucide-react';
 import { downloadCSV } from '@/lib/csv';
+import { ColumnHelpDialog } from '@/components/ColumnHelpDialog';
 
 type Props = {
   rows: PlanRowPerformance[];
@@ -21,8 +21,20 @@ type Props = {
   sticky?: boolean;
 };
 
+const PERF_HELP = [
+  { label: "Units", desc: "Total ETF units at month end (after buys)." },
+  { label: "Price", desc: "Month’s adjusted close in EUR (post FX)." },
+  { label: "Contribution (€)", desc: "Cash actually invested in that ETF during the month." },
+  { label: "Value (€)", desc: "Units × price at month end." },
+  { label: "Monthly Ret.", desc: "(Priceₜ / Priceₜ₋₁ − 1). Empty for first month with price." },
+  { label: "Monthly P&L", desc: "Shows market move only (excludes buys this month)." },
+  { label: "Cum. P&L", desc: "Cumulative P&L for the ETF across the period (price effect only)." },
+];
+
+
 export function PerformanceTable({ rows, components, availableYears, yearFilter, onYearFilterChange, sticky = false }: Props) {
   const [etfFilter, setEtfFilter] = React.useState<string>('ALL');
+  const [showPerfHelp, setShowPerfHelp] = React.useState(false);
 
   const rowsDesc = React.useMemo(
     () => [...rows].sort((a, b) => b.dateKey.localeCompare(a.dateKey)),
@@ -79,30 +91,19 @@ export function PerformanceTable({ rows, components, availableYears, yearFilter,
 
   return (
     <Card>
+       <ColumnHelpDialog
+        open={showPerfHelp}
+        onOpenChange={setShowPerfHelp}
+        title="Performance View — Column Help"
+        items={PERF_HELP}
+      />
       <CardHeader className="flex flex-row items-center justify-between">
         <div className="flex items-center gap-2">
           <div>
             <CardTitle>Performance Details</CardTitle>
             <CardDescription>Per-ETF monthly return and P&amp;L (price effect only) with cumulative P&amp;L.</CardDescription>
           </div>
-          {/* Info dialog */}
-          <Dialog>
-            <DialogTrigger asChild>
-              <Button variant="ghost" size="icon"><Info className="h-4 w-4" /></Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>Performance View — Column Help</DialogTitle></DialogHeader>
-              <div className="text-sm space-y-3 py-2">
-                <p><b>Units</b>: total units at end of month (after contributions).</p>
-                <p><b>Price</b>: month’s price in EUR (instrument price converted via FX).</p>
-                <p><b>Contribution (€)</b>: cash actually invested in that ETF during the month.</p>
-                <p><b>Value (€)</b>: units × price at month end.</p>
-                <p><b>Monthly Ret.</b>: (Priceₜ / Priceₜ₋₁ − 1). Empty for first month with price.</p>
-                <p><b>Monthly P&amp;L</b>: Units at start × (Priceₜ − Priceₜ₋₁). Shows pure market move (excludes buys this month).</p>
-                <p><b>Cum. P&amp;L</b>: Value − cumulative contributions to that ETF.</p>
-              </div>
-            </DialogContent>
-          </Dialog>
+          <Button variant="ghost" size="icon" onClick={() => setShowPerfHelp(true)}><Info className="h-4 w-4" /></Button>
         </div>
 
         {/* Right controls: Year + ETF filters */}
@@ -181,6 +182,9 @@ export function PerformanceTable({ rows, components, availableYears, yearFilter,
             </tbody>
           </table>
         </div>
+         <p className="mt-2 text-xs text-muted-foreground">
+          Prices are “adjusted close” (dividends reinvested). Fees are not shown here; they’re applied in <b>Drift</b> at year-end and reflected in the <b>End of Period Value</b>.
+        </p>
       </CardContent>
     </Card>
   );

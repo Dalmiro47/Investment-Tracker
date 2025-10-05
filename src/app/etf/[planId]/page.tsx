@@ -115,7 +115,15 @@ export default function PlanDetailPage() {
     const [yearFilter, setYearFilter] = useState<string>('all');
     const [missingPrices, setMissingPrices] = useState<MissingPrice[]>([]);
     const [isMissingPricesDialogOpen, setIsMissingPricesDialogOpen] = useState(false);
+    
+    const [mainTab, setMainTab] = useState<'performance' | 'drift'>('performance');
     const [perfView, setPerfView] = useState<'flat' | 'aggregated'>('flat');
+
+    useEffect(() => {
+        if (mainTab === 'drift' && perfView !== 'flat') {
+            setPerfView('flat');
+        }
+    }, [mainTab, perfView]);
 
     useAutoRefreshEtfHistory({ userId: user?.uid });
 
@@ -165,23 +173,11 @@ export default function PlanDetailPage() {
         setSimData(null); // Clear previous results
         toast({ title: 'Running simulation...' });
         try {
-            const plainPlan = {
-                id: plan.id,
-                title: plan.title,
-                baseCurrency: plan.baseCurrency,
-                monthContribution: plan.monthContribution,
-                startDate: plan.startDate,
-                startMonth: plan.startMonth,
-                rebalanceOnContribution: plan.rebalanceOnContribution,
-                contributionSteps: plan.contributionSteps ?? [],
-                frontloadFee: plan.frontloadFee,
-                adminFee: plan.adminFee,
-            };
             const res = await fetch('/api/simulate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
                 cache: 'no-store',
-                body: JSON.stringify({ uid: user.uid, plan: plainPlan, components: plan.components }),
+                body: JSON.stringify({ uid: user.uid, plan, components: plan.components }),
             });
             const data = await res.json();
             
@@ -257,10 +253,7 @@ export default function PlanDetailPage() {
         const totalFees = effectiveDriftRows.reduce((sum, row) => sum + (row.fees ?? 0), 0);
         const currentValue = lastRow.portfolioValue;
 
-        // Fees are already taken out of NAV. Gain/Loss is vs. invested capital.
         const gainLoss = currentValue - valueBeforePeriod - totalContributions;
-
-        // Basis is invested capital, not net of fees.
         const basis = valueBeforePeriod + totalContributions;
         
         const performance = basis > 0 ? gainLoss / basis : 0;
@@ -374,7 +367,7 @@ export default function PlanDetailPage() {
                 )}
                 
                  {simData && plan && (
-                    <Tabs defaultValue="performance" className="mt-6">
+                    <Tabs value={mainTab} onValueChange={(v) => setMainTab(v as any)} className="mt-6">
                       <div className="mb-2 flex items-center gap-2">
                         <TabsList>
                           <TabsTrigger value="performance">Performance</TabsTrigger>
@@ -399,11 +392,13 @@ export default function PlanDetailPage() {
                             type="button"
                             onClick={() => setPerfView('aggregated')}
                             data-active={perfView === 'aggregated'}
+                            disabled={mainTab === 'drift'}
                             className={cn(
                               'h-8 px-3 text-sm font-medium rounded-sm',
                               'text-muted-foreground transition-colors',
                               'hover:text-foreground',
-                              'data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-sm'
+                              'data-[active=true]:bg-background data-[active=true]:text-foreground data-[active=true]:shadow-sm',
+                              'disabled:opacity-50 disabled:cursor-not-allowed'
                             )}
                           >
                             Aggregated
