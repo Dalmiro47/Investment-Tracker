@@ -92,6 +92,37 @@ function PlanModal({
   );
 }
 
+function formatAdvancedFeesSummary(plan: ETFPlan) {
+    const parts: string[] = [];
+    const fmt = (n: number) =>
+      n.toLocaleString('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 });
+  
+    // Legacy / per contribution fee (percent)
+    const legacyPct = (plan.feePct ?? 0) * 100;
+    if (legacyPct > 0) parts.push(`Legacy ${legacyPct}%/contrib`);
+  
+    // Front-load (sales cost)
+    const fl = plan.frontloadFee;
+    if (fl && (fl.percentOfContribution != null || fl.fixedPerMonthEUR != null || fl.durationMonths != null)) {
+      const sub: string[] = [];
+      if (fl.fixedPerMonthEUR != null) sub.push(`${fmt(fl.fixedPerMonthEUR)}/mo`);
+      if (fl.percentOfContribution != null) sub.push(`${(fl.percentOfContribution*100).toFixed(2)}% of contrib`);
+      if (fl.durationMonths != null) sub.push(`${fl.durationMonths} mo`);
+      if (sub.length) parts.push(`Sales ${sub.join(' · ')}`);
+    }
+  
+    // Admin fee
+    const af = plan.adminFee;
+    if (af && (af.annualPercent != null || af.fixedPerMonthEUR != null)) {
+      const sub: string[] = [];
+      if (af.fixedPerMonthEUR != null) sub.push(`${fmt(af.fixedPerMonthEUR)}/mo`);
+      if (af.annualPercent != null) sub.push(`${(af.annualPercent*100).toFixed(2)}%/yr of NAV`);
+      if (sub.length) parts.push(`Admin ${sub.join(' · ')}`);
+    }
+  
+    return parts.length ? parts.join('  ·  ') : 'None';
+}
+
 
 export default function EtfPlansPage() {
     const { user } = useAuth();
@@ -103,6 +134,7 @@ export default function EtfPlansPage() {
     const [editingPlan, setEditingPlan] = useState<(ETFPlan & { components: ETFComponent[] }) | null>(null);
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
     const [infoDialogPlan, setInfoDialogPlan] = useState<ETFPlan | null>(null);
+    const [isFeeInfoOpen, setFeeInfoOpen] = useState(false);
 
     const fetchPlans = useCallback(async (uid: string) => {
         setLoading(true);
@@ -217,6 +249,7 @@ export default function EtfPlansPage() {
                         {plans.map(plan => {
                             const hasStepUps = plan.contributionSteps && plan.contributionSteps.length > 0;
                             const sortedSteps = hasStepUps ? [...plan.contributionSteps!].sort((a,b) => a.month.localeCompare(b.month)) : [];
+                            const hasAdvancedFees = plan.frontloadFee || plan.adminFee || (plan.feePct && plan.feePct > 0);
                             
                             return (
                              <Card key={plan.id} className="flex flex-col">
@@ -260,25 +293,21 @@ export default function EtfPlansPage() {
                                                 </div>
                                             </div>
                                         )}
-                                        <div className="flex justify-between">
-                                            {(plan.frontloadFee || plan.adminFee) ? (
-                                                <>
-                                                <span>Advanced Fees:</span>
-                                                <span className="font-medium text-foreground">
-                                                    {[
-                                                        plan.frontloadFee?.percentOfContribution != null ? `${(plan.frontloadFee.percentOfContribution*100).toFixed(2)}% sales` : null,
-                                                        plan.frontloadFee?.fixedPerMonthEUR ? `€${plan.frontloadFee.fixedPerMonthEUR}/mo sales` : null,
-                                                        plan.adminFee?.annualPercent != null ? `${(plan.adminFee.annualPercent*100).toFixed(2)}% admin` : null,
-                                                        plan.adminFee?.fixedPerMonthEUR ? `€${plan.adminFee.fixedPerMonthEUR}/mo admin` : null,
-                                                    ].filter(Boolean).join(' · ')}
-                                                </span>
-                                                </>
-                                            ) : (
-                                                <>
-                                                <span>Broker Fee:</span> 
-                                                <span className="font-medium text-foreground">{((plan.feePct ?? 0) * 100).toFixed(2)}%</span>
-                                                </>
-                                            )}
+                                        <div className="flex justify-between items-start">
+                                            <span className="pt-px">{hasAdvancedFees ? 'Advanced Fees:' : 'Broker Fee:'}</span> 
+                                            <div className="flex items-center gap-1 text-right">
+                                              <span className="font-medium text-foreground">{hasAdvancedFees ? formatAdvancedFeesSummary(plan) : `${((plan.feePct ?? 0) * 100).toFixed(2)}%`}</span>
+                                               {hasAdvancedFees && (
+                                                 <button
+                                                   type="button"
+                                                   aria-label="Advanced fee details"
+                                                   onClick={() => setFeeInfoOpen(true)}
+                                                   className="inline-flex h-5 w-5 items-center justify-center rounded text-muted-foreground hover:text-foreground"
+                                                 >
+                                                   <Info className="h-4 w-4" />
+                                                 </button>
+                                               )}
+                                            </div>
                                         </div>
                                         <div className="flex justify-between">
                                             <span>Rebalancing Strategy:</span> <span className="font-medium text-foreground">{plan.rebalanceOnContribution ? 'On Contribution' : 'None'}</span>
@@ -338,6 +367,68 @@ export default function EtfPlansPage() {
                             ))}
                         </TableBody>
                     </Table>
+                </DialogContent>
+            </Dialog>
+
+            <Dialog open={isFeeInfoOpen} onOpenChange={setFeeInfoOpen}>
+                <DialogContent className="max-w-xl">
+                    <DialogHeader>
+                        <DialogTitle>Advanced Fees — How they are applied</DialogTitle>
+                        <DialogDescription>
+                        These fees affect the ETF simulation each month.
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4 text-sm leading-6">
+                        <section>
+                        <h4 className="font-medium">Legacy Fee (%)</h4>
+                        <p>
+                            A per-contribution brokerage fee as a percentage. Applied <em>each time</em> your monthly
+                            contribution is invested. Example: <code>0.1%</code> → €0.10 taken out of every €100 contributed.
+                        </p>
+                        </section>
+
+                        <section>
+                        <h4 className="font-medium">Front-load Fee (Sales Cost)</h4>
+                        <ul className="list-disc pl-5">
+                            <li>
+                            <strong>% of Contribution</strong> — a percentage taken from each monthly contribution.
+                            </li>
+                            <li>
+                            <strong>Fixed per Month (€)</strong> — a flat amount charged each month
+                            (typically for a limited <em>Duration (months)</em>).
+                            </li>
+                            <li>
+                            If both are set, both apply. Fixed amount stops after the configured duration.
+                            </li>
+                        </ul>
+                        <p className="mt-2">
+                            These costs are deducted from the cash before buying ETFs.
+                        </p>
+                        </section>
+
+                        <section>
+                        <h4 className="font-medium">Admin Fee (Management/Platform)</h4>
+                        <ul className="list-disc pl-5">
+                            <li>
+                            <strong>Annual % of NAV</strong> — converted to a monthly rate and applied to the
+                            portfolio’s current value (NAV) each month.
+                            </li>
+                            <li>
+                            <strong>Fixed per Month (€)</strong> — a flat monthly charge.
+                            </li>
+                            <li>
+                            If both are set, both apply.
+                            </li>
+                        </ul>
+                        </section>
+
+                        <section className="text-muted-foreground">
+                        <p>
+                            Notes: Prices use Yahoo <em>adjusted close</em> (dividends reinvested). Taxes and spreads are not modeled.
+                        </p>
+                        </section>
+                    </div>
                 </DialogContent>
             </Dialog>
         </div>
