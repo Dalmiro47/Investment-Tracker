@@ -84,7 +84,7 @@ function DashboardPageContent() {
     cryptoMarginalRate: 0.42, // Default to a higher rate
   });
 
-  const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all', mode: 'combined' });
+  const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all', mode: 'holdings' });
   const [isRatesOpen, setIsRatesOpen] = React.useState(false);
   const [ratesInv, setRatesInv] = React.useState<Investment | null>(null);
   
@@ -92,6 +92,17 @@ function DashboardPageContent() {
   const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
   const [pendingOpenEstimate, setPendingOpenEstimate] = React.useState(false);
   const isMobile = useIsMobile();
+
+  // Keeps 'holdings' as the default mode and preserves current mode on year changes
+  const setYearFilterHoldingsSafe = React.useCallback((next: YearFilter) => {
+    setYearFilter(prev => ({
+      kind: next.kind,
+      // carry year only if provided for 'year' kind
+      ...(next.kind === 'year' ? { year: next.year } : {}),
+      // if caller doesn't specify mode, keep previous; default to 'holdings'
+      mode: next.mode ?? prev.mode ?? 'holdings',
+    }));
+  }, []);
 
   const fetchAllData = React.useCallback(async (userId: string) => {
     setLoading(true);
@@ -654,7 +665,7 @@ function DashboardPageContent() {
               isTaxView={isTaxView}
               taxSettings={taxSettings}
               yearFilter={yearFilter}
-              onYearFilterChange={setYearFilter}
+              onYearFilterChange={setYearFilterHoldingsSafe}
             />
           ) : (
             investmentsView
@@ -684,7 +695,7 @@ function DashboardPageContent() {
             isTaxView={isTaxView}
             taxSettings={taxSettings}
             yearFilter={yearFilter}
-            onYearFilterChange={setYearFilter}
+            onYearFilterChange={setYearFilterHoldingsSafe}
           />
           <div className="mt-8 mb-8 p-4 bg-card/50 rounded-lg shadow-sm">
             <div className="flex flex-col sm:flex-row items-center gap-4">
@@ -895,5 +906,3 @@ export default function DashboardPage() {
     </React.Suspense>
   );
 }
-
-    
