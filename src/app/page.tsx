@@ -703,7 +703,7 @@ function DashboardPageContent() {
         isTaxView={isTaxView}
         onToggleTaxView={handleToggleTaxView}
       >
-        <div className="mx-auto w-full max-w-[430px] px-4">
+        <div className="mx-auto w-full px-4 sm:px-6">
           {section === "summary" ? (
             <PortfolioSummary 
               ref={summaryRef}
