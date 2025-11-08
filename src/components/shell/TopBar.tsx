@@ -23,7 +23,7 @@ export default function TopBar({
       bg-muted/40 backdrop-blur supports-[backdrop-filter]:bg-background/70
       border-b border-border will-change-transform"
       style={{ paddingTop: "env(safe-area-inset-top)", WebkitTransform: "translateZ(0)" }}>
-      <div className="mx-auto flex h-14 max-w-[430px] items-center justify-between px-3">
+      <div className="mx-auto flex h-14 w-full items-center justify-between px-3">
         <div className="flex items-center gap-2">
           {/* Small glyph only on mobile */}
           <div className="size-7 rounded bg-primary/20 grid place-items-center">

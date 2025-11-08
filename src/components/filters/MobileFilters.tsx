@@ -47,8 +47,8 @@ export function MobileFilters({ view, setView, mode, setMode, children }: Props)
         <SheetTrigger className="ml-auto rounded border px-3 py-2 text-sm">
           <SlidersHorizontal className="mr-2 inline-block size-4" /> Filters
         </SheetTrigger>
-        <SheetContent side="bottom" className="h-[70vh]">
-          <div className="mx-auto mt-2 w-full max-w-[430px]">{children}</div>
+        <SheetContent side="bottom" className="h-[70vh] overflow-y-auto pb-[env(safe-area-inset-bottom)]">
+          <div className="mx-auto mt-2 w-full px-4 sm:px-6">{children}</div>
         </SheetContent>
       </Sheet>
     </div>

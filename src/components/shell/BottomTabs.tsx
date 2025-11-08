@@ -17,7 +17,7 @@ export default function BottomTabs({
       aria-label="Primary"
       role="tablist"
     >
-      <div className="mx-auto flex max-w-[430px] items-stretch justify-around py-2">
+      <div className="mx-auto flex w-full items-stretch justify-around py-2">
         <button
           role="tab"
           aria-selected={section === "summary"}

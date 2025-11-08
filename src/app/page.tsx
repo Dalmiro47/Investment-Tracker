@@ -527,7 +527,7 @@ function DashboardPageContent() {
       <div className="flex flex-col sm:flex-row items-center gap-4 mt-4">
         <div className="w-full sm:w-auto">
           <Tabs value={typeFilter} onValueChange={(value) => setTypeFilter(value as InvestmentType | 'All')}>
-            <TabsList className="flex-wrap h-auto">
+            <TabsList className="h-auto overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <TabsTrigger value="All">All Types ({typeCounts.All})</TabsTrigger>
               <TabsTrigger value="Stock">Stocks ({typeCounts.Stock})</TabsTrigger>
               <TabsTrigger value="Crypto">Crypto ({typeCounts.Crypto})</TabsTrigger>
@@ -539,7 +539,7 @@ function DashboardPageContent() {
           </Tabs>
         </div>
         <div className="flex-grow" />
-        <div className="flex items-center gap-4 w-full sm:w-auto">
+        <div className="flex items-center gap-3 w-full sm:w-auto min-w-0">
           <div className="w-full sm:w-[220px]">
             <Select
               value={investmentNameFilter}
@@ -600,9 +600,13 @@ function DashboardPageContent() {
 
   const investmentsView = (
     <>
-      <MobileFilters view={viewMode} setView={setViewMode} mode={listMode} setMode={setListMode} />
+      <MobileFilters view={viewMode} setView={setViewMode} mode={listMode} setMode={setListMode}>
+        <div className="mt-2 -mx-4 px-4">
+         {advancedFilters}
+        </div>
+      </MobileFilters>
       
-      <div className="mt-2 -mx-4 px-4">
+      <div className="mt-2 hidden md:block -mx-4 px-4">
         {advancedFilters}
       </div>
 
@@ -703,7 +707,7 @@ function DashboardPageContent() {
         isTaxView={isTaxView}
         onToggleTaxView={handleToggleTaxView}
       >
-        <div className="mx-auto w-full max-w-[430px] px-4">
+        <div className="mx-auto w-full px-4 sm:px-6">
           {section === "summary" ? (
             <PortfolioSummary 
               ref={summaryRef}
