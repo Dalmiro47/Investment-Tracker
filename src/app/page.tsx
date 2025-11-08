@@ -1,4 +1,5 @@
 
+
 "use client";
 
 import React from 'react';
@@ -63,6 +64,7 @@ function DashboardPageContent() {
   const [typeFilter, setTypeFilter] = React.useState<InvestmentType | 'All'>('All');
   const [statusFilter, setStatusFilter] = React.useState<InvestmentStatus | 'All'>('All');
   const [sortKey, setSortKey] = React.useState<SortKey>('purchaseDate');
+  const [investmentNameFilter, setInvestmentNameFilter] = React.useState<'All' | string>('All');
   const [viewMode, setViewMode] = React.useState<'grid' | 'list'>('grid');
   const [listMode, setListMode] = React.useState<'aggregated' | 'flat'>('aggregated');
 
@@ -271,6 +273,31 @@ function DashboardPageContent() {
     return counts;
   }, [investmentsYearScoped, isTaxView, statusFilter]);
 
+  // Build Investment Name options from the currently scoped pool
+  const investmentNameOptions = React.useMemo(() => {
+    // Start with the year-scoped list
+    let base = investmentsYearScoped.filter(inv =>
+      isTaxView
+        ? inv.status === 'Sold'                      // Tax view: Sold only
+        : (statusFilter === 'All' ? true : inv.status === statusFilter)
+    );
+    // Respect the Type tab
+    if (typeFilter !== 'All') {
+      base = base.filter(inv => inv.type === typeFilter);
+    }
+    // Collect unique names (skip falsy just in case)
+    const names = Array.from(new Set(base.map(inv => inv.name).filter(Boolean as unknown as (x: string | null | undefined) => x is string)));
+    names.sort((a, b) => a.localeCompare(b));
+    return names;
+  }, [investmentsYearScoped, isTaxView, statusFilter, typeFilter]);
+
+  // If current selection disappears after filters change, reset to All
+  React.useEffect(() => {
+    if (investmentNameFilter !== 'All' && !investmentNameOptions.includes(investmentNameFilter)) {
+      setInvestmentNameFilter('All');
+    }
+  }, [investmentNameOptions, investmentNameFilter]);
+
 
   const filteredAndSortedInvestments = React.useMemo(() => {
     let filtered = [...investmentsYearScoped];
@@ -283,6 +310,10 @@ function DashboardPageContent() {
       filtered = filtered.filter(inv => inv.status === 'Sold');
     } else if (statusFilter !== 'All') {
       filtered = filtered.filter(inv => inv.status === statusFilter);
+    }
+
+    if (investmentNameFilter !== 'All') {
+      filtered = filtered.filter(inv => inv.name === investmentNameFilter);
     }
 
     return filtered.sort((a, b) => {
@@ -304,7 +335,7 @@ function DashboardPageContent() {
         }
       }
     });
-  }, [investmentsYearScoped, typeFilter, statusFilter, sortKey, isTaxView]);
+  }, [investmentsYearScoped, typeFilter, statusFilter, sortKey, isTaxView, investmentNameFilter]);
 
   const investmentMetrics = React.useMemo(() => {
     const metricsMap = new Map<string, ReturnType<typeof calculatePositionMetrics>>();
@@ -509,6 +540,22 @@ function DashboardPageContent() {
         </div>
         <div className="flex-grow" />
         <div className="flex items-center gap-4 w-full sm:w-auto">
+          <div className="w-full sm:w-[220px]">
+            <Select
+              value={investmentNameFilter}
+              onValueChange={(v) => setInvestmentNameFilter(v as 'All' | string)}
+            >
+              <SelectTrigger>
+                <SelectValue placeholder="Filter by investment" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Investments</SelectItem>
+                {investmentNameOptions.map((n) => (
+                  <SelectItem key={n} value={n}>{n}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
