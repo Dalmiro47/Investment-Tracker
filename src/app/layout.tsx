@@ -28,6 +28,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#0B1220" },
     { media: "(prefers-color-scheme: dark)",  color: "#0B1220" },
@@ -40,14 +41,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${ptSans.variable} ${spaceGrotesk.variable} dark`}>
+    <html lang="en" className={`${ptSans.variable} ${spaceGrotesk.variable} dark h-full`}>
       <head>
         {/* iOS PWA friendliness */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
       </head>
-      <body className="font-body antialiased">
+      <body className="font-body antialiased min-h-[100svh] bg-background text-foreground overflow-x-hidden">
         <AuthProvider>
           {children}
         </AuthProvider>
@@ -73,5 +74,3 @@ export default function RootLayout({
     </html>
   );
 }
-
-    
