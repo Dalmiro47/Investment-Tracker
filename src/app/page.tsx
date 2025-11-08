@@ -707,7 +707,7 @@ function DashboardPageContent() {
         isTaxView={isTaxView}
         onToggleTaxView={handleToggleTaxView}
       >
-        <div className="mx-auto w-full px-4 sm:px-6">
+        <div className="mx-auto w-full px-4 sm:px-6 overflow-x-hidden">
           {section === "summary" ? (
             <PortfolioSummary 
               ref={summaryRef}
@@ -726,7 +726,7 @@ function DashboardPageContent() {
   );
 
   const desktopView = (
-      <div className="min-h-screen w-full bg-background">
+      <div className="min-h-[100svh] w-full bg-background overflow-x-hidden">
         <DashboardHeader 
             isTaxView={isTaxView} 
             onTaxViewChange={setIsTaxView}
@@ -845,7 +845,7 @@ function DashboardPageContent() {
                 </CardContent>
               </Card>
             ) : filteredAndSortedInvestments.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
               {filteredAndSortedInvestments.map(investment => {
                 const metrics = investmentMetrics.get(investment.id);
                 const txs = transactionsMap[investment.id] ?? [];

@@ -1,3 +1,4 @@
+
 "use client";
 import * as React from "react";
 import TopBar from "./TopBar";
@@ -22,7 +23,7 @@ export function MobileAppShell({
   onToggleTaxView = () => {},
 }: MobileAppShellProps) {
   return (
-    <div className="relative min-h-screen md:hidden bg-background text-foreground">
+    <div className="relative min-h-[100svh] md:hidden bg-background text-foreground">
       <TopBar
         onTaxSettingsClick={onTaxSettingsClick}
         onViewTaxEstimate={onViewTaxEstimate}
