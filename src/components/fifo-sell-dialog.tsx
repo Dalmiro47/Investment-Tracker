@@ -92,6 +92,7 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, onSuccess }: Fifo
                     )}
                 />
               </FormItem>
+              <div></div>
             </div>
             
             <div className="grid grid-cols-2 gap-4">
