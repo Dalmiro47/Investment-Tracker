@@ -1,4 +1,3 @@
-
 "use client"
 
 import { useState, useEffect, useMemo, useRef, useCallback } from "react";
@@ -54,11 +53,12 @@ import {
 } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-import { PlusCircle, Loader2, MoreVertical, Edit, Trash2 } from "lucide-react";
+import { PlusCircle, Loader2, MoreVertical, Edit, Trash2, ArrowLeft } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import AppDatePicker from "./ui/app-date-picker";
 
 // --- TransactionForm ---
+// (No changes to logic, just wrapped in the new layout structure in the parent)
 interface TransactionFormProps {
     investment: Investment;
     onFormSubmit: () => void;
@@ -93,7 +93,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
 
     useEffect(() => {
         const initKey = `${editingTransaction?.id ?? 'new'}|${typeOptions.join(',')}`;
-        if (initKeyRef.current === initKey) return; // already initialized for this state
+        if (initKeyRef.current === initKey) return; 
         initKeyRef.current = initKey;
 
         if (editingTransaction) {
@@ -114,9 +114,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
         }
     }, [editingTransaction, typeOptions, investment, form]);
 
-
     const watchedType = useWatch({ control: form.control, name: "type" });
-
 
     const handleSubmit = async (values: TransactionFormValues) => {
         if (!user) return;
@@ -137,8 +135,8 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
 
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4 py-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <form id="transaction-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
                         name="type"
@@ -155,6 +153,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                                         ))}
                                     </SelectContent>
                                 </Select>
+                                <FormMessage />
                             </FormItem>
                         )}
                     />
@@ -176,13 +175,13 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                 </div>
 
                 {watchedType === 'Sell' && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                         <FormField
                             control={form.control}
                             name="quantity"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Quantity</FormLabel>
+                                    <FormLabel>Quantity Sold</FormLabel>
                                     <FormControl>
                                         <Input type="number" step="any" placeholder="e.g. 10" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
                                     </FormControl>
@@ -195,7 +194,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                             name="pricePerUnit"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Price per Unit (€)</FormLabel>
+                                    <FormLabel>Price / Unit (€)</FormLabel>
                                     <FormControl>
                                         <Input type="number" step="any" placeholder="e.g. 150.50" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
                                     </FormControl>
@@ -221,14 +220,6 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                         )}
                     />
                 )}
-
-
-                <div className="flex justify-end gap-2 pt-4">
-                    <Button type="button" variant="ghost" onClick={onCancel} disabled={form.formState.isSubmitting}>Cancel</Button>
-                    <Button type="submit" disabled={form.formState.isSubmitting}>
-                        {form.formState.isSubmitting ? 'Saving...' : 'Save Transaction'}
-                    </Button>
-                </div>
             </form>
         </Form>
     );
@@ -278,7 +269,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
     const handleFormSubmit = () => {
         setView('list');
         setEditingTransaction(undefined);
-        onTransactionAdded(); // This should trigger a refetch on the main page, which then triggers the fetch in this component
+        onTransactionAdded(); 
     }
 
     const handleAddClick = () => {
@@ -313,70 +304,87 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
         ...transactions,
     ].sort((a, b) => +new Date(b.date) - +new Date(a.date));
 
+    // Determine widths based on current view
+    const widthClass = view === 'list' ? 'max-w-4xl' : 'max-w-lg';
 
     return (
         <>
             <Dialog open={isOpen} onOpenChange={onOpenChange}>
-                <DialogContent className="max-w-4xl">
-                    <DialogHeader>
-                        <DialogTitle>
+                {/* Consistent Dialog Structure:
+                    1. w-[96vw] + max-w + p-0
+                    2. Fixed Header (shrink-0)
+                    3. Scrollable Body (flex-1)
+                    4. Fixed Footer (shrink-0)
+                */}
+                <DialogContent className={cn("w-[96vw] p-0 flex flex-col max-h-[85vh]", widthClass)}>
+                    
+                    {/* Fixed Header */}
+                    <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
+                        <DialogTitle className="flex items-center gap-2">
+                            {view === 'form' && (
+                                <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 mr-1" onClick={() => { setView('list'); setEditingTransaction(undefined); }}>
+                                    <ArrowLeft className="h-4 w-4" />
+                                </Button>
+                            )}
                             {view === 'form'
                                 ? editingTransaction ? 'Edit Transaction' : 'Add Transaction'
-                                : `Transaction History: ${investment.name}`}
+                                : `History: ${investment.name}`}
                         </DialogTitle>
                         <DialogDescription>
                             {view === 'form'
-                                ? isIA ? 'Record a deposit or withdrawal for this interest account.' : 'Record a sale or income for this investment.'
-                                : 'View and manage all transactions for this investment.'}
+                                ? isIA ? 'Record a deposit or withdrawal.' : 'Record a sale or income.'
+                                : 'View past transactions for this investment.'}
                         </DialogDescription>
                     </DialogHeader>
 
-                    {view === 'form' ? (
-                        <TransactionForm
-                            investment={investment}
-                            onFormSubmit={handleFormSubmit}
-                            onCancel={() => { setView('list'); setEditingTransaction(undefined); }}
-                            editingTransaction={editingTransaction}
-                        />
-                    ) : (
-                        <>
-                            <div className="max-h-[60vh] overflow-y-auto pr-2">
+                    {/* Scrollable Body */}
+                    <div className="flex-1 overflow-y-auto px-6 py-4">
+                        {view === 'form' ? (
+                            <TransactionForm
+                                investment={investment}
+                                onFormSubmit={handleFormSubmit}
+                                onCancel={() => { setView('list'); setEditingTransaction(undefined); }}
+                                editingTransaction={editingTransaction}
+                            />
+                        ) : (
+                            <div className="border rounded-md">
                                 {loading ? (
-                                    <div className="flex justify-center items-center py-16"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
+                                    <div className="flex justify-center items-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                                 ) : (
                                     <Table>
-                                        <TableHeader>
-                                            <TableRow>
+                                        <TableHeader className="bg-muted/50">
+                                            <TableRow className="hover:bg-transparent">
                                                 <TableHead>Type</TableHead>
                                                 <TableHead>Date</TableHead>
-                                                <TableHead className="text-right">{isIA ? 'Amount' : 'Quantity'}</TableHead>
-                                                {!isIA && <TableHead className="text-right">Price/Unit</TableHead>}
-                                                {!isIA && <TableHead className="text-right">Total Amount</TableHead>}
-                                                <TableHead className="text-right">Actions</TableHead>
+                                                <TableHead className="text-right">{isIA ? 'Amount' : 'Qty'}</TableHead>
+                                                {!isIA && <TableHead className="text-right">Price</TableHead>}
+                                                {!isIA && <TableHead className="text-right">Total</TableHead>}
+                                                <TableHead className="w-[50px]"></TableHead>
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
+                                            {/* Initial Buy Row */}
                                             {investment.type !== 'Interest Account' && (
-                                                <TableRow className="bg-muted/30">
-                                                    <TableCell><span className="font-semibold text-green-500">Buy</span></TableCell>
-                                                    <TableCell>{format(parseISO(investment.purchaseDate), 'dd MMM yyyy')}</TableCell>
-                                                    <TableCell className="text-right font-mono">{formatQuantity(investment.purchaseQuantity)}</TableCell>
-                                                    <TableCell className="text-right font-mono">{formatCurrency(investment.purchasePricePerUnit)}</TableCell>
-                                                    <TableCell className="text-right font-mono">{formatCurrency(investment.purchaseQuantity * investment.purchasePricePerUnit)}</TableCell>
+                                                <TableRow className="bg-muted/20 hover:bg-muted/40">
+                                                    <TableCell><span className="font-medium text-green-600">Buy</span></TableCell>
+                                                    <TableCell className="text-muted-foreground">{format(parseISO(investment.purchaseDate), 'dd MMM yyyy')}</TableCell>
+                                                    <TableCell className="text-right font-mono text-muted-foreground">{formatQuantity(investment.purchaseQuantity)}</TableCell>
+                                                    <TableCell className="text-right font-mono text-muted-foreground">{formatCurrency(investment.purchasePricePerUnit)}</TableCell>
+                                                    <TableCell className="text-right font-mono text-muted-foreground">{formatCurrency(investment.purchaseQuantity * investment.purchasePricePerUnit)}</TableCell>
                                                     <TableCell></TableCell>
                                                 </TableRow>
                                             )}
 
-                                            {/* Other Transactions */}
+                                            {/* Transactions */}
                                             {allTransactionsForDisplay.map((tx) => (
                                                 <TableRow key={tx.id}>
                                                     <TableCell>
                                                         <span className={cn(
-                                                            'font-semibold',
+                                                            'font-medium inline-flex items-center',
                                                             tx.type === 'Sell' && 'text-red-500',
                                                             tx.type === 'Dividend' && 'text-blue-500',
                                                             tx.type === 'Interest' && 'text-purple-500',
-                                                            tx.type === 'Deposit' && 'text-green-500',
+                                                            tx.type === 'Deposit' && 'text-green-600',
                                                             tx.type === 'Withdrawal' && 'text-orange-500',
                                                         )}>
                                                             {tx.type}
@@ -384,14 +392,14 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                                                     </TableCell>
                                                     <TableCell>{format(parseISO(tx.date), 'dd MMM yyyy')}</TableCell>
                                                     <TableCell className="text-right font-mono">
-                                                        {tx.type === 'Sell' ? formatQuantity(tx.quantity) : isIA ? formatCurrency(tx.totalAmount) : '-'}
+                                                        {tx.type === 'Sell' ? formatQuantity(tx.quantity) : isIA ? formatCurrency(tx.totalAmount) : '—'}
                                                     </TableCell>
-                                                    {!isIA && <TableCell className="text-right font-mono">{tx.type === 'Sell' ? formatCurrency(tx.pricePerUnit) : '-'}</TableCell>}
+                                                    {!isIA && <TableCell className="text-right font-mono text-muted-foreground">{tx.type === 'Sell' ? formatCurrency(tx.pricePerUnit) : '—'}</TableCell>}
                                                     {!isIA && <TableCell className="text-right font-mono">{formatCurrency(tx.totalAmount)}</TableCell>}
                                                     <TableCell className="text-right">
                                                         <DropdownMenu>
                                                             <DropdownMenuTrigger asChild>
-                                                                <Button variant="ghost" size="icon" className="h-8 w-8">
+                                                                <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-muted">
                                                                     <MoreVertical className="h-4 w-4" />
                                                                 </Button>
                                                             </DropdownMenuTrigger>
@@ -411,8 +419,8 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                                             ))}
                                             {allTransactionsForDisplay.length === 0 && (
                                                 <TableRow>
-                                                    <TableCell colSpan={isIA ? 4 : 6} className="text-center text-muted-foreground py-8">
-                                                        No other transactions recorded yet.
+                                                    <TableCell colSpan={isIA ? 4 : 6} className="h-24 text-center text-muted-foreground">
+                                                        No additional transactions found.
                                                     </TableCell>
                                                 </TableRow>
                                             )}
@@ -420,23 +428,34 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                                     </Table>
                                 )}
                             </div>
-                            <DialogFooter>
-                                <Button onClick={handleAddClick}>
-                                    <PlusCircle className="mr-2 h-4 w-4" />
-                                    Add Transaction
+                        )}
+                    </div>
+
+                    {/* Fixed Footer */}
+                    <DialogFooter className="px-6 py-4 bg-background/50 backdrop-blur border-t shrink-0">
+                         {view === 'form' ? (
+                             <>
+                                <Button type="button" variant="ghost" onClick={() => { setView('list'); setEditingTransaction(undefined); }}>Cancel</Button>
+                                <Button type="submit" form="transaction-form">
+                                    {editingTransaction ? 'Update Transaction' : 'Save Transaction'}
                                 </Button>
-                            </DialogFooter>
-                        </>
-                    )}
+                             </>
+                         ) : (
+                             <Button onClick={handleAddClick} className="w-full sm:w-auto">
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Add Transaction
+                             </Button>
+                         )}
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
             <AlertDialog open={!!deletingTransactionId} onOpenChange={(open) => !open && setDeletingTransactionId(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                        <AlertDialogTitle>Delete Transaction?</AlertDialogTitle>
                         <AlertDialogDescription>
-                            This will permanently delete the transaction. This action cannot be undone.
+                            This will permanently remove this record from your history. This action cannot be undone.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
@@ -448,5 +467,3 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
         </>
     );
 }
-
-    
