@@ -67,80 +67,84 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, onSuccess }: Fifo
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
+      <DialogContent className="w-[96vw] sm:max-w-[500px] p-0 flex flex-col max-h-[85vh]">
+        {/* Fixed Header */}
+        <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>Sell {symbol} (FIFO)</DialogTitle>
           <DialogDescription>
             This will automatically sell your oldest holdings first to comply with German tax rules.
           </DialogDescription>
         </DialogHeader>
         
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <FormItem>
-                 <FormLabel>Date</FormLabel>
-                 <Controller
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+            <Form {...form}>
+            <form id="fifo-sell-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                <FormItem>
+                    <FormLabel>Date</FormLabel>
+                    <Controller
+                        control={form.control}
+                        name="date"
+                        render={({ field }) => (
+                            <AppDatePicker
+                                value={field.value ?? null}
+                                onChange={field.onChange}
+                                maxDate={new Date()}
+                            />
+                        )}
+                    />
+                </FormItem>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                    <FormField
                     control={form.control}
-                    name="date"
+                    name="quantity"
                     render={({ field }) => (
-                        <AppDatePicker
-                            value={field.value ?? null}
-                            onChange={field.onChange}
-                            maxDate={new Date()}
-                        />
+                        <FormItem>
+                        <FormLabel>Quantity</FormLabel>
+                        <FormControl>
+                            <Input 
+                                type="number" step="any" 
+                                {...field} 
+                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
+                            />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
                     )}
-                />
-              </FormItem>
-              <div></div>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-                <FormField
-                  control={form.control}
-                  name="quantity"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Quantity</FormLabel>
-                      <FormControl>
-                        <Input 
-                            type="number" step="any" 
-                            {...field} 
-                            onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="pricePerUnit"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Price / Unit (€)</FormLabel>
-                      <FormControl>
-                        <Input 
-                            type="number" step="any" 
-                            {...field} 
-                            onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-            </div>
+                    />
+                    <FormField
+                    control={form.control}
+                    name="pricePerUnit"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Price / Unit (€)</FormLabel>
+                        <FormControl>
+                            <Input 
+                                type="number" step="any" 
+                                {...field} 
+                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
+                            />
+                        </FormControl>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                    />
+                </div>
+            </form>
+            </Form>
+        </div>
 
-            <DialogFooter className="pt-4">
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Sell Investment
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+        {/* Fixed Footer */}
+        <DialogFooter className="px-6 py-4 bg-background/50 backdrop-blur border-t shrink-0">
+            <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="submit" form="fifo-sell-form" disabled={isSubmitting}>
+            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Sell Investment
+            </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
