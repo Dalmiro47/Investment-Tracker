@@ -13,13 +13,12 @@ import { YearTaxSummary } from '@/lib/portfolio';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
 import { Skeleton } from './ui/skeleton';
 import { Button } from './ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TAX, defaultCapitalAllowance, defaultCryptoThreshold } from '@/lib/tax';
 import { Separator } from './ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { Dialog as MiniDialog, DialogContent as MiniDialogContent, DialogHeader as MiniDialogHeader, DialogTitle as MiniDialogTitle } from '@/components/ui/dialog';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetTrigger } from "@/components/ui/sheet";
 
 
 const CHART_COLORS = [
@@ -268,6 +267,7 @@ function PortfolioSummaryImpl({
     
     const [donutMode, setDonutMode] = useState<DonutMode>('market');
     const [isEstimateOpen, setIsEstimateOpen] = useState(false);
+    const [isInfoOpen, setIsInfoOpen] = useState(false);
 
     useEffect(() => {
       if (yearFilter.mode === 'holdings') setDonutMode('market');
@@ -360,81 +360,10 @@ function PortfolioSummaryImpl({
                     <div>
                         <div className="flex items-center gap-2">
                            <CardTitle className="font-headline text-2xl">{title}</CardTitle>
-                           <Sheet>
-                              <SheetTrigger asChild>
-                                <Button variant="ghost" size="icon">
-                                  <Info className="h-5 w-5" />
-                                  <span className="sr-only">Show Explanations</span>
-                                </Button>
-                              </SheetTrigger>
-                              <SheetContent side="right" className="overflow-y-auto sm:max-w-md">
-                                <SheetHeader>
-                                  <SheetTitle>Summary Column Explanations</SheetTitle>
-                                  <SheetDescription>
-                                    How each value in the summary table is calculated.
-                                  </SheetDescription>
-                                </SheetHeader>
-                                <div className="mt-6 text-sm space-y-4">
-                                  <div>
-                                      <h4 className="font-semibold">Filter Explanation</h4>
-                                      <ul className="list-disc pl-5 mt-2 space-y-2 text-muted-foreground">
-                                          <li><span className="font-semibold text-foreground">All Years View:</span> Shows a lifetime summary of all investments (active and sold).</li>
-                                          <li><span className="font-semibold text-foreground">Specific Year View:</span> Restricts calculations to a single year and enables different view modes.</li>
-                                      </ul>
-                                  </div>
-                                  <div>
-                                      <h4 className="font-semibold">Yearly View Modes</h4>
-                                      <p className="text-muted-foreground">When a specific year is selected, these modes change which investments are included in the summary.</p>
-                                      <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
-                                          <li><span className="font-semibold text-foreground">Holdings:</span> Shows ONLY currently open positions. Realized P/L is hidden.</li>
-                                          <li><span className="font-semibold text-foreground">Realized (Tax):</span> Shows ONLY positions that had a sale in the selected year. Unrealized P/L is hidden. Market Value represents Realized Proceeds.</li>
-                                          <li><span className="font-semibold text-foreground">Combined:</span> (Default) Shows all currently open positions PLUS any positions that had a sale in the selected year.</li>
-                                      </ul>
-                                  </div>
-                                  <div>
-                                      <h4 className="font-semibold">Cost Basis</h4>
-                                      <p className="text-muted-foreground">The original purchase price of the assets included in the current view. <br/><code className="text-xs">Formula: For each included investment, sum of (Original Purchase Price per Unit x Quantity)</code></p>
-                                  </div>
-                                  <div>
-                                      <h4 className="font-semibold">{marketValueLabel}</h4>
-                                      <p className="text-muted-foreground">In Holdings/Combined mode, this is the current value of assets you still own. In Realized mode, it shows the cash proceeds from sales.<br/><code className="text-xs">Formula (Holdings/Combined): Available Quantity × Current Price per Unit</code><br/><code className="text-xs">Formula (Realized): Sum of (Sell Price x Quantity Sold)</code></p>
-                                  </div>
-                                  {showRealizedCol && (
-                                      <div>
-                                          <h4 className="font-semibold">Realized P/L (Profit/Loss)</h4>
-                                          <p className="text-muted-foreground">Your &quot;locked-in&quot; profit or loss from sales, filtered by the selected period.<br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
-                                      </div>
-                                  )}
-                                  {showUnrealizedCol && (
-                                      <div>
-                                          <h4 className="font-semibold">Unrealized P/L (Profit/Loss)</h4>
-                                          <p className="text-muted-foreground">Your &quot;paper&quot; profit or loss on assets you still hold.<br/><code className="text-xs">Formula: Market Value - Cost Basis of remaining shares</code></p>
-                                      </div>
-                                  )}
-                                  <div>
-                                      <h4 className="font-semibold">Total P/L (Profit/Loss)</h4>
-                                      <p className="text-muted-foreground">The complete picture of your profit or loss, combining the (filtered) realized gains/losses with the current unrealized gains/losses.<br/><code className="text-xs">Formula: Realized P/L + Unrealized P/L</code></p>
-                                  </div>
-                                  <div>
-                                     <h4 className="font-semibold">Performance</h4>
-                                     <p className="text-muted-foreground">The total percentage return for the assets included in the current view.</p>
-                                     <p className="text-muted-foreground mt-1"><code className="text-xs">Formula: (Total P/L / Total Original Purchase Value) × 100</code></p>
-                                  </div>
-                                  <div>
-                                      <h4 className="font-semibold">% of Portfolio (Donut Chart)</h4>
-                                      <p className="text-muted-foreground">This shows the allocation of your portfolio&apos;s value. It has two modes:</p>
-                                      <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
-                                          <li><span className="font-semibold text-foreground">Market Value Mode:</span> Shows the percentage based on the current market value of what you own.</li>
-                                          <li><span className="font-semibold text-foreground">Economic Value Mode:</span> Shows a broader view, including your realized gains. The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>
-                                      </ul>
-                                  </div>
-                                  <div className="pt-2">
-                                      <h4 className="font-semibold">Total Row</h4>
-                                      <p className="text-muted-foreground">The &quot;Total&quot; row sums the numeric columns from the rows above it. The &quot;Performance&quot; percentage is then re-calculated based on the grand totals to provide a true weighted-average performance for your entire portfolio.</p>
-                                  </div>
-                                </div>
-                              </SheetContent>
-                            </Sheet>
+                            <Button variant="ghost" size="icon" onClick={() => setIsInfoOpen(true)}>
+                                <Info className="h-5 w-5" />
+                                <span className="sr-only">Show Explanations</span>
+                            </Button>
                         </div>
                         <CardDescription>{description}</CardDescription>
                     </div>
@@ -671,6 +600,73 @@ function PortfolioSummaryImpl({
                 </div>
             </CardContent>
         </Card>
+        <Dialog open={isInfoOpen} onOpenChange={setIsInfoOpen}>
+            <DialogContent className="w-[96vw] max-w-3xl p-0">
+                <DialogHeader className="px-6 pt-6 pb-2">
+                    <DialogTitle>Summary Column Explanations</DialogTitle>
+                    <DialogDescription>How each value in the summary table is calculated.</DialogDescription>
+                </DialogHeader>
+                <div className="px-6 pb-6 max-h-[65vh] overflow-y-auto space-y-4">
+                    <div>
+                        <h4 className="font-semibold">Filter Explanation</h4>
+                        <ul className="list-disc pl-5 mt-2 space-y-2 text-muted-foreground">
+                            <li><span className="font-semibold text-foreground">All Years View:</span> Shows a lifetime summary of all investments (active and sold).</li>
+                            <li><span className="font-semibold text-foreground">Specific Year View:</span> Restricts calculations to a single year and enables different view modes.</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold">Yearly View Modes</h4>
+                        <p className="text-muted-foreground">When a specific year is selected, these modes change which investments are included in the summary.</p>
+                        <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
+                            <li><span className="font-semibold text-foreground">Holdings:</span> Shows ONLY currently open positions. Realized P/L is hidden.</li>
+                            <li><span className="font-semibold text-foreground">Realized (Tax):</span> Shows ONLY positions that had a sale in the selected year. Unrealized P/L is hidden. Market Value represents Realized Proceeds.</li>
+                            <li><span className="font-semibold text-foreground">Combined:</span> (Default) Shows all currently open positions PLUS any positions that had a sale in the selected year.</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold">Cost Basis</h4>
+                        <p className="text-muted-foreground">The original purchase price of the assets included in the current view. <br/><code className="text-xs">Formula: For each included investment, sum of (Original Purchase Price per Unit x Quantity)</code></p>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold">{marketValueLabel}</h4>
+                        <p className="text-muted-foreground">In Holdings/Combined mode, this is the current value of assets you still own. In Realized mode, it shows the cash proceeds from sales.<br/><code className="text-xs">Formula (Holdings/Combined): Available Quantity × Current Price per Unit</code><br/><code className="text-xs">Formula (Realized): Sum of (Sell Price x Quantity Sold)</code></p>
+                    </div>
+                    {showRealizedCol && (
+                        <div>
+                            <h4 className="font-semibold">Realized P/L (Profit/Loss)</h4>
+                            <p className="text-muted-foreground">Your &quot;locked-in&quot; profit or loss from sales, filtered by the selected period.<br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
+                        </div>
+                    )}
+                    {showUnrealizedCol && (
+                        <div>
+                            <h4 className="font-semibold">Unrealized P/L (Profit/Loss)</h4>
+                            <p className="text-muted-foreground">Your &quot;paper&quot; profit or loss on assets you still hold.<br/><code className="text-xs">Formula: Market Value - Cost Basis of remaining shares</code></p>
+                        </div>
+                    )}
+                    <div>
+                        <h4 className="font-semibold">Total P/L (Profit/Loss)</h4>
+                        <p className="text-muted-foreground">The complete picture of your profit or loss, combining the (filtered) realized gains/losses with the current unrealized gains/losses.<br/><code className="text-xs">Formula: Realized P/L + Unrealized P/L</code></p>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold">Performance</h4>
+                        <p className="text-muted-foreground">The total percentage return for the assets included in the current view.</p>
+                        <p className="text-muted-foreground mt-1"><code className="text-xs">Formula: (Total P/L / Total Original Purchase Value) × 100</code></p>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold">% of Portfolio (Donut Chart)</h4>
+                        <p className="text-muted-foreground">This shows the allocation of your portfolio's value. It has two modes:</p>
+                        <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
+                            <li><span className="font-semibold text-foreground">Market Value Mode:</span> Shows the percentage based on the current market value of what you own.</li>
+                            <li><span className="font-semibold text-foreground">Economic Value Mode:</span> Shows a broader view, including your realized gains. The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>
+                        </ul>
+                    </div>
+                    <div className="pt-2">
+                        <h4 className="font-semibold">Total Row</h4>
+                        <p className="text-muted-foreground">The &quot;Total&quot; row sums the numeric columns from the rows above it. The &quot;Performance&quot; percentage is then re-calculated based on the grand totals to provide a true weighted-average performance for your entire portfolio.</p>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
         {yearFilter.kind === 'year' && (
             <TaxEstimateDialog 
                 isOpen={isEstimateOpen}
