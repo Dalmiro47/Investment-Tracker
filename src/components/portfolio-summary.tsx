@@ -67,7 +67,8 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                 <DialogTitle className="flex items-center gap-2">
                   <Scale className="h-5 w-5" /> Estimated Taxes for {year}
                 </DialogTitle>
-                <Button size="sm" variant="outline" onClick={() => setView('law')}>
+                {/* Added mr-8 to prevent overlap with the Dialog's absolute close button */}
+                <Button size="sm" variant="outline" onClick={() => setView('law')} className="mr-8">
                   Law Info
                 </Button>
               </div>
