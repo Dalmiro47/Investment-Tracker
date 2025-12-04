@@ -1,14 +1,14 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
 import type { TaxSettings } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Info } from 'lucide-react';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 interface TaxSettingsDialogProps {
   isOpen: boolean;
@@ -87,47 +87,49 @@ export function TaxSettingsDialog({ isOpen, onOpenChange, currentSettings, onSav
           </div>
 
            <div className="space-y-2">
-             <div className="flex items-center gap-2">
-                <Label>Crypto Marginal Tax Rate</Label>
-                <Dialog>
-                    <DialogTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-5 w-5"><Info className="h-4 w-4" /></Button>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-xl">
-                        <DialogHeader>
-                            <DialogTitle>How to Estimate Your Marginal Tax Rate</DialogTitle>
-                        </DialogHeader>
-                        <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4">
-                            <h4 className="font-semibold">Step 1 — Know your taxable income (zu versteuerndes Einkommen)</h4>
-                            <p className="text-muted-foreground">This is not your gross salary. It’s your gross annual income minus:</p>
-                            <ul className="list-disc pl-5 text-muted-foreground space-y-1">
-                                <li>Social security contributions (health, pension, unemployment, care insurance)</li>
-                                <li>Certain deductions (e.g. work expenses lump sum €1,230, special expenses lump sum €36)</li>
-                                <li>Allowances (e.g. basic tax-free allowance €11,604 in 2024 for singles)</li>
-                            </ul>
-                            <p className="text-muted-foreground">💡 Your payroll slip or your last <code className="text-xs">Einkommensteuerbescheid</code> shows this number as <code className="text-xs">&quot;zu versteuerndes Einkommen&quot;</code>.</p>
-                            
-                            <h4 className="font-semibold">Step 2 — Find your marginal rate</h4>
-                            <p className="text-muted-foreground">Germany’s income tax is progressive. Here are 2024 figures for single taxpayers (before solidarity surcharge):</p>
-                            <table className="w-full text-left border-collapse">
-                                <thead>
-                                    <tr>
-                                        <th className="p-2 border-b">Taxable income (€)</th>
-                                        <th className="p-2 border-b">Marginal tax rate</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr className="border-b"><td className="p-2">Up to €11,604</td><td className="p-2">0% (tax-free)</td></tr>
-                                    <tr className="border-b"><td className="p-2">€11,605 – €18,336</td><td className="p-2">14% → 24% (progressive ramp-up)</td></tr>
-                                    <tr className="border-b"><td className="p-2">€18,337 – €66,760</td><td className="p-2">24% → 42% (progressive ramp-up)</td></tr>
-                                    <tr className="border-b"><td className="p-2">€66,761 – €277,825</td><td className="p-2">42%</td></tr>
-                                    <tr><td className="p-2">Over €277,825</td><td className="p-2">45% (“rich tax” rate)</td></tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </DialogContent>
-                </Dialog>
-             </div>
+            <div className="flex items-center gap-2">
+              <Label>Crypto Marginal Tax Rate</Label>
+              <Sheet>
+                <SheetTrigger asChild>
+                  <Button variant="ghost" size="icon" className="h-5 w-5">
+                    <Info className="h-4 w-4" />
+                  </Button>
+                </SheetTrigger>
+                <SheetContent side="right" className="overflow-y-auto sm:max-w-md z-[100]">
+                  <SheetHeader>
+                    <SheetTitle>How to Estimate Your Marginal Tax Rate</SheetTitle>
+                  </SheetHeader>
+                  <div className="mt-6 text-sm space-y-4 pb-10">
+                    <h4 className="font-semibold">Step 1 — Know your taxable income (zu versteuerndes Einkommen)</h4>
+                    <p className="text-muted-foreground">This is not your gross salary. It’s your gross annual income minus:</p>
+                    <ul className="list-disc pl-5 text-muted-foreground space-y-1">
+                        <li>Social security contributions (health, pension, unemployment, care insurance)</li>
+                        <li>Certain deductions (e.g. work expenses lump sum €1,230, special expenses lump sum €36)</li>
+                        <li>Allowances (e.g. basic tax-free allowance €11,604 in 2024 for singles)</li>
+                    </ul>
+                    <p className="text-muted-foreground">💡 Your payroll slip or your last <code className="text-xs">Einkommensteuerbescheid</code> shows this number as <code className="text-xs">&quot;zu versteuerndes Einkommen&quot;</code>.</p>
+                    
+                    <h4 className="font-semibold">Step 2 — Find your marginal rate</h4>
+                    <p className="text-muted-foreground">Germany’s income tax is progressive. Here are 2024 figures for single taxpayers (before solidarity surcharge):</p>
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr>
+                                <th className="p-2 border-b">Taxable income (€)</th>
+                                <th className="p-2 border-b">Marginal tax rate</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr className="border-b"><td className="p-2">Up to €11,604</td><td className="p-2">0% (tax-free)</td></tr>
+                            <tr className="border-b"><td className="p-2">€11,605 – €18,336</td><td className="p-2">14% → 24% (progressive ramp-up)</td></tr>
+                            <tr className="border-b"><td className="p-2">€18,337 – €66,760</td><td className="p-2">24% → 42% (progressive ramp-up)</td></tr>
+                            <tr className="border-b"><td className="p-2">€66,761 – €277,825</td><td className="p-2">42%</td></tr>
+                            <tr><td className="p-2">Over €277,825</td><td className="p-2">45% (“rich tax” rate)</td></tr>
+                        </tbody>
+                    </table>
+                  </div>
+                </SheetContent>
+              </Sheet>
+            </div>
              <Select
                 value={String(settings.cryptoMarginalRate)}
                 onValueChange={(value) => setSettings(s => ({ ...s, cryptoMarginalRate: Number(value) }))}
@@ -152,5 +154,3 @@ export function TaxSettingsDialog({ isOpen, onOpenChange, currentSettings, onSav
     </Dialog>
   );
 }
-
-    

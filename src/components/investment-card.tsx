@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from 'react';
@@ -22,7 +21,7 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import { Button } from './ui/button';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from './ui/sheet';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { EtfSimLink } from './etf/EtfSimLink';
 
@@ -179,19 +178,19 @@ export default function InvestmentCard({
           </div>
            <div className="flex items-center gap-1">
             <Badge variant={status === 'Active' ? 'default' : 'secondary'} className={cn(status === 'Active' && 'bg-green-600 text-white')}>{status}</Badge>
-            <Dialog>
-                <DialogTrigger asChild>
+            <Sheet>
+                <SheetTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-8 w-8">
                         <Info className="h-4 w-4" />
                     </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl">
-                    <DialogHeader>
-                        <DialogTitle>Field Explanations</DialogTitle>
-                        <DialogDescription>Here&apos;s how each value on the card is calculated for this investment type.</DialogDescription>
-                    </DialogHeader>
+                </SheetTrigger>
+                <SheetContent side="right" className="overflow-y-auto sm:max-w-md">
+                    <SheetHeader>
+                        <SheetTitle>Field Explanations</SheetTitle>
+                        <SheetDescription>Here&apos;s how each value on the card is calculated for this investment type.</SheetDescription>
+                    </SheetHeader>
                     {isIA ? (
-                        <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4 py-4">
+                        <div className="mt-6 text-sm space-y-4 pb-10">
                             <div>
                                 <h4 className="font-semibold">Net Deposits</h4>
                                 <p className="text-muted-foreground">The total amount of cash you have moved into this account, minus any withdrawals. It is your principal investment.<br/><code className="text-xs">Formula: Sum of all Deposits - Sum of all Withdrawals</code></p>
@@ -210,7 +209,7 @@ export default function InvestmentCard({
                             </div>
                         </div>
                     ) : (
-                        <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4 py-4">
+                        <div className="mt-6 text-sm space-y-4 pb-10">
                             <div>
                                 <h4 className="font-semibold">Cost Basis</h4>
                                 <p className="text-muted-foreground">The original purchase price of the assets you currently still own. It ignores the cost of shares you&apos;ve already sold. <br/><code className="text-xs">Formula: Available Quantity × Original Purchase Price per Unit</code></p>
@@ -241,8 +240,8 @@ export default function InvestmentCard({
                             </div>
                         </div>
                     )}
-                </DialogContent>
-            </Dialog>
+                </SheetContent>
+            </Sheet>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
@@ -464,5 +463,3 @@ export default function InvestmentCard({
     </Card>
   );
 }
-
-    
