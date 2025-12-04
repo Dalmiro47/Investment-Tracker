@@ -55,21 +55,23 @@ export default function RootLayout({
         <Toaster />
         <OfflineToast />
         {/* Register SW at the root once on mount */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function(){
-                if ('serviceWorker' in navigator) {
-                  window.addEventListener('load', function(){
-                    navigator.serviceWorker.register('/sw.js').catch(function(e){
-                      console.warn('SW registration failed', e);
+        {process.env.NODE_ENV === 'production' && (
+          <script
+            dangerouslySetInnerHTML={{
+              __html: `
+                (function(){
+                  if ('serviceWorker' in navigator) {
+                    window.addEventListener('load', function(){
+                      navigator.serviceWorker.register('/sw.js').catch(function(e){
+                        console.warn('SW registration failed', e);
+                      });
                     });
-                  });
-                }
-              })();
-            `
-          }}
-        />
+                  }
+                })();
+              `
+            }}
+          />
+        )}
       </body>
     </html>
   );
