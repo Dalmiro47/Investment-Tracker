@@ -107,9 +107,17 @@ export default function InvestmentListView({
       const isFullySold = r.availableQty < 1e-6;
       const displayBasis = isFullySold ? r.soldBasis : r.costBasis;
 
+      // NEW: Calculate Sold Value (Proceeds)
+      const soldValue = r.soldBasis + r.realizedPL;
+
+      // NEW: Determine what to show in "Market Value" column
+      // If fully sold, show the total exit value (Proceeds). Otherwise show current market value.
+      const displayValue = isFullySold ? soldValue : r.marketValue;
+
       return {
         ...r,
         costBasis: displayBasis,
+        marketValue: displayValue,
         // Alias buyQty to boughtQty for consistency with Flat view
         boughtQty: r.buyQty,
         currentRatePct,
@@ -130,11 +138,15 @@ export default function InvestmentListView({
       const avgSellPrice = soldQty > 0 ? sellProceeds / soldQty : null;
 
       const isIA = inv.type === 'Interest Account';
+      const isSold = inv.status === 'Sold';
+      
       const costBasis = isIA
           ? m.purchaseValue
-          : inv.status === 'Sold'
+          : isSold
             ? m.soldCostBasis
             : m.availableQty * (Number(inv.purchasePricePerUnit) || 0);
+
+      const displayMarketValue = isSold ? sellProceeds : m.marketValue;
 
       return {
         key: inv.id,
@@ -153,9 +165,9 @@ export default function InvestmentListView({
         currentPrice: isIA ? 0 : (Number(inv.currentValue ?? 0)),
 
         costBasis,
-        marketValue: m.marketValue,             // IA: Balance
+        marketValue: displayMarketValue,
         realizedPL: m.realizedPLDisplay,
-        unrealizedPL: m.unrealizedPL,           // IA: Accrued Interest
+        unrealizedPL: m.unrealizedPL,
         totalPL: m.totalPLDisplay,
         performancePct: m.performancePct,
         purchaseValue: m.purchaseValue,
@@ -345,7 +357,7 @@ export default function InvestmentListView({
                 </>
               ) : null
             }
-            <th className="text-right">Market Value</th>
+            <th className="text-right">Value</th>
             {showRealizedPLCol && <th className="text-right">Realized P/L</th>}
             {showUnrealizedPLCol && <th className="text-right">Unrealized P/L</th>}
             <th className="text-right">Total P/L</th>
