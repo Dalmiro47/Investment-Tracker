@@ -1,3 +1,4 @@
+
 'use client';
 
 import * as React from 'react';
@@ -122,7 +123,10 @@ export default function AppDatePicker({
     return false;
   };
 
-  const selectDay = (d: Date) => {
+  const selectDay = (e: React.MouseEvent, d: Date) => {
+    e.preventDefault();
+    e.stopPropagation();
+
     if (disabled || dayIsDisabled(d)) return;
     const picked = startOfDayLocal(d);
     onChange(picked);
@@ -247,7 +251,8 @@ export default function AppDatePicker({
                   key={+d}
                   type="button"
                   disabled={disabledDay}
-                  onClick={() => selectDay(d)}
+                  onClick={(e) => selectDay(e, d)}
+                  onMouseDown={(e) => e.preventDefault()}
                   className={clsx(
                     'h-8 w-8 mx-auto rounded-md text-sm grid place-items-center',
                     'transition-colors',
