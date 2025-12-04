@@ -365,26 +365,28 @@ export default function EtfPlansPage() {
             />
 
             <Dialog open={isInfoDialogOpen} onOpenChange={setIsInfoDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
+                <DialogContent className="w-[96vw] max-w-3xl p-0">
+                    <DialogHeader className="px-6 pt-6 pb-2">
                         <DialogTitle>Contribution Schedule for {infoDialogPlan?.title}</DialogTitle>
                     </DialogHeader>
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Effective Month</TableHead>
-                                <TableHead className="text-right">New Monthly Amount</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {(infoDialogPlan?.contributionSteps ?? []).slice().sort((a,b) => a.month.localeCompare(b.month)).map(step => (
-                                <TableRow key={step.month}>
-                                    <TableCell>{format(parseISO(`${step.month}-01`), 'MMM yyyy')}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(step.amount)}</TableCell>
+                    <div className="px-6 pb-6 max-h-[65vh] overflow-y-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Effective Month</TableHead>
+                                    <TableHead className="text-right">New Monthly Amount</TableHead>
                                 </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                            </TableHeader>
+                            <TableBody>
+                                {(infoDialogPlan?.contributionSteps ?? []).slice().sort((a,b) => a.month.localeCompare(b.month)).map(step => (
+                                    <TableRow key={step.month}>
+                                        <TableCell>{format(parseISO(`${step.month}-01`), 'MMM yyyy')}</TableCell>
+                                        <TableCell className="text-right font-mono">{formatCurrency(step.amount)}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
                 </DialogContent>
             </Dialog>
 

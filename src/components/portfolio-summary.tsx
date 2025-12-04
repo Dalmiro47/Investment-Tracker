@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
@@ -7,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
-import { TrendingUp, TrendingDown, Info, Scale } from 'lucide-react';
+import { TrendingUp, TrendingDown, Info, Scale, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatPercent, toNum } from '@/lib/money';
 import { YearTaxSummary } from '@/lib/portfolio';
@@ -19,7 +18,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TAX, defaultCapitalAllowance, defaultCryptoThreshold } from '@/lib/tax';
 import { Separator } from './ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
-import { Dialog as MiniDialog, DialogContent as MiniDialogContent, DialogHeader as MiniDialogHeader, DialogTitle as MiniDialogTitle } from '@/components/ui/dialog';
 
 
 const CHART_COLORS = [
@@ -39,6 +37,13 @@ interface TaxEstimateDialogProps {
 }
 
 function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings }: TaxEstimateDialogProps) {
+  const [view, setView] = useState<'estimate' | 'law'>('estimate');
+
+  // Reset to main view on open
+  useEffect(() => {
+    if (isOpen) setView('estimate');
+  }, [isOpen]);
+
   if (!taxSummary || !taxSettings || !taxSummary.capitalTaxResult || !taxSummary.cryptoTaxResult) {
     return null;
   }
@@ -46,162 +51,191 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
   const { capitalTaxResult: capital, cryptoTaxResult: crypto } = taxSummary;
   const shortTermGainsTotal = taxSummary.totalShortTermGains;
 
-  // NEW: remaining helpers
   const capitalAllowanceRemaining = Math.max(0, (capital.allowance ?? 0) - (capital.allowanceUsed ?? 0));
   const cryptoThresholdRemaining = Math.max(0, (crypto.threshold ?? 0) - (shortTermGainsTotal ?? 0));
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <Scale /> Estimated Taxes for {year}
+      <DialogContent className="w-[96vw] max-w-3xl p-0 gap-0">
+        
+        {/* VIEW 1: ESTIMATE BREAKDOWN */}
+        {view === 'estimate' && (
+          <>
+            <DialogHeader className="px-6 pt-6 pb-2">
+              <div className="flex items-center justify-between">
+                <DialogTitle className="flex items-center gap-2">
+                  <Scale className="h-5 w-5" /> Estimated Taxes for {year}
+                </DialogTitle>
+                <Button size="sm" variant="outline" onClick={() => setView('law')}>
+                  Law Info
+                </Button>
+              </div>
+              <DialogDescription>
+                This is an estimate for informational purposes only and not professional tax advice.
+              </DialogDescription>
+            </DialogHeader>
 
-            <MiniDialog>
-              <DialogTrigger asChild>
-                <Button size="sm" variant="outline">Law Info</Button>
-              </DialogTrigger>
-              <MiniDialogContent className="max-w-xl">
-                <MiniDialogHeader>
-                  <MiniDialogTitle>German Tax Basics for {year}</MiniDialogTitle>
-                </MiniDialogHeader>
-                <div className="text-sm space-y-4">
-                  <div className="p-3 rounded-md bg-muted/50 border">
-                    <h4 className="font-semibold">Capital Income (§20 EStG)</h4>
-                    <ul className="list-disc pl-5 text-muted-foreground space-y-1">
+            <div className="px-6 pb-6 max-h-[70vh] overflow-y-auto space-y-4">
+               {/* Capital Gains Section */}
+              <div className="p-4 rounded-md bg-muted/30 border">
+                <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    Capital Income <span className="text-xs font-normal text-muted-foreground">(§20 EStG)</span>
+                </h4>
+                <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                    <span className="text-muted-foreground">Total Capital Income</span>
+                    <span className="font-mono">{formatCurrency((capital.taxableBase ?? 0) + (capital.allowanceUsed ?? 0))}</span>
+                    </div>
+
+                    <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground pl-2 border-l-2 border-muted ml-1">
+                        Allowance Remaining ({formatCurrency(capital.allowance ?? 0)})
+                    </span>
+                    <span className="font-mono text-muted-foreground">{formatCurrency(capitalAllowanceRemaining)}</span>
+                    </div>
+
+                    <Separator className="my-1" />
+                    <div className="flex justify-between font-medium">
+                    <span>Taxable Base</span>
+                    <span className="font-mono">{formatCurrency(capital.taxableBase)}</span>
+                    </div>
+                    
+                    <div className="pl-2 border-l-2 border-primary/20 mt-2 space-y-1">
+                        <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Base Tax ({formatPercent(TAX.abgeltungsteuer)})</span>
+                        <span className="font-mono">{formatCurrency(capital.baseTax)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Solidarity Surcharge ({formatPercent(TAX.soliRate)})</span>
+                        <span className="font-mono">{formatCurrency(capital.soli)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Church Tax ({taxSettings.churchTaxRate ? formatPercent(taxSettings.churchTaxRate) : '0%'})</span>
+                        <span className="font-mono">{formatCurrency(capital.church)}</span>
+                        </div>
+                    </div>
+                    <div className="flex justify-between font-bold mt-2 pt-2 border-t border-dashed">
+                    <span>Total Capital Tax</span>
+                    <span className="font-mono text-base">{formatCurrency(capital.total)}</span>
+                    </div>
+                </div>
+              </div>
+
+              {/* Crypto Section */}
+              <div className="p-4 rounded-md bg-muted/30 border">
+                <h4 className="font-semibold mb-3 flex items-center gap-2">
+                    Crypto Private Sales <span className="text-xs font-normal text-muted-foreground">(§23 EStG)</span>
+                </h4>
+                <div className="space-y-2 text-sm">
+                    <div className="flex justify-between">
+                    <span className="text-muted-foreground">Short-term Gains (≤1y)</span>
+                    <span className="font-mono">{formatCurrency(shortTermGainsTotal)}</span>
+                    </div>
+
+                    <div className="flex justify-between text-xs">
+                    <span className="text-muted-foreground pl-2 border-l-2 border-muted ml-1">
+                        Threshold Remaining ({formatCurrency(crypto.threshold)})
+                    </span>
+                    <span className="font-mono text-muted-foreground">{formatCurrency(cryptoThresholdRemaining)}</span>
+                    </div>
+
+                    <Separator className="my-1" />
+                    <div className="flex justify-between font-medium">
+                    <span>Taxable Base</span>
+                    <span className="font-mono">{formatCurrency(crypto.taxableBase)}</span>
+                    </div>
+                    
+                    <div className="pl-2 border-l-2 border-primary/20 mt-2 space-y-1">
+                        <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Income Tax ({formatPercent(taxSettings.cryptoMarginalRate)})</span>
+                        <span className="font-mono">{formatCurrency(crypto.incomeTax)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Solidarity Surcharge ({formatPercent(TAX.soliRate)})</span>
+                        <span className="font-mono">{formatCurrency(crypto.soli)}</span>
+                        </div>
+                        <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Church Tax ({taxSettings.churchTaxRate ? formatPercent(taxSettings.churchTaxRate) : '0%'})</span>
+                        <span className="font-mono">{formatCurrency(crypto.church)}</span>
+                        </div>
+                    </div>
+                    <div className="flex justify-between font-bold mt-2 pt-2 border-t border-dashed">
+                    <span>Total Crypto Tax</span>
+                    <span className="font-mono text-base">{formatCurrency(crypto.total)}</span>
+                    </div>
+                </div>
+              </div>
+
+              {/* Grand Total */}
+              <div className="p-4 rounded-md bg-primary/10 border border-primary/20">
+                <div className="flex justify-between items-center">
+                  <span className="font-bold text-lg text-primary">Grand Total Estimated Tax</span>
+                  <span className="font-mono font-bold text-xl">{formatCurrency(taxSummary.grandTotal)}</span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+
+        {/* VIEW 2: LAW INFO */}
+        {view === 'law' && (
+          <>
+             <DialogHeader className="px-6 pt-6 pb-2">
+               <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="icon" onClick={() => setView('estimate')} className="-ml-2 h-8 w-8">
+                      <ArrowLeft className="h-4 w-4" />
+                  </Button>
+                  <DialogTitle>German Tax Basics for {year}</DialogTitle>
+               </div>
+            </DialogHeader>
+            <div className="px-6 pb-6 max-h-[70vh] overflow-y-auto">
+                <div className="text-sm space-y-6">
+                  <div className="p-4 rounded-md bg-muted/30 border">
+                    <h4 className="font-semibold text-base mb-2">Capital Income (§20 EStG)</h4>
+                    <ul className="list-disc pl-5 text-muted-foreground space-y-2 leading-relaxed">
                       <li>
-                        Annual allowance (“Sparer-Pauschbetrag”): 
-                        <span className="ml-1 font-medium text-foreground">
+                        <strong>Annual allowance (“Sparer-Pauschbetrag”):</strong>{' '}
+                        <span className="text-foreground">
                           €{defaultCapitalAllowance(year, taxSettings?.filingStatus ?? 'single').toLocaleString('de-DE')}
                         </span>
                       </li>
                       <li>Applied to the <i>sum</i> of dividends, interest, and §20 capital gains.</li>
                       <li>Only the amount above the allowance is taxed.</li>
-                      <li>Base tax: {Math.round(TAX.abgeltungsteuer * 100)}% Abgeltungsteuer.</li>
+                      <li>Base tax: <strong>{Math.round(TAX.abgeltungsteuer * 100)}% Abgeltungsteuer</strong>.</li>
                       <li>Plus solidarity surcharge {Math.round(TAX.soliRate * 100)}% on the tax, and (optional) church tax {taxSettings?.churchTaxRate ? `${Math.round(taxSettings.churchTaxRate*100)}%` : '0%'} on the tax.</li>
                     </ul>
                   </div>
 
-                  <div className="p-3 rounded-md bg-muted/50 border">
-                    <h4 className="font-semibold">Crypto Private Sales (§23 EStG)</h4>
-                    <ul className="list-disc pl-5 text-muted-foreground space-y-1">
+                  <div className="p-4 rounded-md bg-muted/30 border">
+                    <h4 className="font-semibold text-base mb-2">Crypto Private Sales (§23 EStG)</h4>
+                    <ul className="list-disc pl-5 text-muted-foreground space-y-2 leading-relaxed">
                       <li>
-                        Short-term gains (holding ≤ 1 year) threshold for {year}:{' '}
-                        <span className="font-medium text-foreground">
+                        <strong>Short-term gains (holding ≤ 1 year)</strong> threshold for {year}:{' '}
+                        <span className="text-foreground">
                           €{defaultCryptoThreshold(year).toLocaleString('de-DE')}
                         </span>
                       </li>
-                      <li>If short-term gains ≤ threshold ➜ no tax. If they exceed it, the <i>full</i> short-term gains amount becomes taxable.</li>
-                      <li>Crypto held &gt; 1 year is tax-free (10 years if staking/lending).</li>
-                      <li>Taxed at your marginal income tax rate ({Math.round((taxSettings?.cryptoMarginalRate ?? 0)*100)}%) + soli {Math.round(TAX.soliRate*100)}% (+ church tax if applicable).</li>
+                      <li>If short-term gains ≤ threshold ➜ <strong>no tax</strong>.</li>
+                      <li>If they exceed it, the <strong>full</strong> short-term gains amount becomes taxable.</li>
+                      <li>Crypto held &gt; 1 year is <strong>tax-free</strong> (10 years if staking/lending).</li>
+                      <li>Taxed at your <strong>marginal income tax rate</strong> ({Math.round((taxSettings?.cryptoMarginalRate ?? 0)*100)}%) + soli {Math.round(TAX.soliRate*100)}% (+ church tax if applicable).</li>
                     </ul>
                   </div>
                 </div>
-              </MiniDialogContent>
-            </MiniDialog>
-          </DialogTitle>
-          <DialogDescription>
-            This is an estimate for informational purposes only and not professional tax advice.
-          </DialogDescription>
-        </DialogHeader>
+            </div>
+            <div className="p-4 border-t bg-background flex justify-end">
+                <Button onClick={() => setView('estimate')}>Back to Estimate</Button>
+            </div>
+          </>
+        )}
 
-        <div className="space-y-4 text-sm py-4">
-          {/* Capital Gains */}
-          <div className="p-3 rounded-md bg-muted/50 border">
-            <h4 className="font-semibold mb-2">Capital Income (§20 EStG)</h4>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Total Capital Income</span>
-              <span className="font-mono">{formatCurrency((capital.taxableBase ?? 0) + (capital.allowanceUsed ?? 0))}</span>
-            </div>
-
-            {/* NEW: Allowance Remaining */}
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground pl-2">
-                Allowance Remaining ({formatCurrency(capital.allowance ?? 0)})
-              </span>
-              <span className="font-mono">{formatCurrency(capitalAllowanceRemaining)}</span>
-            </div>
-
-            {/* keep the “Taxable Base” + taxes as-is */}
-            <div className="border-t my-1" />
-            <div className="flex justify-between font-medium">
-              <span>Taxable Base</span>
-              <span className="font-mono">{formatCurrency(capital.taxableBase)}</span>
-            </div>
-            <Separator className="my-2" />
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Base Tax ({formatPercent(TAX.abgeltungsteuer)})</span>
-              <span className="font-mono">{formatCurrency(capital.baseTax)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Solidarity Surcharge ({formatPercent(TAX.soliRate)})</span>
-              <span className="font-mono">{formatCurrency(capital.soli)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Church Tax ({taxSettings.churchTaxRate ? formatPercent(taxSettings.churchTaxRate) : '0%'})</span>
-              <span className="font-mono">{formatCurrency(capital.church)}</span>
-            </div>
-            <div className="flex justify-between font-bold mt-1">
-              <span>Total Capital Tax</span>
-              <span className="font-mono">{formatCurrency(capital.total)}</span>
-            </div>
-          </div>
-
-          {/* Crypto */}
-          <div className="p-3 rounded-md bg-muted/50 border">
-            <h4 className="font-semibold mb-2">Crypto Private Sales (§23 EStG)</h4>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Short-term Gains (≤1y)</span>
-              <span className="font-mono">{formatCurrency(shortTermGainsTotal)}</span>
-            </div>
-
-            {/* NEW: Threshold Remaining */}
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground pl-2">
-                Threshold Remaining ({formatCurrency(crypto.threshold)})
-              </span>
-              <span className="font-mono">{formatCurrency(cryptoThresholdRemaining)}</span>
-            </div>
-
-            <Separator className="my-1" />
-            <div className="flex justify-between font-medium">
-              <span>Taxable Base</span>
-              <span className="font-mono">{formatCurrency(crypto.taxableBase)}</span>
-            </div>
-            <Separator className="my-2" />
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Income Tax ({formatPercent(taxSettings.cryptoMarginalRate)})</span>
-              <span className="font-mono">{formatCurrency(crypto.incomeTax)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Solidarity Surcharge ({formatPercent(TAX.soliRate)})</span>
-              <span className="font-mono">{formatCurrency(crypto.soli)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-muted-foreground">Church Tax ({taxSettings.churchTaxRate ? formatPercent(taxSettings.churchTaxRate) : '0%'})</span>
-              <span className="font-mono">{formatCurrency(crypto.church)}</span>
-            </div>
-            <div className="flex justify-between font-bold mt-1">
-              <span>Total Crypto Tax</span>
-              <span className="font-mono">{formatCurrency(crypto.total)}</span>
-            </div>
-          </div>
-
-          {/* Grand Total */}
-          <div className="pt-2 border-t mt-2">
-            <div className="flex justify-between font-bold text-base text-primary">
-              <span>Grand Total Estimated Tax</span>
-              <span className="font-mono">{formatCurrency(taxSummary.grandTotal)}</span>
-            </div>
-          </div>
-        </div>
       </DialogContent>
     </Dialog>
   );
 }
 
+
 const getSummaryContext = (filter: YearFilter): { title: string; description: string } => {
-  // ---- All Years (lifetime) ----
   if (filter.kind === 'all') {
     switch (filter.mode) {
       case 'holdings':
@@ -226,7 +260,6 @@ const getSummaryContext = (filter: YearFilter): { title: string; description: st
     }
   }
 
-  // ---- Specific Year (unchanged) ----
   const year = filter.year;
   switch (filter.mode) {
     case 'combined':
@@ -274,10 +307,11 @@ function PortfolioSummaryImpl({
     
     const [donutMode, setDonutMode] = useState<DonutMode>('market');
     const [isEstimateOpen, setIsEstimateOpen] = useState(false);
+    const [isInfoOpen, setIsInfoOpen] = useState(false);
 
     useEffect(() => {
       if (yearFilter.mode === 'holdings') setDonutMode('market');
-      else setDonutMode('economic'); // realized or combined
+      else setDonutMode('economic');
     }, [yearFilter.mode]);
 
     const openEstimate = useCallback(() => setIsEstimateOpen(true), []);
@@ -348,6 +382,11 @@ function PortfolioSummaryImpl({
     const isYearView = yearFilter.kind === 'year';
     const isAllView = yearFilter.kind === 'all';
 
+    const mode = yearFilter.mode ?? 'holdings';
+    const showRealizedCol = mode !== 'holdings';
+    const showUnrealizedCol = mode !== 'realized';
+    const marketValueLabel = mode === 'realized' ? 'Realized Proceeds' : 'Market Value';
+
     const pctLabel =
         yearFilter.mode === 'realized'
             ? '(Realized)'
@@ -361,75 +400,10 @@ function PortfolioSummaryImpl({
                     <div>
                         <div className="flex items-center gap-2">
                            <CardTitle className="font-headline text-2xl">{title}</CardTitle>
-                             <Dialog>
-                                <DialogTrigger asChild>
-                                    <Button variant="ghost" size="icon">
-                                        <Info className="h-5 w-5" />
-                                        <span className="sr-only">Show Explanations</span>
-                                    </Button>
-                                </DialogTrigger>
-                                 <DialogContent className="max-w-2xl">
-                                    <DialogHeader>
-                                        <DialogTitle>Summary Column Explanations</DialogTitle>
-                                        <DialogDescription>How each value in the summary table is calculated.</DialogDescription>
-                                    </DialogHeader>
-                                    <div className="text-sm space-y-4 max-h-[70vh] overflow-y-auto pr-4">
-                                        <div>
-                                            <h4 className="font-semibold">Filter Explanation</h4>
-                                             <ul className="list-disc pl-5 mt-2 space-y-2 text-muted-foreground">
-                                                <li><span className="font-semibold text-foreground">All Years View:</span> Shows a lifetime summary of all investments (active and sold). The &apos;Realized P/L&apos; column displays total realized gains/losses across all time.</li>
-                                                <li><span className="font-semibold text-foreground">Specific Year View:</span> Restricts calculations to a single year and enables different view modes.</li>
-                                            </ul>
-                                        </div>
-                                         <div>
-                                            <h4 className="font-semibold">Yearly View Modes</h4>
-                                            <p className="text-muted-foreground">When a specific year is selected, these modes change which investments are included in the summary.</p>
-                                            <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
-                                                <li><span className="font-semibold text-foreground">Holdings:</span> Shows ONLY currently open positions. Realized P/L is shown as zero.</li>
-                                                <li><span className="font-semibold text-foreground">Realized (Tax):</span> Shows ONLY positions that had a sale in the selected year. This is a pure tax-reporting view.</li>
-                                                <li><span className="font-semibold text-foreground">Combined:</span> (Default) Shows all currently open positions PLUS any positions that had a sale in the selected year. Realized P/L is year-specific.</li>
-                                            </ul>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-semibold">Cost Basis</h4>
-                                            <p className="text-muted-foreground">The original purchase price of the assets included in the current view. <br/><code className="text-xs">Formula: For each included investment, sum of (Original Purchase Price per Unit x Quantity)</code></p>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-semibold">Market Value</h4>
-                                            <p className="text-muted-foreground">The current value of the assets you still own. <br/><code className="text-xs">Formula: Available Quantity × Current Price per Unit</code></p>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-semibold">Realized P/L (Profit/Loss)</h4>
-                                            <p className="text-muted-foreground">Your &quot;locked-in&quot; profit or loss from sales. This value is filtered by the selected &quot;Tax Year&quot; and &quot;View Mode&quot;. <br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-semibold">Unrealized P/L (Profit/Loss)</h4>
-                                            <p className="text-muted-foreground">Your &quot;paper&quot; profit or loss on the assets you still hold. It&apos;s the difference between what they are worth now and what you paid for them.<br/><code className="text-xs">Formula: Market Value - Cost Basis of remaining shares</code></p>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-semibold">Total P/L (Profit/Loss)</h4>
-                                            <p className="text-muted-foreground">The complete picture of your profit or loss, combining the (filtered) realized gains/losses with the current unrealized gains/losses.<br/><code className="text-xs">Formula: Realized P/L + Unrealized P/L</code></p>
-                                        </div>
-                                        <div>
-                                           <h4 className="font-semibold">Performance</h4>
-                                           <p className="text-muted-foreground">The total percentage return. This is calculated against the total original purchase value of the assets included in the current view to give a true measure of performance for that selection.</p>
-                                           <p className="text-muted-foreground mt-1"><code className="text-xs">Formula: (Total P/L / Total Original Purchase Value) × 100</code></p>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-semibold">% of Portfolio (Donut Chart)</h4>
-                                            <p className="text-muted-foreground">This shows the allocation of your portfolio&apos;s value. It has two modes:</p>
-                                            <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
-                                                <li><span className="font-semibold text-foreground">Market Value Mode:</span> Shows the percentage based on the current market value of what you own.</li>
-                                                <li><span className="font-semibold text-foreground">Economic Value Mode:</span> Shows a broader view, including your realized gains (note: this uses all-time realized gains, not the filtered year). The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>
-                                            </ul>
-                                        </div>
-                                        <div className="pt-2">
-                                            <h4 className="font-semibold">Total Row</h4>
-                                            <p className="text-muted-foreground">The &quot;Total&quot; row sums the numeric columns from the rows above it. The &quot;Performance&quot; percentage is then re-calculated based on the grand totals to provide a true weighted-average performance for your entire portfolio.</p>
-                                        </div>
-                                    </div>
-                                </DialogContent>
-                            </Dialog>
+                            <Button variant="ghost" size="icon" onClick={() => setIsInfoOpen(true)}>
+                                <Info className="h-5 w-5" />
+                                <span className="sr-only">Show Explanations</span>
+                            </Button>
                         </div>
                         <CardDescription>{description}</CardDescription>
                     </div>
@@ -477,7 +451,7 @@ function PortfolioSummaryImpl({
                                 <TableRow>
                                     <TableHead>Asset Type</TableHead>
                                     <TableHead className="text-right">
-                                        {yearFilter.mode === 'realized'
+                                        {mode === 'realized'
                                             ? (
                                             <Tooltip>
                                                 <TooltipTrigger className="cursor-help underline decoration-dashed">
@@ -489,10 +463,10 @@ function PortfolioSummaryImpl({
                                             : 'Cost Basis'}
                                     </TableHead>
                                     <TableHead className="text-right">
-                                        {yearFilter.mode === 'realized' ? (
+                                        {mode === 'realized' ? (
                                             <Tooltip>
                                             <TooltipTrigger className="cursor-help underline decoration-dashed">
-                                                Realized Value
+                                                {marketValueLabel}
                                             </TooltipTrigger>
                                             <TooltipContent>
                                                 Cash proceeds from sold lots
@@ -500,25 +474,32 @@ function PortfolioSummaryImpl({
                                             </TooltipContent>
                                             </Tooltip>
                                         ) : (
-                                            'Market Value'
+                                            marketValueLabel
                                         )}
                                     </TableHead>
-                                    <TableHead className="text-right">
-                                        {isYearView ? (
-                                             <Tooltip>
-                                                <TooltipTrigger className="cursor-help underline decoration-dashed">Realized P/L</TooltipTrigger>
-                                                <TooltipContent>Only includes sales completed in {yearFilter.year}.</TooltipContent>
-                                            </Tooltip>
-                                        ) : 'Realized P/L'}
-                                    </TableHead>
-                                    <TableHead className="text-right">
-                                         {isYearView ? (
-                                             <Tooltip>
-                                                <TooltipTrigger className="cursor-help underline decoration-dashed">Unrealized P/L</TooltipTrigger>
-                                                <TooltipContent>Based on current prices, not prices from {yearFilter.year}.</TooltipContent>
-                                            </Tooltip>
-                                        ) : 'Unrealized P/L'}
-                                    </TableHead>
+                                    
+                                    {showRealizedCol && (
+                                        <TableHead className="text-right">
+                                            {isYearView ? (
+                                                <Tooltip>
+                                                    <TooltipTrigger className="cursor-help underline decoration-dashed">Realized P/L</TooltipTrigger>
+                                                    <TooltipContent>Only includes sales completed in {yearFilter.year}.</TooltipContent>
+                                                </Tooltip>
+                                            ) : 'Realized P/L'}
+                                        </TableHead>
+                                    )}
+
+                                    {showUnrealizedCol && (
+                                        <TableHead className="text-right">
+                                            {isYearView ? (
+                                                <Tooltip>
+                                                    <TooltipTrigger className="cursor-help underline decoration-dashed">Unrealized P/L</TooltipTrigger>
+                                                    <TooltipContent>Based on current prices, not prices from {yearFilter.year}.</TooltipContent>
+                                                </Tooltip>
+                                            ) : 'Unrealized P/L'}
+                                        </TableHead>
+                                    )}
+
                                     <TableHead className="text-right">Total P/L</TableHead>
                                     <TableHead className="text-right">Performance</TableHead>
                                     <TableHead className="text-right">% of Portfolio {pctLabel}</TableHead>
@@ -527,7 +508,7 @@ function PortfolioSummaryImpl({
                             <TableBody>
                               {rows.length === 0 ? (
                                 <TableRow>
-                                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                                  <TableCell colSpan={showRealizedCol && showUnrealizedCol ? 8 : 7} className="text-center text-muted-foreground py-8">
                                     {yearFilter.kind === 'year'
                                       ? `No assets were sold in ${yearFilter.year}.`
                                       : 'No assets match this view.'}
@@ -544,8 +525,19 @@ function PortfolioSummaryImpl({
                                         <TableCell className="font-medium">{item.type}</TableCell>
                                         <TableCell className="text-right font-mono">{formatCurrency(item.costBasis)}</TableCell>
                                         <TableCell className="text-right font-mono font-bold">{formatCurrency(item.marketValue)}</TableCell>
-                                        <TableCell className={cn("text-right font-mono", item.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>{formatCurrency(item.realizedPL)}</TableCell>
-                                        <TableCell className={cn("text-right font-mono", item.unrealizedPL >= 0 ? "text-green-500" : "text-destructive")}>{formatCurrency(item.unrealizedPL)}</TableCell>
+                                        
+                                        {showRealizedCol && (
+                                            <TableCell className={cn("text-right font-mono", item.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                                {formatCurrency(item.realizedPL)}
+                                            </TableCell>
+                                        )}
+                                        
+                                        {showUnrealizedCol && (
+                                            <TableCell className={cn("text-right font-mono", item.unrealizedPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                                {formatCurrency(item.unrealizedPL)}
+                                            </TableCell>
+                                        )}
+
                                         <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", item.totalPL >= 0 ? "text-green-500" : "text-destructive")}>
                                           {item.totalPL >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                                           {formatCurrency(item.totalPL)}
@@ -561,8 +553,19 @@ function PortfolioSummaryImpl({
                                     <TableCell>Total</TableCell>
                                     <TableCell className="text-right font-mono">{formatCurrency(totals.costBasis)}</TableCell>
                                     <TableCell className="text-right font-mono">{formatCurrency(totals.marketValue)}</TableCell>
-                                    <TableCell className={cn("text-right font-mono", totals.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>{formatCurrency(totals.realizedPL)}</TableCell>
-                                    <TableCell className={cn("text-right font-mono", totals.unrealizedPL >= 0 ? "text-green-500" : "text-destructive")}>{formatCurrency(totals.unrealizedPL)}</TableCell>
+                                    
+                                    {showRealizedCol && (
+                                        <TableCell className={cn("text-right font-mono", totals.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                            {formatCurrency(totals.realizedPL)}
+                                        </TableCell>
+                                    )}
+
+                                    {showUnrealizedCol && (
+                                        <TableCell className={cn("text-right font-mono", totals.unrealizedPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                            {formatCurrency(totals.unrealizedPL)}
+                                        </TableCell>
+                                    )}
+
                                     <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", totals.totalPL >= 0 ? "text-green-500" : "text-destructive")}>
                                         {totals.totalPL >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                                         {formatCurrency(totals.totalPL)}
@@ -637,6 +640,73 @@ function PortfolioSummaryImpl({
                 </div>
             </CardContent>
         </Card>
+        <Dialog open={isInfoOpen} onOpenChange={setIsInfoOpen}>
+            <DialogContent className="w-[96vw] max-w-3xl p-0">
+                <DialogHeader className="px-6 pt-6 pb-2">
+                    <DialogTitle>Summary Column Explanations</DialogTitle>
+                    <DialogDescription>How each value in the summary table is calculated.</DialogDescription>
+                </DialogHeader>
+                <div className="px-6 pb-6 max-h-[65vh] overflow-y-auto space-y-4">
+                    <div>
+                        <h4 className="font-semibold">Filter Explanation</h4>
+                        <ul className="list-disc pl-5 mt-2 space-y-2 text-muted-foreground">
+                            <li><span className="font-semibold text-foreground">All Years View:</span> Shows a lifetime summary of all investments (active and sold).</li>
+                            <li><span className="font-semibold text-foreground">Specific Year View:</span> Restricts calculations to a single year and enables different view modes.</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold">Yearly View Modes</h4>
+                        <p className="text-muted-foreground">When a specific year is selected, these modes change which investments are included in the summary.</p>
+                        <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
+                            <li><span className="font-semibold text-foreground">Holdings:</span> Shows ONLY currently open positions. Realized P/L is hidden.</li>
+                            <li><span className="font-semibold text-foreground">Realized (Tax):</span> Shows ONLY positions that had a sale in the selected year. Unrealized P/L is hidden. Market Value represents Realized Proceeds.</li>
+                            <li><span className="font-semibold text-foreground">Combined:</span> (Default) Shows all currently open positions PLUS any positions that had a sale in the selected year.</li>
+                        </ul>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold">Cost Basis</h4>
+                        <p className="text-muted-foreground">The original purchase price of the assets included in the current view. <br/><code className="text-xs">Formula: For each included investment, sum of (Original Purchase Price per Unit x Quantity)</code></p>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold">{marketValueLabel}</h4>
+                        <p className="text-muted-foreground">In Holdings/Combined mode, this is the current value of assets you still own. In Realized mode, it shows the cash proceeds from sales.<br/><code className="text-xs">Formula (Holdings/Combined): Available Quantity × Current Price per Unit</code><br/><code className="text-xs">Formula (Realized): Sum of (Sell Price x Quantity Sold)</code></p>
+                    </div>
+                    {showRealizedCol && (
+                        <div>
+                            <h4 className="font-semibold">Realized P/L (Profit/Loss)</h4>
+                            <p className="text-muted-foreground">Your &quot;locked-in&quot; profit or loss from sales, filtered by the selected period.<br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
+                        </div>
+                    )}
+                    {showUnrealizedCol && (
+                        <div>
+                            <h4 className="font-semibold">Unrealized P/L (Profit/Loss)</h4>
+                            <p className="text-muted-foreground">Your &quot;paper&quot; profit or loss on assets you still hold.<br/><code className="text-xs">Formula: Market Value - Cost Basis of remaining shares</code></p>
+                        </div>
+                    )}
+                    <div>
+                        <h4 className="font-semibold">Total P/L (Profit/Loss)</h4>
+                        <p className="text-muted-foreground">The complete picture of your profit or loss, combining the (filtered) realized gains/losses with the current unrealized gains/losses.<br/><code className="text-xs">Formula: Realized P/L + Unrealized P/L</code></p>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold">Performance</h4>
+                        <p className="text-muted-foreground">The total percentage return for the assets included in the current view.</p>
+                        <p className="text-muted-foreground mt-1"><code className="text-xs">Formula: (Total P/L / Total Original Purchase Value) × 100</code></p>
+                    </div>
+                    <div>
+                        <h4 className="font-semibold">% of Portfolio (Donut Chart)</h4>
+                        <p className="text-muted-foreground">This shows the allocation of your portfolio's value. It has two modes:</p>
+                        <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
+                            <li><span className="font-semibold text-foreground">Market Value Mode:</span> Shows the percentage based on the current market value of what you own.</li>
+                            <li><span className="font-semibold text-foreground">Economic Value Mode:</span> Shows a broader view, including your realized gains. The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>
+                        </ul>
+                    </div>
+                    <div className="pt-2">
+                        <h4 className="font-semibold">Total Row</h4>
+                        <p className="text-muted-foreground">The &quot;Total&quot; row sums the numeric columns from the rows above it. The &quot;Performance&quot; percentage is then re-calculated based on the grand totals to provide a true weighted-average performance for your entire portfolio.</p>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
         {yearFilter.kind === 'year' && (
             <TaxEstimateDialog 
                 isOpen={isEstimateOpen}
