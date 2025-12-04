@@ -1,6 +1,4 @@
-
-
-'use client';
+"use client";
 
 import React, { useMemo } from 'react';
 import type {
@@ -107,6 +105,8 @@ export default function InvestmentListView({
 
       return {
         ...r,
+        // Alias buyQty to boughtQty for consistency with Flat view
+        boughtQty: r.buyQty,
         currentRatePct,
         latestActivityAt,
         _sort_marketValue: marketValue,
@@ -295,8 +295,8 @@ export default function InvestmentListView({
   const showStatusCol = isFlat && statusFilter === 'All';
   const showPurchaseDateCol = isFlat;
 
-  const showBoughtCol = isFlat && !isSoldView;
-  const showAvailCol  = isFlat && !isSoldView;
+  const showBoughtCol = !isSoldView;
+  const showAvailCol  = true; // Always show available
   const showSoldCols  = isFlat && statusFilter === 'Sold';
   const showBuyPrice  = !isSoldView;
   const showCurrentPriceCol = !isSoldView;
@@ -326,6 +326,8 @@ export default function InvestmentListView({
                 </>
               ) : (
                 <>
+                  <th className="text-right">Bought</th>
+                  <th className="text-right">Qty (avail.)</th>
                   <th className="text-right">Buy Price</th>
                   <th className="text-right">Current Price</th>
                   <th className="text-right">Cost Basis</th>
@@ -380,6 +382,8 @@ export default function InvestmentListView({
                     </>
                 ) : (
                     <>
+                      <td className="text-right">{isIARow ? '—' : fmtQty(r.boughtQty)}</td>
+                      <td className="text-right">{isIARow ? '—' : fmtQty(r.availableQty)}</td>
                       <td className="text-right">{r.availableQty > 0 ? fmtEur.format(r.buyPrice) : '—'}</td>
                       <td className="text-right">{r.availableQty > 0 ? fmtEur.format(r.currentPrice) : '—'}</td>
                       <td className="text-right">{fmtEur.format(r.costBasis)}</td>
@@ -426,6 +430,8 @@ export default function InvestmentListView({
                     </>
                 ) : (
                     <>
+                        <td></td>
+                        <td></td>
                         <td></td>
                         <td></td>
                         <td className="text-right">{fmtEur.format(totals.costBasis)}</td>
