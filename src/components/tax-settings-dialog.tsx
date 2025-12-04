@@ -1,15 +1,13 @@
-
 "use client";
 
 import { useState, useEffect } from 'react';
 import type { TaxSettings } from '@/lib/types';
 import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Info } from 'lucide-react';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
 interface TaxSettingsDialogProps {
   isOpen: boolean;
@@ -90,17 +88,20 @@ export function TaxSettingsDialog({ isOpen, onOpenChange, currentSettings, onSav
            <div className="space-y-2">
             <div className="flex items-center gap-2">
               <Label>Crypto Marginal Tax Rate</Label>
-              <Sheet>
-                <SheetTrigger asChild>
+              
+              {/* REPLACED Sheet with Nested Dialog for better stacking */}
+              <Dialog>
+                <DialogTrigger asChild>
                   <Button variant="ghost" size="icon" className="h-5 w-5">
                     <Info className="h-4 w-4" />
                   </Button>
-                </SheetTrigger>
-                <SheetContent side="right" className="overflow-y-auto sm:max-w-md z-[9999]">
-                  <SheetHeader>
-                    <SheetTitle>How to Estimate Your Marginal Tax Rate</SheetTitle>
-                  </SheetHeader>
-                  <div className="mt-6 text-sm space-y-4 pb-10">
+                </DialogTrigger>
+                {/* ADDED: max-h-[80vh] and overflow-y-auto to fix the 'cramped' issue */}
+                <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-xl">
+                  <DialogHeader>
+                    <DialogTitle>How to Estimate Your Marginal Tax Rate</DialogTitle>
+                  </DialogHeader>
+                  <div className="mt-4 text-sm space-y-4 pb-4">
                     <h4 className="font-semibold">Step 1 — Know your taxable income (zu versteuerndes Einkommen)</h4>
                     <p className="text-muted-foreground">This is not your gross salary. It’s your gross annual income minus:</p>
                     <ul className="list-disc pl-5 text-muted-foreground space-y-1">
@@ -112,25 +113,26 @@ export function TaxSettingsDialog({ isOpen, onOpenChange, currentSettings, onSav
                     
                     <h4 className="font-semibold">Step 2 — Find your marginal rate</h4>
                     <p className="text-muted-foreground">Germany’s income tax is progressive. Here are 2024 figures for single taxpayers (before solidarity surcharge):</p>
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse border rounded-md">
                         <thead>
-                            <tr>
-                                <th className="p-2 border-b">Taxable income (€)</th>
-                                <th className="p-2 border-b">Marginal tax rate</th>
+                            <tr className="bg-muted/50">
+                                <th className="p-2 border-b font-medium">Taxable income (€)</th>
+                                <th className="p-2 border-b font-medium">Marginal tax rate</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr className="border-b"><td className="p-2">Up to €11,604</td><td className="p-2">0% (tax-free)</td></tr>
-                            <tr className="border-b"><td className="p-2">€11,605 – €18,336</td><td className="p-2">14% → 24% (progressive ramp-up)</td></tr>
-                            <tr className="border-b"><td className="p-2">€18,337 – €66,760</td><td className="p-2">24% → 42% (progressive ramp-up)</td></tr>
+                            <tr className="border-b"><td className="p-2">€11,605 – €18,336</td><td className="p-2">14% → 24%</td></tr>
+                            <tr className="border-b"><td className="p-2">€18,337 – €66,760</td><td className="p-2">24% → 42%</td></tr>
                             <tr className="border-b"><td className="p-2">€66,761 – €277,825</td><td className="p-2">42%</td></tr>
-                            <tr><td className="p-2">Over €277,825</td><td className="p-2">45% (“rich tax” rate)</td></tr>
+                            <tr><td className="p-2">Over €277,825</td><td className="p-2">45%</td></tr>
                         </tbody>
                     </table>
                   </div>
-                </SheetContent>
-              </Sheet>
+                </DialogContent>
+              </Dialog>
             </div>
+
              <Select
                 value={String(settings.cryptoMarginalRate)}
                 onValueChange={(value) => setSettings(s => ({ ...s, cryptoMarginalRate: Number(value) }))}
