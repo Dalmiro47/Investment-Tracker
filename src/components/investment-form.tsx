@@ -35,7 +35,6 @@ import { Label } from "./ui/label"
 import AppDatePicker from '@/components/ui/app-date-picker';
 import { NumericInput } from "./ui/numeric-input"
 
-
 interface InvestmentFormProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
@@ -58,7 +57,6 @@ const defaultFormValues: InvestmentFormValues = {
   stakingOrLending: false,
 };
 
-
 export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, initialType }: InvestmentFormProps) {
   const form = useForm<InvestmentFormValues>({
     resolver: zodResolver(investmentSchema),
@@ -68,14 +66,11 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
   const [startingBalance, setStartingBalance] = useState<number | null>(null);
   const [initialRatePct, setInitialRatePct] = useState<number | null>(null);
   
-  const watchedType = useWatch({
-    control: form.control,
-    name: "type",
-  });
-
+  const watchedType = useWatch({ control: form.control, name: "type" });
   const isIA = watchedType === 'Interest Account';
   const isEditing = !!investment;
 
+  // Reset form when dialog opens
   useEffect(() => {
     if (isOpen) {
         setStartingBalance(null);
@@ -120,198 +115,204 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
   };
 
   const isSubmitting = form.formState.isSubmitting;
-  const isTickerRequired = ['Stock', 'ETF', 'Crypto'].includes(watchedType);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="w-[96vw] max-w-lg p-0 flex flex-col max-h-[85vh]">
+        {/* Fixed Header */}
+        <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>{investment ? 'Edit Investment' : 'Add Investment'}</DialogTitle>
           <DialogDescription>
             {investment ? 'Update the details of your investment.' : 'Enter the details of your new investment below.'}
           </DialogDescription>
         </DialogHeader>
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4 py-2">
-            
-            {/* Row 1: Name */}
-            <FormField
-              control={form.control}
-              name="name"
-              render={({ field }) => (
-                  <FormItem>
-                  <FormLabel>Account / Asset Name</FormLabel>
-                  <FormControl>
-                      <Input placeholder={isIA ? "e.g. High Yield Savings" : "e.g. TechCorp Inc."} {...field} />
-                  </FormControl>
-                  <FormMessage />
-                  </FormItem>
-              )}
-            />
-            
-            {/* Row 2: Type & Ticker */}
-            <div className="grid grid-cols-2 gap-4">
-                <FormField
+
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-4">
+          <Form {...form}>
+            <form id="investment-form" onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4">
+              
+              {/* Row 1: Name */}
+              <FormField
                 control={form.control}
-                name="type"
+                name="name"
                 render={({ field }) => (
                     <FormItem>
-                    <FormLabel>Type</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                        <FormControl>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                        <SelectItem value="Stock">Stock</SelectItem>
-                        <SelectItem value="ETF">ETF</SelectItem>
-                        <SelectItem value="Crypto">Crypto</SelectItem>
-                        <SelectItem value="Bond">Bond</SelectItem>
-                        <SelectItem value="Interest Account">Interest Account</SelectItem>
-                        <SelectItem value="Real Estate">Real Estate</SelectItem>
-                        </SelectContent>
-                    </Select>
+                    <FormLabel>Account / Asset Name</FormLabel>
+                    <FormControl>
+                        <Input placeholder={isIA ? "e.g. High Yield Savings" : "e.g. TechCorp Inc."} {...field} />
+                    </FormControl>
                     <FormMessage />
                     </FormItem>
                 )}
-                />
+              />
+              
+              {/* Row 2: Type & Ticker */}
+              <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                  control={form.control}
+                  name="type"
+                  render={({ field }) => (
+                      <FormItem>
+                      <FormLabel>Type</FormLabel>
+                      <Select onValueChange={field.onChange} value={field.value}>
+                          <FormControl>
+                          <SelectTrigger>
+                              <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                          <SelectItem value="Stock">Stock</SelectItem>
+                          <SelectItem value="ETF">ETF</SelectItem>
+                          <SelectItem value="Crypto">Crypto</SelectItem>
+                          <SelectItem value="Bond">Bond</SelectItem>
+                          <SelectItem value="Interest Account">Interest Account</SelectItem>
+                          <SelectItem value="Real Estate">Real Estate</SelectItem>
+                          </SelectContent>
+                      </Select>
+                      <FormMessage />
+                      </FormItem>
+                  )}
+                  />
 
-                {!isIA && (
-                    <FormField
-                    control={form.control}
-                    name="ticker"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Ticker / Symbol</FormLabel>
-                        <FormControl>
-                            <Input placeholder={
-                            watchedType === 'Crypto' ? "e.g. bitcoin (id)" : "e.g. NVD.F"
-                            } {...field} />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
-                )}
-            </div>
+                  {!isIA && (
+                      <FormField
+                      control={form.control}
+                      name="ticker"
+                      render={({ field }) => (
+                          <FormItem>
+                          <FormLabel>Ticker / Symbol</FormLabel>
+                          <FormControl>
+                              <Input placeholder={
+                              watchedType === 'Crypto' ? "e.g. bitcoin (id)" : "e.g. NVD.F"
+                              } {...field} />
+                          </FormControl>
+                          <FormMessage />
+                          </FormItem>
+                      )}
+                      />
+                  )}
+              </div>
 
-            {/* Row 3: Date & Quantity */}
-            <div className="grid grid-cols-2 gap-4">
-                <FormItem>
-                    <FormLabel>{isIA ? "Opening Date" : "Purchase Date"}</FormLabel>
-                    <Controller
-                        control={form.control}
-                        name="purchaseDate"
-                        render={({ field }) => (
-                        <AppDatePicker
-                            value={field.value ?? null}
-                            onChange={(d) => field.onChange(d)}
-                            placeholder="dd/mm/yyyy"
-                            maxDate={new Date()}
-                        />
-                        )}
-                    />
-                    <FormMessage />
-                </FormItem>
+              {/* Row 3: Date & Quantity */}
+              <div className="grid grid-cols-2 gap-4">
+                  <FormItem>
+                      <FormLabel>{isIA ? "Opening Date" : "Purchase Date"}</FormLabel>
+                      <Controller
+                          control={form.control}
+                          name="purchaseDate"
+                          render={({ field }) => (
+                          <AppDatePicker
+                              value={field.value ?? null}
+                              onChange={(d) => field.onChange(d)}
+                              placeholder="dd/mm/yyyy"
+                              maxDate={new Date()}
+                          />
+                          )}
+                      />
+                      <FormMessage />
+                  </FormItem>
 
-                {!isIA && (
-                    <FormField
-                    control={form.control}
-                    name="purchaseQuantity"
-                    render={({ field }) => (
-                        <FormItem>
-                        <FormLabel>Quantity</FormLabel>
-                        <FormControl>
-                            <NumericInput
-                            value={field.value as number | null | undefined}
-                            onCommit={(n) => field.onChange(n ?? undefined)}
-                            placeholder="e.g. 0.12"
-                            allowDecimal={true}
-                            />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
-                )}
-            </div>
+                  {!isIA && (
+                      <FormField
+                      control={form.control}
+                      name="purchaseQuantity"
+                      render={({ field }) => (
+                          <FormItem>
+                          <FormLabel>Quantity</FormLabel>
+                          <FormControl>
+                              <NumericInput
+                              value={field.value as number | null | undefined}
+                              onCommit={(n) => field.onChange(n ?? undefined)}
+                              placeholder="e.g. 0.12"
+                              allowDecimal={true}
+                              />
+                          </FormControl>
+                          <FormMessage />
+                          </FormItem>
+                      )}
+                      />
+                  )}
+              </div>
 
-            {/* IA Specific Fields */}
-            {isIA && !isEditing && (
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                        <Label>Starting Balance</Label>
-                        <NumericInput
-                            value={startingBalance}
-                            onCommit={(n) => setStartingBalance(n ?? null)}
-                            placeholder="e.g. 3,000.00"
-                            allowDecimal
-                        />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Initial Rate (%)</Label>
-                        <NumericInput
-                            value={initialRatePct}
-                            onCommit={(n) => setInitialRatePct(n ?? null)}
-                            placeholder="e.g. 3.5"
-                            allowDecimal
-                        />
-                    </div>
-                </div>
-            )}
+              {/* IA Specific Fields */}
+              {isIA && !isEditing && (
+                  <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                          <Label>Starting Balance</Label>
+                          <NumericInput
+                              value={startingBalance}
+                              onCommit={(n) => setStartingBalance(n ?? null)}
+                              placeholder="e.g. 3,000.00"
+                              allowDecimal
+                          />
+                      </div>
+                      <div className="space-y-2">
+                          <Label>Initial Rate (%)</Label>
+                          <NumericInput
+                              value={initialRatePct}
+                              onCommit={(n) => setInitialRatePct(n ?? null)}
+                              placeholder="e.g. 3.5"
+                              allowDecimal
+                          />
+                      </div>
+                  </div>
+              )}
 
-            {/* Price Row (Full Width for clarity, or can be grid) */}
-            {!isIA && (
-                 <FormField
-                 control={form.control}
-                 name="purchasePricePerUnit"
-                 render={({ field }) => (
-                     <FormItem>
-                     <FormLabel>Purchase Price (per unit)</FormLabel>
-                     <FormControl>
-                         <NumericInput
-                         value={field.value as number | null | undefined}
-                         onCommit={(n) => field.onChange(n ?? undefined)}
-                         placeholder="e.g. 150.50"
-                         allowDecimal={true}
-                         />
-                     </FormControl>
-                     <FormMessage />
-                     </FormItem>
-                 )}
-                 />
-            )}
+              {/* Price Row */}
+              {!isIA && (
+                   <FormField
+                   control={form.control}
+                   name="purchasePricePerUnit"
+                   render={({ field }) => (
+                       <FormItem>
+                       <FormLabel>Purchase Price (per unit)</FormLabel>
+                       <FormControl>
+                           <NumericInput
+                           value={field.value as number | null | undefined}
+                           onCommit={(n) => field.onChange(n ?? undefined)}
+                           placeholder="e.g. 150.50"
+                           allowDecimal={true}
+                           />
+                       </FormControl>
+                       <FormMessage />
+                       </FormItem>
+                   )}
+                   />
+              )}
 
-            {watchedType === 'Crypto' && (
-                <FormField
-                control={form.control}
-                name="stakingOrLending"
-                render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-3">
-                        <FormControl>
-                            <Checkbox
-                            checked={field.value}
-                            onCheckedChange={field.onChange}
-                            />
-                        </FormControl>
-                        <div className="space-y-1 leading-none">
-                             <FormLabel>Used for Staking/Lending?</FormLabel>
-                             <FormDescription className="text-xs">Extends tax-free holding to 10 years (DE).</FormDescription>
-                        </div>
-                    </FormItem>
-                )}
-                />
-            )}
-            
-            <DialogFooter>
-              <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : (investment ? 'Update Investment' : 'Save Investment')}
-              </Button>
-            </DialogFooter>
-          </form>
-        </Form>
+              {watchedType === 'Crypto' && (
+                  <FormField
+                  control={form.control}
+                  name="stakingOrLending"
+                  render={({ field }) => (
+                      <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-3">
+                          <FormControl>
+                              <Checkbox
+                              checked={field.value}
+                              onCheckedChange={field.onChange}
+                              />
+                          </FormControl>
+                          <div className="space-y-1 leading-none">
+                               <FormLabel>Used for Staking/Lending?</FormLabel>
+                               <FormDescription className="text-xs">Extends tax-free holding to 10 years (DE).</FormDescription>
+                          </div>
+                      </FormItem>
+                  )}
+                  />
+              )}
+            </form>
+          </Form>
+        </div>
+
+        {/* Fixed Footer */}
+        <DialogFooter className="px-6 py-4 bg-background/50 backdrop-blur border-t shrink-0">
+          <Button type="button" variant="ghost" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
+          {/* Connect button to form via ID */}
+          <Button type="submit" form="investment-form" disabled={isSubmitting}>
+            {isSubmitting ? 'Saving...' : (investment ? 'Update Investment' : 'Save Investment')}
+          </Button>
+        </DialogFooter>
       </DialogContent>
     </Dialog>
   )

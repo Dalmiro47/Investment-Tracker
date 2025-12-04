@@ -58,6 +58,7 @@ import { format, parseISO } from "date-fns";
 import AppDatePicker from "./ui/app-date-picker";
 
 // --- TransactionForm ---
+// (No changes to logic, just wrapped in the new layout structure in the parent)
 interface TransactionFormProps {
     investment: Investment;
     onFormSubmit: () => void;
@@ -113,9 +114,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
         }
     }, [editingTransaction, typeOptions, investment, form]);
 
-
     const watchedType = useWatch({ control: form.control, name: "type" });
-
 
     const handleSubmit = async (values: TransactionFormValues) => {
         if (!user) return;
@@ -136,8 +135,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
 
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4 pt-2">
-                {/* Type and Date Row */}
+            <form id="transaction-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
@@ -176,7 +174,6 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                      </FormItem>
                 </div>
 
-                {/* Sell Specifics */}
                 {watchedType === 'Sell' && (
                     <div className="grid grid-cols-2 gap-4">
                         <FormField
@@ -208,7 +205,6 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                     </div>
                 )}
 
-                {/* Amount (for Dividend, Interest, Deposit, Withdrawal) */}
                 {(watchedType !== 'Sell') && (
                     <FormField
                         control={form.control}
@@ -224,13 +220,6 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                         )}
                     />
                 )}
-
-                <DialogFooter className="gap-2 sm:gap-0 pt-2">
-                    <Button type="button" variant="ghost" onClick={onCancel} disabled={form.formState.isSubmitting}>Cancel</Button>
-                    <Button type="submit" disabled={form.formState.isSubmitting}>
-                        {form.formState.isSubmitting ? (editingTransaction ? 'Updating...' : 'Adding...') : (editingTransaction ? 'Update Transaction' : 'Add Transaction')}
-                    </Button>
-                </DialogFooter>
             </form>
         </Form>
     );
@@ -315,13 +304,22 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
         ...transactions,
     ].sort((a, b) => +new Date(b.date) - +new Date(a.date));
 
+    // Determine widths based on current view
+    const widthClass = view === 'list' ? 'max-w-4xl' : 'max-w-lg';
 
     return (
         <>
             <Dialog open={isOpen} onOpenChange={onOpenChange}>
-                {/* UPDATED: max-w classes refined for better compactness */}
-                <DialogContent className={cn("max-h-[85vh] flex flex-col sm:rounded-xl", view === 'list' ? "sm:max-w-[700px]" : "sm:max-w-[425px]")}>
-                    <DialogHeader>
+                {/* Consistent Dialog Structure:
+                    1. w-[96vw] + max-w + p-0
+                    2. Fixed Header (shrink-0)
+                    3. Scrollable Body (flex-1)
+                    4. Fixed Footer (shrink-0)
+                */}
+                <DialogContent className={cn("w-[96vw] p-0 flex flex-col max-h-[85vh]", widthClass)}>
+                    
+                    {/* Fixed Header */}
+                    <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
                         <DialogTitle className="flex items-center gap-2">
                             {view === 'form' && (
                                 <Button variant="ghost" size="icon" className="h-8 w-8 -ml-2 mr-1" onClick={() => { setView('list'); setEditingTransaction(undefined); }}>
@@ -339,21 +337,22 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                         </DialogDescription>
                     </DialogHeader>
 
-                    {view === 'form' ? (
-                        <TransactionForm
-                            investment={investment}
-                            onFormSubmit={handleFormSubmit}
-                            onCancel={() => { setView('list'); setEditingTransaction(undefined); }}
-                            editingTransaction={editingTransaction}
-                        />
-                    ) : (
-                        <>
-                            <div className="flex-1 overflow-auto -mx-6 px-6 relative scroll-area border-t border-b">
+                    {/* Scrollable Body */}
+                    <div className="flex-1 overflow-y-auto px-6 py-4">
+                        {view === 'form' ? (
+                            <TransactionForm
+                                investment={investment}
+                                onFormSubmit={handleFormSubmit}
+                                onCancel={() => { setView('list'); setEditingTransaction(undefined); }}
+                                editingTransaction={editingTransaction}
+                            />
+                        ) : (
+                            <div className="border rounded-md">
                                 {loading ? (
                                     <div className="flex justify-center items-center py-20"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>
                                 ) : (
                                     <Table>
-                                        <TableHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 shadow-sm">
+                                        <TableHeader className="bg-muted/50">
                                             <TableRow className="hover:bg-transparent">
                                                 <TableHead>Type</TableHead>
                                                 <TableHead>Date</TableHead>
@@ -429,14 +428,25 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                                     </Table>
                                 )}
                             </div>
-                            <DialogFooter className="pt-2">
-                                <Button onClick={handleAddClick} className="w-full sm:w-auto">
-                                    <PlusCircle className="mr-2 h-4 w-4" />
-                                    Add Transaction
+                        )}
+                    </div>
+
+                    {/* Fixed Footer */}
+                    <DialogFooter className="px-6 py-4 bg-background/50 backdrop-blur border-t shrink-0">
+                         {view === 'form' ? (
+                             <>
+                                <Button type="button" variant="ghost" onClick={() => { setView('list'); setEditingTransaction(undefined); }}>Cancel</Button>
+                                <Button type="submit" form="transaction-form">
+                                    {editingTransaction ? 'Update Transaction' : 'Save Transaction'}
                                 </Button>
-                            </DialogFooter>
-                        </>
-                    )}
+                             </>
+                         ) : (
+                             <Button onClick={handleAddClick} className="w-full sm:w-auto">
+                                <PlusCircle className="mr-2 h-4 w-4" />
+                                Add Transaction
+                             </Button>
+                         )}
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
 
