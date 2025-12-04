@@ -46,7 +46,6 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
   const { capitalTaxResult: capital, cryptoTaxResult: crypto } = taxSummary;
   const shortTermGainsTotal = taxSummary.totalShortTermGains;
 
-  // NEW: remaining helpers
   const capitalAllowanceRemaining = Math.max(0, (capital.allowance ?? 0) - (capital.allowanceUsed ?? 0));
   const cryptoThresholdRemaining = Math.max(0, (crypto.threshold ?? 0) - (shortTermGainsTotal ?? 0));
 
@@ -114,7 +113,6 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
               <span className="font-mono">{formatCurrency((capital.taxableBase ?? 0) + (capital.allowanceUsed ?? 0))}</span>
             </div>
 
-            {/* NEW: Allowance Remaining */}
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground pl-2">
                 Allowance Remaining ({formatCurrency(capital.allowance ?? 0)})
@@ -122,7 +120,6 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
               <span className="font-mono">{formatCurrency(capitalAllowanceRemaining)}</span>
             </div>
 
-            {/* keep the “Taxable Base” + taxes as-is */}
             <div className="border-t my-1" />
             <div className="flex justify-between font-medium">
               <span>Taxable Base</span>
@@ -155,7 +152,6 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
               <span className="font-mono">{formatCurrency(shortTermGainsTotal)}</span>
             </div>
 
-            {/* NEW: Threshold Remaining */}
             <div className="flex justify-between text-xs">
               <span className="text-muted-foreground pl-2">
                 Threshold Remaining ({formatCurrency(crypto.threshold)})
@@ -201,7 +197,6 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
 }
 
 const getSummaryContext = (filter: YearFilter): { title: string; description: string } => {
-  // ---- All Years (lifetime) ----
   if (filter.kind === 'all') {
     switch (filter.mode) {
       case 'holdings':
@@ -226,7 +221,6 @@ const getSummaryContext = (filter: YearFilter): { title: string; description: st
     }
   }
 
-  // ---- Specific Year (unchanged) ----
   const year = filter.year;
   switch (filter.mode) {
     case 'combined':
@@ -277,7 +271,7 @@ function PortfolioSummaryImpl({
 
     useEffect(() => {
       if (yearFilter.mode === 'holdings') setDonutMode('market');
-      else setDonutMode('economic'); // realized or combined
+      else setDonutMode('economic');
     }, [yearFilter.mode]);
 
     const openEstimate = useCallback(() => setIsEstimateOpen(true), []);
@@ -348,6 +342,11 @@ function PortfolioSummaryImpl({
     const isYearView = yearFilter.kind === 'year';
     const isAllView = yearFilter.kind === 'all';
 
+    const mode = yearFilter.mode ?? 'holdings';
+    const showRealizedCol = mode !== 'holdings';
+    const showUnrealizedCol = mode !== 'realized';
+    const marketValueLabel = mode === 'realized' ? 'Realized Proceeds' : 'Market Value';
+
     const pctLabel =
         yearFilter.mode === 'realized'
             ? '(Realized)'
@@ -385,9 +384,9 @@ function PortfolioSummaryImpl({
                                             <h4 className="font-semibold">Yearly View Modes</h4>
                                             <p className="text-muted-foreground">When a specific year is selected, these modes change which investments are included in the summary.</p>
                                             <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
-                                                <li><span className="font-semibold text-foreground">Holdings:</span> Shows ONLY currently open positions. Realized P/L is shown as zero.</li>
-                                                <li><span className="font-semibold text-foreground">Realized (Tax):</span> Shows ONLY positions that had a sale in the selected year. This is a pure tax-reporting view.</li>
-                                                <li><span className="font-semibold text-foreground">Combined:</span> (Default) Shows all currently open positions PLUS any positions that had a sale in the selected year. Realized P/L is year-specific.</li>
+                                                <li><span className="font-semibold text-foreground">Holdings:</span> Shows ONLY currently open positions. Realized P/L is hidden.</li>
+                                                <li><span className="font-semibold text-foreground">Realized (Tax):</span> Shows ONLY positions that had a sale in the selected year. Unrealized P/L is hidden. Market Value represents Realized Proceeds.</li>
+                                                <li><span className="font-semibold text-foreground">Combined:</span> (Default) Shows all currently open positions PLUS any positions that had a sale in the selected year.</li>
                                             </ul>
                                         </div>
                                         <div>
@@ -395,24 +394,28 @@ function PortfolioSummaryImpl({
                                             <p className="text-muted-foreground">The original purchase price of the assets included in the current view. <br/><code className="text-xs">Formula: For each included investment, sum of (Original Purchase Price per Unit x Quantity)</code></p>
                                         </div>
                                         <div>
-                                            <h4 className="font-semibold">Market Value</h4>
-                                            <p className="text-muted-foreground">The current value of the assets you still own. <br/><code className="text-xs">Formula: Available Quantity × Current Price per Unit</code></p>
+                                            <h4 className="font-semibold">{marketValueLabel}</h4>
+                                            <p className="text-muted-foreground">In Holdings/Combined mode, this is the current value of assets you still own. In Realized mode, it shows the cash proceeds from sales.<br/><code className="text-xs">Formula (Holdings/Combined): Available Quantity × Current Price per Unit</code><br/><code className="text-xs">Formula (Realized): Sum of (Sell Price x Quantity Sold)</code></p>
                                         </div>
-                                        <div>
-                                            <h4 className="font-semibold">Realized P/L (Profit/Loss)</h4>
-                                            <p className="text-muted-foreground">Your &quot;locked-in&quot; profit or loss from sales. This value is filtered by the selected &quot;Tax Year&quot; and &quot;View Mode&quot;. <br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-semibold">Unrealized P/L (Profit/Loss)</h4>
-                                            <p className="text-muted-foreground">Your &quot;paper&quot; profit or loss on the assets you still hold. It&apos;s the difference between what they are worth now and what you paid for them.<br/><code className="text-xs">Formula: Market Value - Cost Basis of remaining shares</code></p>
-                                        </div>
+                                        {showRealizedCol && (
+                                            <div>
+                                                <h4 className="font-semibold">Realized P/L (Profit/Loss)</h4>
+                                                <p className="text-muted-foreground">Your &quot;locked-in&quot; profit or loss from sales, filtered by the selected period.<br/><code className="text-xs">Formula: Sum of (Sell Price - Original Purchase Price) × Quantity Sold</code></p>
+                                            </div>
+                                        )}
+                                        {showUnrealizedCol && (
+                                            <div>
+                                                <h4 className="font-semibold">Unrealized P/L (Profit/Loss)</h4>
+                                                <p className="text-muted-foreground">Your &quot;paper&quot; profit or loss on assets you still hold.<br/><code className="text-xs">Formula: Market Value - Cost Basis of remaining shares</code></p>
+                                            </div>
+                                        )}
                                         <div>
                                             <h4 className="font-semibold">Total P/L (Profit/Loss)</h4>
                                             <p className="text-muted-foreground">The complete picture of your profit or loss, combining the (filtered) realized gains/losses with the current unrealized gains/losses.<br/><code className="text-xs">Formula: Realized P/L + Unrealized P/L</code></p>
                                         </div>
                                         <div>
                                            <h4 className="font-semibold">Performance</h4>
-                                           <p className="text-muted-foreground">The total percentage return. This is calculated against the total original purchase value of the assets included in the current view to give a true measure of performance for that selection.</p>
+                                           <p className="text-muted-foreground">The total percentage return for the assets included in the current view.</p>
                                            <p className="text-muted-foreground mt-1"><code className="text-xs">Formula: (Total P/L / Total Original Purchase Value) × 100</code></p>
                                         </div>
                                         <div>
@@ -420,7 +423,7 @@ function PortfolioSummaryImpl({
                                             <p className="text-muted-foreground">This shows the allocation of your portfolio&apos;s value. It has two modes:</p>
                                             <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
                                                 <li><span className="font-semibold text-foreground">Market Value Mode:</span> Shows the percentage based on the current market value of what you own.</li>
-                                                <li><span className="font-semibold text-foreground">Economic Value Mode:</span> Shows a broader view, including your realized gains (note: this uses all-time realized gains, not the filtered year). The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>
+                                                <li><span className="font-semibold text-foreground">Economic Value Mode:</span> Shows a broader view, including your realized gains. The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>
                                             </ul>
                                         </div>
                                         <div className="pt-2">
@@ -477,7 +480,7 @@ function PortfolioSummaryImpl({
                                 <TableRow>
                                     <TableHead>Asset Type</TableHead>
                                     <TableHead className="text-right">
-                                        {yearFilter.mode === 'realized'
+                                        {mode === 'realized'
                                             ? (
                                             <Tooltip>
                                                 <TooltipTrigger className="cursor-help underline decoration-dashed">
@@ -489,10 +492,10 @@ function PortfolioSummaryImpl({
                                             : 'Cost Basis'}
                                     </TableHead>
                                     <TableHead className="text-right">
-                                        {yearFilter.mode === 'realized' ? (
+                                        {mode === 'realized' ? (
                                             <Tooltip>
                                             <TooltipTrigger className="cursor-help underline decoration-dashed">
-                                                Realized Value
+                                                {marketValueLabel}
                                             </TooltipTrigger>
                                             <TooltipContent>
                                                 Cash proceeds from sold lots
@@ -500,25 +503,32 @@ function PortfolioSummaryImpl({
                                             </TooltipContent>
                                             </Tooltip>
                                         ) : (
-                                            'Market Value'
+                                            marketValueLabel
                                         )}
                                     </TableHead>
-                                    <TableHead className="text-right">
-                                        {isYearView ? (
-                                             <Tooltip>
-                                                <TooltipTrigger className="cursor-help underline decoration-dashed">Realized P/L</TooltipTrigger>
-                                                <TooltipContent>Only includes sales completed in {yearFilter.year}.</TooltipContent>
-                                            </Tooltip>
-                                        ) : 'Realized P/L'}
-                                    </TableHead>
-                                    <TableHead className="text-right">
-                                         {isYearView ? (
-                                             <Tooltip>
-                                                <TooltipTrigger className="cursor-help underline decoration-dashed">Unrealized P/L</TooltipTrigger>
-                                                <TooltipContent>Based on current prices, not prices from {yearFilter.year}.</TooltipContent>
-                                            </Tooltip>
-                                        ) : 'Unrealized P/L'}
-                                    </TableHead>
+                                    
+                                    {showRealizedCol && (
+                                        <TableHead className="text-right">
+                                            {isYearView ? (
+                                                <Tooltip>
+                                                    <TooltipTrigger className="cursor-help underline decoration-dashed">Realized P/L</TooltipTrigger>
+                                                    <TooltipContent>Only includes sales completed in {yearFilter.year}.</TooltipContent>
+                                                </Tooltip>
+                                            ) : 'Realized P/L'}
+                                        </TableHead>
+                                    )}
+
+                                    {showUnrealizedCol && (
+                                        <TableHead className="text-right">
+                                            {isYearView ? (
+                                                <Tooltip>
+                                                    <TooltipTrigger className="cursor-help underline decoration-dashed">Unrealized P/L</TooltipTrigger>
+                                                    <TooltipContent>Based on current prices, not prices from {yearFilter.year}.</TooltipContent>
+                                                </Tooltip>
+                                            ) : 'Unrealized P/L'}
+                                        </TableHead>
+                                    )}
+
                                     <TableHead className="text-right">Total P/L</TableHead>
                                     <TableHead className="text-right">Performance</TableHead>
                                     <TableHead className="text-right">% of Portfolio {pctLabel}</TableHead>
@@ -527,7 +537,7 @@ function PortfolioSummaryImpl({
                             <TableBody>
                               {rows.length === 0 ? (
                                 <TableRow>
-                                  <TableCell colSpan={8} className="text-center text-muted-foreground py-8">
+                                  <TableCell colSpan={showRealizedCol && showUnrealizedCol ? 8 : 7} className="text-center text-muted-foreground py-8">
                                     {yearFilter.kind === 'year'
                                       ? `No assets were sold in ${yearFilter.year}.`
                                       : 'No assets match this view.'}
@@ -544,8 +554,19 @@ function PortfolioSummaryImpl({
                                         <TableCell className="font-medium">{item.type}</TableCell>
                                         <TableCell className="text-right font-mono">{formatCurrency(item.costBasis)}</TableCell>
                                         <TableCell className="text-right font-mono font-bold">{formatCurrency(item.marketValue)}</TableCell>
-                                        <TableCell className={cn("text-right font-mono", item.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>{formatCurrency(item.realizedPL)}</TableCell>
-                                        <TableCell className={cn("text-right font-mono", item.unrealizedPL >= 0 ? "text-green-500" : "text-destructive")}>{formatCurrency(item.unrealizedPL)}</TableCell>
+                                        
+                                        {showRealizedCol && (
+                                            <TableCell className={cn("text-right font-mono", item.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                                {formatCurrency(item.realizedPL)}
+                                            </TableCell>
+                                        )}
+                                        
+                                        {showUnrealizedCol && (
+                                            <TableCell className={cn("text-right font-mono", item.unrealizedPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                                {formatCurrency(item.unrealizedPL)}
+                                            </TableCell>
+                                        )}
+
                                         <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", item.totalPL >= 0 ? "text-green-500" : "text-destructive")}>
                                           {item.totalPL >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                                           {formatCurrency(item.totalPL)}
@@ -561,8 +582,19 @@ function PortfolioSummaryImpl({
                                     <TableCell>Total</TableCell>
                                     <TableCell className="text-right font-mono">{formatCurrency(totals.costBasis)}</TableCell>
                                     <TableCell className="text-right font-mono">{formatCurrency(totals.marketValue)}</TableCell>
-                                    <TableCell className={cn("text-right font-mono", totals.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>{formatCurrency(totals.realizedPL)}</TableCell>
-                                    <TableCell className={cn("text-right font-mono", totals.unrealizedPL >= 0 ? "text-green-500" : "text-destructive")}>{formatCurrency(totals.unrealizedPL)}</TableCell>
+                                    
+                                    {showRealizedCol && (
+                                        <TableCell className={cn("text-right font-mono", totals.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                            {formatCurrency(totals.realizedPL)}
+                                        </TableCell>
+                                    )}
+
+                                    {showUnrealizedCol && (
+                                        <TableCell className={cn("text-right font-mono", totals.unrealizedPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                            {formatCurrency(totals.unrealizedPL)}
+                                        </TableCell>
+                                    )}
+
                                     <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", totals.totalPL >= 0 ? "text-green-500" : "text-destructive")}>
                                         {totals.totalPL >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                                         {formatCurrency(totals.totalPL)}
@@ -651,3 +683,5 @@ function PortfolioSummaryImpl({
 }
 
 export default forwardRef(PortfolioSummaryImpl);
+
+    
