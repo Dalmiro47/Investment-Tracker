@@ -40,6 +40,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MobileAppShell } from '@/components/shell/MobileAppShell';
 import { MobileFilters } from '@/components/filters/MobileFilters';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { FifoSellDialog } from "@/components/fifo-sell-dialog"; // Add this import
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -94,6 +95,11 @@ function DashboardPageContent() {
   const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
   const [pendingOpenEstimate, setPendingOpenEstimate] = React.useState(false);
   const isMobile = useIsMobile();
+
+  // -- Add NEW state for FIFO handling --
+  const [fifoWarnSymbol, setFifoWarnSymbol] = React.useState<string | null>(null);
+  const [isFifoDialogOpen, setIsFifoDialogOpen] = React.useState(false);
+  const [fifoSellSymbol, setFifoSellSymbol] = React.useState<string | null>(null);
 
   // Keeps 'holdings' as the default mode and preserves current mode on year changes
   const setYearFilterHoldingsSafe = React.useCallback((next: YearFilter) => {
@@ -374,6 +380,27 @@ function DashboardPageContent() {
   }
 
   const handleAddTransactionClick = (investment: Investment) => {
+    // 1. Check for older active lots of the same symbol (FIFO check)
+    // Only applies to taxable assets (Stock, ETF, Crypto) with a ticker
+    if (investment.type !== 'Interest Account' && investment.ticker && investment.status === 'Active') {
+        const investmentDate = new Date(investment.purchaseDate).getTime();
+        
+        // Find if there is ANY active investment with same ticker but OLDER date
+        const olderLotExists = investments.some(other => 
+            other.id !== investment.id && 
+            other.ticker === investment.ticker &&
+            other.status === 'Active' &&
+            new Date(other.purchaseDate).getTime() < investmentDate
+        );
+
+        if (olderLotExists) {
+            // Intercept: Trigger the warning
+            setFifoWarnSymbol(investment.ticker);
+            return;
+        }
+    }
+
+    // Standard behavior (No older lots, or Interest Account)
     setViewingHistoryInvestment(investment);
     setHistoryDialogView('form');
     setIsHistoryOpen(true);
@@ -520,6 +547,14 @@ function DashboardPageContent() {
       return;
     }
     setViewMode(mode);
+  };
+
+  const handleConfirmFifo = () => {
+    if (fifoWarnSymbol) {
+        setFifoSellSymbol(fifoWarnSymbol);
+        setFifoWarnSymbol(null);
+        setIsFifoDialogOpen(true);
+    }
   };
 
   const advancedFilters = (
@@ -898,6 +933,7 @@ function DashboardPageContent() {
   return (
     <>
       {isMobile ? mobileView : desktopView}
+      
       <InvestmentForm 
         isOpen={isFormOpen}
         onOpenChange={setIsFormOpen}
@@ -925,6 +961,37 @@ function DashboardPageContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      
+      {/* --- NEW: FIFO Warning Alert --- */}
+      <AlertDialog open={!!fifoWarnSymbol} onOpenChange={(open) => !open && setFifoWarnSymbol(null)}>
+        <AlertDialogContent>
+            <AlertDialogHeader>
+                <AlertDialogTitle>FIFO Rule Applies</AlertDialogTitle>
+                <AlertDialogDescription>
+                    In Germany, securities are sold on a First-In, First-Out (FIFO) basis. 
+                    To maintain accurate tax calculations, this sale will be applied to your 
+                    oldest <b>{fifoWarnSymbol}</b> holdings first.
+                </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleConfirmFifo}>
+                    Proceed to Sell
+                </AlertDialogAction>
+            </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* --- NEW: FIFO Sell Dialog --- */}
+      <FifoSellDialog 
+        isOpen={isFifoDialogOpen}
+        onOpenChange={setIsFifoDialogOpen}
+        symbol={fifoSellSymbol}
+        onSuccess={async () => {
+             if (user) await fetchAllData(user.uid);
+        }}
+      />
+
       {viewingHistoryInvestment && (
         <TransactionHistoryDialog 
             isOpen={isHistoryOpen}
