@@ -16,6 +16,7 @@ export interface PositionMetrics {
   availableQty: number;
   purchaseValue: number; // The full original cost, does not decrease with sells. For IA: Net Deposits.
   marketValue: number;
+  soldCostBasis: number;
   
   // P&L Metrics
   realizedPLAll: number;
@@ -52,6 +53,7 @@ export type AggregatedSymbolRow = {
   buyQty: number;
   availableQty: number;
   costBasis: number;
+  soldBasis: number;
   marketValue: number;
 
   // NEW: per-unit prices for the aggregated row
@@ -81,6 +83,7 @@ export function calculatePositionMetrics(
     capitalGainsYear: 0, dividendsYear: 0, interestYear: 0,
     realizedProceedsAll: 0, realizedProceedsYear: 0,
     realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0,
+    soldCostBasis: 0,
     type: inv.type,
     planId: inv.planId,
   };
@@ -223,6 +226,7 @@ export function calculatePositionMetrics(
     availableQty: toNum(availableQty, 8),
     purchaseValue: toNum(purchaseValue),
     marketValue: toNum(marketValue),
+    soldCostBasis: toNum(sellCostBasisAll),
     realizedPLAll: toNum(realizedPLAll),
     realizedPLYear: toNum(realizedPLYear),
     unrealizedPL: toNum(unrealizedPL),
@@ -267,6 +271,7 @@ export function aggregateBySymbol(
         buyQty: 0,
         availableQty: 0,
         costBasis: 0,
+        soldBasis: 0,
         marketValue: 0,
 
         // NEW
@@ -300,6 +305,8 @@ export function aggregateBySymbol(
     a.costBasis += metrics.type === 'Interest Account'
       ? metrics.purchaseValue
       : metrics.availableQty * metrics.buyPrice;
+
+    a.soldBasis += metrics.soldCostBasis;
 
     a.marketValue += metrics.marketValue;
     a.realizedPL += metrics.realizedPLDisplay;

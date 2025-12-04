@@ -103,9 +103,13 @@ export default function InvestmentListView({
       const marketValue = num(r.marketValue);
       const performancePct = num(r.performancePct);
       const economicValue = num(r.economicValue ?? (r.marketValue + r.realizedPL));
+      
+      const isFullySold = r.availableQty < 1e-6;
+      const displayBasis = isFullySold ? r.soldBasis : r.costBasis;
 
       return {
         ...r,
+        costBasis: displayBasis,
         // Alias buyQty to boughtQty for consistency with Flat view
         boughtQty: r.buyQty,
         currentRatePct,
@@ -127,8 +131,10 @@ export default function InvestmentListView({
 
       const isIA = inv.type === 'Interest Account';
       const costBasis = isIA
-        ? m.purchaseValue
-        : m.availableQty * (Number(inv.purchasePricePerUnit) || 0);
+          ? m.purchaseValue
+          : inv.status === 'Sold'
+            ? m.soldCostBasis
+            : m.availableQty * (Number(inv.purchasePricePerUnit) || 0);
 
       return {
         key: inv.id,
@@ -304,7 +310,7 @@ export default function InvestmentListView({
   const showSoldCols  = isFlat && statusFilter === 'Sold';
   const showBuyPrice  = !isSoldView;
   const showCurrentPriceCol = !isSoldView;
-  const showCostBasisCol = !isSoldView;
+  const showCostBasisCol = true; // Always show, label will change
   const showRealizedPLCol   = !(isFlat && statusFilter === 'Active');
   const showUnrealizedPLCol = !(isSoldView || (isFlat && statusFilter === 'Active'));
 
@@ -327,7 +333,7 @@ export default function InvestmentListView({
                   {showBuyPrice && <th className="text-right">Buy Price</th>}
                   {showSoldCols && <th className="text-right">Avg. Sell Price</th>}
                   {showCurrentPriceCol && <th className="text-right">Current Price</th>}
-                  {showCostBasisCol && <th className="text-right">Cost Basis</th>}
+                  {showCostBasisCol && <th className="text-right">{ isSoldView ? "Original Cost" : "Cost Basis" }</th>}
                 </>
               ) : isAggregated ? (
                 <>
