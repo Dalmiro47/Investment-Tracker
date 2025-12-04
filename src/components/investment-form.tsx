@@ -124,7 +124,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+      <DialogContent className="sm:max-w-[500px] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{investment ? 'Edit Investment' : 'Add Investment'}</DialogTitle>
           <DialogDescription>
@@ -132,23 +132,25 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6 py-2">
+          <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4 py-2">
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <FormField
-                control={form.control}
-                name="name"
-                render={({ field }) => (
-                    <FormItem className="md:col-span-2">
-                    <FormLabel>Account / Asset Name</FormLabel>
-                    <FormControl>
-                        <Input placeholder={isIA ? "e.g. High Yield Savings" : "e.g. TechCorp Inc."} {...field} />
-                    </FormControl>
-                    <FormMessage />
-                    </FormItem>
-                )}
-                />
-                
+            {/* Row 1: Name */}
+            <FormField
+              control={form.control}
+              name="name"
+              render={({ field }) => (
+                  <FormItem>
+                  <FormLabel>Account / Asset Name</FormLabel>
+                  <FormControl>
+                      <Input placeholder={isIA ? "e.g. High Yield Savings" : "e.g. TechCorp Inc."} {...field} />
+                  </FormControl>
+                  <FormMessage />
+                  </FormItem>
+              )}
+            />
+            
+            {/* Row 2: Type & Ticker */}
+            <div className="grid grid-cols-2 gap-4">
                 <FormField
                 control={form.control}
                 name="type"
@@ -175,7 +177,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                 )}
                 />
 
-                {!isIA ? (
+                {!isIA && (
                     <FormField
                     control={form.control}
                     name="ticker"
@@ -184,18 +186,18 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                         <FormLabel>Ticker / Symbol</FormLabel>
                         <FormControl>
                             <Input placeholder={
-                            watchedType === 'Crypto' ? "e.g. bitcoin (coingecko id)" : "e.g. NVD.F"
+                            watchedType === 'Crypto' ? "e.g. bitcoin (id)" : "e.g. NVD.F"
                             } {...field} />
                         </FormControl>
-                        <FormDescription>
-                            {isTickerRequired ? "Required for price updates." : "Optional."}
-                        </FormDescription>
                         <FormMessage />
                         </FormItem>
                     )}
                     />
-                ) : <div />}
+                )}
+            </div>
 
+            {/* Row 3: Date & Quantity */}
+            <div className="grid grid-cols-2 gap-4">
                 <FormItem>
                     <FormLabel>{isIA ? "Opening Date" : "Purchase Date"}</FormLabel>
                     <Controller
@@ -213,41 +215,13 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                     <FormMessage />
                 </FormItem>
 
-                {isIA ? (
-                <>
-                {!isEditing && (
-                    <>
-                        <div className="md:col-span-1 space-y-2">
-                            <Label>Starting Balance</Label>
-                            <NumericInput
-                                value={startingBalance}
-                                onCommit={(n) => setStartingBalance(n ?? null)}
-                                placeholder="e.g. 3,000.00"
-                                allowDecimal
-                            />
-                            <p className="text-[0.8rem] text-muted-foreground">Recorded as a Deposit.</p>
-                        </div>
-                        <div className="md:col-span-1 space-y-2">
-                            <Label>Initial Interest Rate (%)</Label>
-                            <NumericInput
-                                value={initialRatePct}
-                                onCommit={(n) => setInitialRatePct(n ?? null)}
-                                placeholder="e.g. 3.5"
-                                allowDecimal
-                            />
-                            <p className="text-[0.8rem] text-muted-foreground">Annual rate.</p>
-                        </div>
-                    </>
-                    )}
-                </>
-                ) : (
-                <>
+                {!isIA && (
                     <FormField
                     control={form.control}
                     name="purchaseQuantity"
                     render={({ field }) => (
                         <FormItem>
-                        <FormLabel>Purchase Quantity</FormLabel>
+                        <FormLabel>Quantity</FormLabel>
                         <FormControl>
                             <NumericInput
                             value={field.value as number | null | undefined}
@@ -260,35 +234,61 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                         </FormItem>
                     )}
                     />
-                    
-                    <FormField
-                    control={form.control}
-                    name="purchasePricePerUnit"
-                    render={({ field }) => (
-                        <FormItem className={watchedType === 'Crypto' ? '' : 'md:col-span-2'}>
-                        <FormLabel>Purchase Price (per unit)</FormLabel>
-                        <FormControl>
-                            <NumericInput
-                            value={field.value as number | null | undefined}
-                            onCommit={(n) => field.onChange(n ?? undefined)}
-                            placeholder="e.g. 150.50"
-                            allowDecimal={true}
-                            />
-                        </FormControl>
-                        <FormMessage />
-                        </FormItem>
-                    )}
-                    />
-                </>
                 )}
             </div>
+
+            {/* IA Specific Fields */}
+            {isIA && !isEditing && (
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label>Starting Balance</Label>
+                        <NumericInput
+                            value={startingBalance}
+                            onCommit={(n) => setStartingBalance(n ?? null)}
+                            placeholder="e.g. 3,000.00"
+                            allowDecimal
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Initial Rate (%)</Label>
+                        <NumericInput
+                            value={initialRatePct}
+                            onCommit={(n) => setInitialRatePct(n ?? null)}
+                            placeholder="e.g. 3.5"
+                            allowDecimal
+                        />
+                    </div>
+                </div>
+            )}
+
+            {/* Price Row (Full Width for clarity, or can be grid) */}
+            {!isIA && (
+                 <FormField
+                 control={form.control}
+                 name="purchasePricePerUnit"
+                 render={({ field }) => (
+                     <FormItem>
+                     <FormLabel>Purchase Price (per unit)</FormLabel>
+                     <FormControl>
+                         <NumericInput
+                         value={field.value as number | null | undefined}
+                         onCommit={(n) => field.onChange(n ?? undefined)}
+                         placeholder="e.g. 150.50"
+                         allowDecimal={true}
+                         />
+                     </FormControl>
+                     <FormMessage />
+                     </FormItem>
+                 )}
+                 />
+            )}
 
             {watchedType === 'Crypto' && (
                 <FormField
                 control={form.control}
                 name="stakingOrLending"
                 render={({ field }) => (
-                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4">
+                    <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-3">
                         <FormControl>
                             <Checkbox
                             checked={field.value}
@@ -297,7 +297,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                         </FormControl>
                         <div className="space-y-1 leading-none">
                              <FormLabel>Used for Staking/Lending?</FormLabel>
-                             <FormDescription>Extends tax-free holding period to 10 years in Germany.</FormDescription>
+                             <FormDescription className="text-xs">Extends tax-free holding to 10 years (DE).</FormDescription>
                         </div>
                     </FormItem>
                 )}

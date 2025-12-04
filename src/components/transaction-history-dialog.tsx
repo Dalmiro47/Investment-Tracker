@@ -136,14 +136,15 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
 
     return (
         <Form {...form}>
-            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6 pt-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4 pt-2">
+                {/* Type and Date Row */}
+                <div className="grid grid-cols-2 gap-4">
                     <FormField
                         control={form.control}
                         name="type"
                         render={({ field }) => (
                             <FormItem>
-                                <FormLabel>Transaction Type</FormLabel>
+                                <FormLabel>Type</FormLabel>
                                 <Select onValueChange={field.onChange} value={field.value}>
                                     <FormControl>
                                         <SelectTrigger><SelectValue placeholder="Select type" /></SelectTrigger>
@@ -175,8 +176,9 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                      </FormItem>
                 </div>
 
+                {/* Sell Specifics */}
                 {watchedType === 'Sell' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                         <FormField
                             control={form.control}
                             name="quantity"
@@ -195,7 +197,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                             name="pricePerUnit"
                             render={({ field }) => (
                                 <FormItem>
-                                    <FormLabel>Price per Unit (€)</FormLabel>
+                                    <FormLabel>Price / Unit (€)</FormLabel>
                                     <FormControl>
                                         <Input type="number" step="any" placeholder="e.g. 150.50" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
                                     </FormControl>
@@ -206,6 +208,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                     </div>
                 )}
 
+                {/* Amount (for Dividend, Interest, Deposit, Withdrawal) */}
                 {(watchedType !== 'Sell') && (
                     <FormField
                         control={form.control}
@@ -222,8 +225,8 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                     />
                 )}
 
-                <DialogFooter className="gap-2 sm:gap-0">
-                    <Button type="button" variant="outline" onClick={onCancel} disabled={form.formState.isSubmitting}>Cancel</Button>
+                <DialogFooter className="gap-2 sm:gap-0 pt-2">
+                    <Button type="button" variant="ghost" onClick={onCancel} disabled={form.formState.isSubmitting}>Cancel</Button>
                     <Button type="submit" disabled={form.formState.isSubmitting}>
                         {form.formState.isSubmitting ? (editingTransaction ? 'Updating...' : 'Adding...') : (editingTransaction ? 'Update Transaction' : 'Add Transaction')}
                     </Button>
@@ -316,7 +319,8 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
     return (
         <>
             <Dialog open={isOpen} onOpenChange={onOpenChange}>
-                <DialogContent className={cn("max-h-[85vh] flex flex-col", view === 'list' ? "max-w-4xl" : "max-w-lg")}>
+                {/* UPDATED: max-w classes refined for better compactness */}
+                <DialogContent className={cn("max-h-[85vh] flex flex-col sm:rounded-xl", view === 'list' ? "sm:max-w-[700px]" : "sm:max-w-[425px]")}>
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             {view === 'form' && (
@@ -330,8 +334,8 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                         </DialogTitle>
                         <DialogDescription>
                             {view === 'form'
-                                ? isIA ? 'Record a deposit or withdrawal for this interest account.' : 'Record a sale or income for this investment.'
-                                : 'View and manage all past transactions for this investment.'}
+                                ? isIA ? 'Record a deposit or withdrawal.' : 'Record a sale or income.'
+                                : 'View past transactions for this investment.'}
                         </DialogDescription>
                     </DialogHeader>
 
@@ -353,8 +357,8 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                                             <TableRow className="hover:bg-transparent">
                                                 <TableHead>Type</TableHead>
                                                 <TableHead>Date</TableHead>
-                                                <TableHead className="text-right">{isIA ? 'Amount' : 'Quantity'}</TableHead>
-                                                {!isIA && <TableHead className="text-right">Price/Unit</TableHead>}
+                                                <TableHead className="text-right">{isIA ? 'Amount' : 'Qty'}</TableHead>
+                                                {!isIA && <TableHead className="text-right">Price</TableHead>}
                                                 {!isIA && <TableHead className="text-right">Total</TableHead>}
                                                 <TableHead className="w-[50px]"></TableHead>
                                             </TableRow>
