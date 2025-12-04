@@ -54,17 +54,34 @@ export default function RootLayout({
         </AuthProvider>
         <Toaster />
         <OfflineToast />
-        {/* Register SW at the root once on mount */}
+        {/* PWA Logic: Register in Prod, DESTROY in Dev */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               (function(){
                 if ('serviceWorker' in navigator) {
-                  window.addEventListener('load', function(){
-                    navigator.serviceWorker.register('/sw.js').catch(function(e){
-                      console.warn('SW registration failed', e);
+                  // 1. PRODUCTION: Register the PWA Service Worker
+                  if ('${process.env.NODE_ENV}' === 'production') {
+                    window.addEventListener('load', function(){
+                      navigator.serviceWorker.register('/sw.js').catch(function(e){
+                        console.warn('SW registration failed', e);
+                      });
                     });
-                  });
+                  } 
+                  // 2. DEVELOPMENT / PREVIEW: Force Unregister (Kill the cache)
+                  else {
+                    navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                      for(let registration of registrations) {
+                        registration.unregister();
+                        console.log('Cleaning up: Service Worker unregistered for Development/Preview.');
+                      }
+                      // Optional: Reload once if we found one, to ensure fresh content
+                      if (registrations.length > 0) {
+                        // console.log('Reloading to serve fresh content...');
+                        // window.location.reload(); 
+                      }
+                    });
+                  }
                 }
               })();
             `
