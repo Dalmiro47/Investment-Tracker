@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -95,7 +96,7 @@ export function TaxSettingsDialog({ isOpen, onOpenChange, currentSettings, onSav
                     <Info className="h-4 w-4" />
                   </Button>
                 </SheetTrigger>
-                <SheetContent side="right" className="overflow-y-auto sm:max-w-md z-[100]">
+                <SheetContent side="right" className="overflow-y-auto sm:max-w-md z-[9999]">
                   <SheetHeader>
                     <SheetTitle>How to Estimate Your Marginal Tax Rate</SheetTitle>
                   </SheetHeader>
