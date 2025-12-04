@@ -430,3 +430,94 @@ export async function addRateChange(
   const ref = collection(db, 'users', uid, 'investments', invId, 'rateSchedule');
   await addDoc(ref, change);
 }
+
+export async function processFifoSell(
+  uid: string, 
+  symbol: string, 
+  data: { date: Date; quantity: number; pricePerUnit: number }
+) {
+  // 1. Identify candidates: Query all active investments with this symbol
+  // We use the 'symbol' field which corresponds to the ticker.
+  const q = query(
+    investmentsCol(uid), 
+    where('symbol', '==', symbol), 
+    where('status', '==', 'Active')
+  );
+  
+  const snap = await getDocs(q);
+  const candidates = snap.docs.map(fromInvestmentDoc);
+
+  if (candidates.length === 0) {
+    throw new Error(`No active investments found for symbol: ${symbol}`);
+  }
+
+  // 2. Sort by purchase date (Oldest First for FIFO)
+  candidates.sort((a, b) => new Date(a.purchaseDate).getTime() - new Date(b.purchaseDate).getTime());
+
+  // 3. Execute Atomic Transaction
+  await runTransaction(db, async (tx) => {
+    // Re-fetch inside transaction to ensure data integrity (Optimistic locking)
+    const invReads = await Promise.all(candidates.map(c => tx.get(doc(db, 'users', uid, 'investments', c.id))));
+    const freshInvs = invReads.map(fromInvestmentDoc);
+
+    let remainingQtyToSell = data.quantity;
+    
+    // Check global availability first
+    const totalAvailable = freshInvs.reduce((acc, inv) => acc + (inv.purchaseQuantity - (inv.totalSoldQty ?? 0)), 0);
+    
+    // Allow a tiny epsilon for float math safety
+    if (remainingQtyToSell > totalAvailable + 0.00000001) {
+        throw new Error(`Insufficient funds. You have ${totalAvailable} available, but tried to sell ${remainingQtyToSell}.`);
+    }
+
+    // Distribute the sell quantity across lots
+    for (const inv of freshInvs) {
+        if (remainingQtyToSell <= 0.00000001) break;
+
+        const currentAvailable = inv.purchaseQuantity - (inv.totalSoldQty ?? 0);
+        
+        // Skip exhausted ones if status wasn't updated correctly for some reason
+        if (currentAvailable <= 0.00000001) continue; 
+
+        // Determine how much to take from this specific lot
+        const take = Math.min(currentAvailable, remainingQtyToSell);
+        
+        // Prepare Transaction Data
+        const txTotalAmount = take * data.pricePerUnit;
+        
+        // Create new Tx Doc Ref within the subcollection of this specific lot
+        const newTxRef = doc(txCol(uid, inv.id));
+
+        // Calculate aggregates (Reusing logic from addTransaction)
+        const totalSoldQty = (inv.totalSoldQty ?? 0) + take;
+        const availableQty = Math.max(0, inv.purchaseQuantity - totalSoldQty);
+        
+        // Determine Status
+        const status: Investment['status'] =
+          inv.type === 'Interest Account' ? 'Active' : (availableQty > 1e-6 ? 'Active' : 'Sold');
+        
+        const realizedProceeds = (inv.realizedProceeds ?? 0) + txTotalAmount;
+        const realizedPnL = (inv.realizedPnL ?? 0) + ((data.pricePerUnit - inv.purchasePricePerUnit) * take);
+
+        // Update Investment Document
+        tx.update(doc(db, 'users', uid, 'investments', inv.id), {
+            totalSoldQty,
+            realizedProceeds,
+            realizedPnL,
+            status,
+            updatedAt: serverTimestamp()
+        });
+
+        // Create Transaction Document
+        tx.set(newTxRef, {
+            type: 'Sell',
+            date: toTS(data.date),
+            quantity: take,
+            pricePerUnit: data.pricePerUnit,
+            totalAmount: txTotalAmount
+        });
+
+        remainingQtyToSell -= take;
+    }
+  });
+}
