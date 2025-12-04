@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -87,6 +86,10 @@ export default function AppDatePicker({
   const [open, setOpen] = React.useState(false);
   const [view, setView] = React.useState<Date>(value ?? new Date());
   const [text, setText] = React.useState<string>(value ? format(value, inputFormat) : '');
+  
+  // Ref to track if we are currently clicking a day.
+  // This prevents the "Close" event from overwriting the selection with the text input value.
+  const isSelectingRef = React.useRef(false);
 
   // keep input text and the calendar month in sync with external value
   React.useEffect(() => {
@@ -128,9 +131,16 @@ export default function AppDatePicker({
     e.stopPropagation();
 
     if (disabled || dayIsDisabled(d)) return;
+    
+    // MARK as selecting to block commitText
+    isSelectingRef.current = true;
+    
     const picked = startOfDayLocal(d);
     onChange(picked);
     setOpen(false);
+
+    // Reset flag after a tick
+    setTimeout(() => { isSelectingRef.current = false; }, 0);
   };
 
   const months = Array.from({ length: 12 }, (_, i) =>
@@ -145,9 +155,12 @@ export default function AppDatePicker({
 
   return (
     <div className={clsx('w-full', className)}>
-      <Popover open={open} onOpenChange={(o) => {
+      {/* FIX 1: modal={true} ensures correct focus management inside Dialogs 
+         FIX 2: Check isSelectingRef before committing text
+      */}
+      <Popover modal={true} open={open} onOpenChange={(o) => {
         setOpen(o);
-        if (!o) commitText(); // closing → commit typed text (if any)
+        if (!o && !isSelectingRef.current) commitText(); 
       }}>
         <PopoverTrigger asChild>
           <button
