@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useMemo } from 'react';
@@ -204,8 +205,10 @@ export default function InvestmentListView({
         a.unrealizedPL += r.unrealizedPL ?? 0;
         a.totalPL += r.totalPL ?? 0;
         a.purchaseValue += r.purchaseValue ?? 0;
+        a.boughtQty += r.boughtQty ?? 0;
+        a.availableQty += r.availableQty ?? 0;
         return a;
-    }, { costBasis: 0, marketValue: 0, realizedPL: 0, unrealizedPL: 0, totalPL: 0, purchaseValue: 0 });
+    }, { costBasis: 0, marketValue: 0, realizedPL: 0, unrealizedPL: 0, totalPL: 0, purchaseValue: 0, boughtQty: 0, availableQty: 0 });
 
     return {
         ...acc,
@@ -289,6 +292,7 @@ export default function InvestmentListView({
 
   // ---- Default (generic) table for all other types ----
   const isFlat = mode === 'flat';
+  const isAggregated = mode === 'aggregated';
   const isSoldView = isFlat && statusFilter === 'Sold';
 
   const showPercentPortfolioCol = !isFlat;
@@ -296,7 +300,7 @@ export default function InvestmentListView({
   const showPurchaseDateCol = isFlat;
 
   const showBoughtCol = !isSoldView;
-  const showAvailCol  = true; // Always show available
+  const showAvailCol  = !isSoldView;
   const showSoldCols  = isFlat && statusFilter === 'Sold';
   const showBuyPrice  = !isSoldView;
   const showCurrentPriceCol = !isSoldView;
@@ -314,6 +318,7 @@ export default function InvestmentListView({
               <th>Asset</th>
               {showPurchaseDateCol && <th>Purchase Date</th>}
               {showStatusCol && <th>Status</th>}
+              
               {isFlat ? (
                 <>
                   {showBoughtCol && <th className="text-right">Bought</th>}
@@ -324,7 +329,7 @@ export default function InvestmentListView({
                   {showCurrentPriceCol && <th className="text-right">Current Price</th>}
                   {showCostBasisCol && <th className="text-right">Cost Basis</th>}
                 </>
-              ) : (
+              ) : isAggregated ? (
                 <>
                   <th className="text-right">Bought</th>
                   <th className="text-right">Qty (avail.)</th>
@@ -332,7 +337,7 @@ export default function InvestmentListView({
                   <th className="text-right">Current Price</th>
                   <th className="text-right">Cost Basis</th>
                 </>
-              )
+              ) : null
             }
             <th className="text-right">Market Value</th>
             {showRealizedPLCol && <th className="text-right">Realized P/L</th>}
@@ -420,23 +425,23 @@ export default function InvestmentListView({
                 
                 {isFlat ? (
                     <>
-                        {showBoughtCol && <td></td>}
+                        {showBoughtCol && <td className="text-right">{fmtQty(totals.boughtQty)}</td>}
                         {showSoldCols && <td></td>}
-                        {showAvailCol && <td></td>}
+                        {showAvailCol && <td className="text-right">{fmtQty(totals.availableQty)}</td>}
                         {showBuyPrice && <td></td>}
                         {showSoldCols && <td></td>}
                         {showCurrentPriceCol && <td></td>}
                         {showCostBasisCol && <td className="text-right">{fmtEur.format(totals.costBasis)}</td>}
                     </>
-                ) : (
+                ) : isAggregated ? (
                     <>
-                        <td></td>
-                        <td></td>
+                        <td className="text-right">{fmtQty(totals.boughtQty)}</td>
+                        <td className="text-right">{fmtQty(totals.availableQty)}</td>
                         <td></td>
                         <td></td>
                         <td className="text-right">{fmtEur.format(totals.costBasis)}</td>
                     </>
-                )}
+                ) : null}
 
                 <td className="text-right">{fmtEur.format(totals.marketValue)}</td>
                 {showRealizedPLCol && <td className={`text-right ${plClass(totals.realizedPL)}`}>{fmtEur.format(totals.realizedPL)}</td>}
