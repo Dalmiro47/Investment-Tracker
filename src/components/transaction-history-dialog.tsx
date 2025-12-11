@@ -316,7 +316,10 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                     3. Scrollable Body (flex-1)
                     4. Fixed Footer (shrink-0)
                 */}
-                <DialogContent className={cn("w-[96vw] p-0 flex flex-col max-h-[85vh]", widthClass)}>
+                <DialogContent 
+                    className={cn("w-[96vw] p-0 flex flex-col max-h-[85vh]", widthClass)}
+                    onCloseAutoFocus={(e) => e.preventDefault()}
+                >
                     
                     {/* Fixed Header */}
                     <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
