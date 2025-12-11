@@ -15,24 +15,15 @@ import {
   format,
   parse,
   isValid,
+  isAfter,
+  startOfDay,
 } from 'date-fns';
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-export type AppDatePickerProps = {
-  value: Date | null | undefined;
-  onChange: (date: Date | null) => void;
-  placeholder?: string;
-  disabled?: boolean;
-  minDate?: Date;
-  maxDate?: Date;
-  className?: string;
-  inputFormat?: string; // default: dd/MM/yyyy
-};
-
+// --- Helper Functions ---
 const INPUT_FORMAT = 'dd/MM/yyyy';
-const PIVOT_2DIGIT = 50; // 00..49 => 2000..2049, 50..99 => 1950..1999
-
+const PIVOT_2DIGIT = 50; 
 const startOfDayLocal = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 
 function clamp(date: Date, min?: Date, max?: Date) {
@@ -47,31 +38,36 @@ function expand2DigitYear(two: string) {
   return n <= PIVOT_2DIGIT ? `20${two.padStart(2, '0')}` : `19${two.padStart(2, '0')}`;
 }
 
-// dd/MM/yyyy + permissive extras (ddMMyyyy, dd/MM/yy, ddMMyy)
 function parseUserInput(raw: string, fmt: string): Date | null {
   const v = raw.trim();
   if (!v) return null;
-
   if (/^\d{6}$/.test(v)) {
-    const d = v.slice(0, 2);
-    const m = v.slice(2, 4);
-    const y = expand2DigitYear(v.slice(4));
+    const d = v.slice(0, 2); const m = v.slice(2, 4); const y = expand2DigitYear(v.slice(4));
     const parsed = parse(`${d}${m}${y}`, 'ddMMyyyy', new Date());
     return isValid(parsed) ? startOfDayLocal(parsed) : null;
   }
   if (/^\d{2}\/\d{2}\/\d{2}$/.test(v)) {
-    const [d, m, y2] = v.split('/');
-    const y = expand2DigitYear(y2);
+    const [d, m, y2] = v.split('/'); const y = expand2DigitYear(y2);
     const parsed = parse(`${d}/${m}/${y}`, 'dd/MM/yyyy', new Date());
     return isValid(parsed) ? startOfDayLocal(parsed) : null;
   }
-
   for (const f of [fmt, 'ddMMyyyy', 'd/M/yyyy', 'dd/M/yyyy', 'MM/dd/yyyy', 'yyyy-MM-dd', 'dd.MM.yyyy']) {
     const parsed = parse(v, f, new Date());
     if (isValid(parsed)) return startOfDayLocal(parsed);
   }
   return null;
 }
+
+export type AppDatePickerProps = {
+  value: Date | null | undefined;
+  onChange: (date: Date | null) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  minDate?: Date;
+  maxDate?: Date;
+  className?: string;
+  inputFormat?: string;
+};
 
 export default function AppDatePicker({
   value,
@@ -87,17 +83,40 @@ export default function AppDatePicker({
   const [view, setView] = React.useState<Date>(value ?? new Date());
   const [text, setText] = React.useState<string>(value ? format(value, inputFormat) : '');
   
-  // Ref to track if we are currently clicking a day.
-  // This prevents the "Close" event from overwriting the selection with the text input value.
+  // Safety Refs
   const isSelectingRef = React.useRef(false);
+  const isMountedRef = React.useRef(false); 
 
-  // keep input text and the calendar month in sync with external value
+  const valueTimestamp = value?.getTime();
+  
+  // 1. Track Mount State
   React.useEffect(() => {
-    setText(value ? format(value, inputFormat) : '');
-    if (value) setView(value);
-  }, [value, inputFormat]);
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
-  // auto-insert slashes while typing
+  // 2. Sync with External Prop
+  React.useEffect(() => {
+    const distinctDate = valueTimestamp ? new Date(valueTimestamp) : null;
+
+    if (distinctDate) {
+      const formatted = format(distinctDate, inputFormat);
+      // Only update if visually different to avoid cursor jumps, but ALWAYS allow if coming from prop
+      if (text !== formatted) {
+        setText(formatted);
+      }
+      if (!isSameMonth(distinctDate, view)) {
+         setView(distinctDate);
+      }
+    } else {
+       if (text !== '') setText('');
+    }
+    // FIX: Removed 'text' from dependencies to stop the infinite loop / frozen screen
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valueTimestamp, inputFormat]); 
+
   const onChangeRaw = (e: React.ChangeEvent<HTMLInputElement>) => {
     let digits = e.target.value.replace(/\D/g, '').slice(0, 8);
     let out = '';
@@ -108,64 +127,73 @@ export default function AppDatePicker({
   };
 
   const commitText = () => {
+    if (!isMountedRef.current) return;
+
     const parsed = parseUserInput(text, inputFormat);
+    
+    if (parsed && value && isSameDay(parsed, value)) {
+        const pretty = format(value, inputFormat);
+        if (text !== pretty) setText(pretty);
+        return;
+    }
+
     if (parsed) onChange(clamp(parsed, minDate, maxDate));
     else if (!text.trim()) onChange(null);
-    else setText(value ? format(value, inputFormat) : ''); // snap back to valid
+    else setText(value ? format(value, inputFormat) : ''); 
   };
 
   const days = React.useMemo(() => {
-    const start = startOfWeek(startOfMonth(view), { weekStartsOn: 1 }); // Monday
+    const start = startOfWeek(startOfMonth(view), { weekStartsOn: 1 });
     const end = endOfWeek(endOfMonth(view), { weekStartsOn: 1 });
     return eachDayOfInterval({ start, end });
   }, [view]);
-
-  const dayIsDisabled = (d: Date) => {
-    if (minDate && +d < +startOfDayLocal(minDate)) return true;
-    if (maxDate && +d > +startOfDayLocal(maxDate)) return true;
-    return false;
-  };
 
   const selectDay = (e: React.MouseEvent, d: Date) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (disabled || dayIsDisabled(d)) return;
+    // Check bounds before selecting
+    if (disabled) return;
+    if (minDate && startOfDay(d) < startOfDay(minDate)) return;
+    if (maxDate && startOfDay(d) > startOfDay(maxDate)) return;
     
-    // MARK as selecting to block commitText
+    if (!isMountedRef.current) return;
+
     isSelectingRef.current = true;
     
     const picked = startOfDayLocal(d);
-    onChange(picked);
-    setOpen(false);
 
-    // Reset flag after a tick
-    setTimeout(() => { isSelectingRef.current = false; }, 0);
+    setText(format(picked, inputFormat));
+
+    if (!value || !isSameDay(picked, value)) {
+        onChange(picked);
+    }
+    
+    setOpen(false);
+    
+    setTimeout(() => { 
+        if(isMountedRef.current) isSelectingRef.current = false; 
+    }, 200);
   };
 
-  const months = Array.from({ length: 12 }, (_, i) =>
-    new Date(2020, i, 1).toLocaleString('en-GB', { month: 'long' }),
-  );
-
-  // years list (tight to min/max if provided)
-  const thisYear = new Date().getFullYear();
-  const yStart = minDate ? minDate.getFullYear() : 1900;
-  const yEnd = maxDate ? maxDate.getFullYear() : thisYear + 50;
-  const years = Array.from({ length: yEnd - yStart + 1 }, (_, i) => yStart + i);
+  // Logic to disable "Next Month" button if we are already at the maxDate's month
+  const canGoNext = React.useMemo(() => {
+    if (!maxDate) return true;
+    const nextMonth = addMonths(view, 1);
+    return startOfMonth(nextMonth) <= startOfMonth(maxDate);
+  }, [view, maxDate]);
 
   return (
     <div className={clsx('w-full', className)}>
-      {/* FIX 1: modal={true} ensures correct focus management inside Dialogs 
-         FIX 2: Check isSelectingRef before committing text
-      */}
       <Popover modal={true} open={open} onOpenChange={(o) => {
         setOpen(o);
-        if (!o && !isSelectingRef.current) commitText(); 
+        if (!o && !isSelectingRef.current && isMountedRef.current) {
+            commitText();
+        }
       }}>
         <PopoverTrigger asChild>
           <button
             type="button"
-            disabled={disabled}
             className={clsx(
               'w-full grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2',
               'bg-background border-border text-foreground',
@@ -174,10 +202,7 @@ export default function AppDatePicker({
             onClick={() => setOpen((s) => !s)}
           >
             <input
-              aria-label="Date"
-              placeholder={placeholder}
               value={text}
-              disabled={disabled}
               onChange={onChangeRaw}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
@@ -195,90 +220,65 @@ export default function AppDatePicker({
 
         <PopoverContent
           align="start"
-          className={clsx(
-            'p-0 w-[280px] rounded-md border bg-popover text-popover-foreground shadow-md',
-            'border-border'
-          )}
+          onCloseAutoFocus={(e) => e.preventDefault()} 
+          className="p-0 w-[280px] rounded-md border bg-popover text-popover-foreground shadow-md"
         >
-          {/* Header */}
           <div className="flex items-center gap-2 p-2 border-b border-border bg-popover">
             <button
               type="button"
-              className="grid place-items-center h-7 w-7 rounded-md border border-border text-muted-foreground hover:bg-secondary"
+              className="grid place-items-center h-7 w-7 rounded-md border border-border hover:bg-muted"
               onClick={() => setView(subMonths(view, 1))}
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-
-            <select
-              className="flex-1 h-7 rounded-md border border-border bg-card px-2 text-sm"
-              value={view.getMonth()}
-              onChange={(e) => setView(new Date(view.getFullYear(), Number(e.target.value), 1))}
-            >
-              {months.map((m, i) => (
-                <option key={m} value={i}>
-                  {m}
-                </option>
-              ))}
-            </select>
-
-            <select
-              className="flex-1 h-7 rounded-md border border-border bg-card px-2 text-sm"
-              value={view.getFullYear()}
-              onChange={(e) => setView(new Date(Number(e.target.value), view.getMonth(), 1))}
-            >
-              {years.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-
+             <div className="flex-1 text-center font-medium">
+                {format(view, 'MMMM yyyy')}
+             </div>
             <button
               type="button"
-              className="grid place-items-center h-7 w-7 rounded-md border border-border text-muted-foreground hover:bg-secondary"
-              onClick={() => setView(addMonths(view, 1))}
+              className={clsx(
+                "grid place-items-center h-7 w-7 rounded-md border border-border",
+                canGoNext ? "hover:bg-muted" : "opacity-30 cursor-not-allowed"
+              )}
+              onClick={() => canGoNext && setView(addMonths(view, 1))}
+              disabled={!canGoNext}
             >
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
 
-          {/* Week headers */}
-          <div className="grid grid-cols-7 text-xs text-muted-foreground px-2 py-1">
-            {['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'].map((d) => (
-              <div key={d} className="text-center py-1">
-                {d}
-              </div>
-            ))}
-          </div>
-
-          {/* Day grid */}
           <div className="grid grid-cols-7 gap-y-1 p-2">
+            {['Mo','Tu','We','Th','Fr','Sa','Su'].map(day => (
+                 <div key={day} className="text-center text-xs text-muted-foreground font-medium py-1">{day}</div>
+            ))}
             {days.map((d) => {
-              const outside = !isSameMonth(d, view);
-              const selected = !!value && isSameDay(d, value);
-              const disabledDay = dayIsDisabled(d);
+                const isSelected = !!value && isSameDay(d, value);
+                const isCurrentMonth = isSameMonth(d, view);
+                // Check disabling
+                const isBeforeMin = minDate ? startOfDay(d) < startOfDay(minDate) : false;
+                const isAfterMax = maxDate ? startOfDay(d) > startOfDay(maxDate) : false;
+                const isDisabledDay = isBeforeMin || isAfterMax;
 
-              return (
+                return (
                 <button
                   key={+d}
                   type="button"
-                  disabled={disabledDay}
-                  onClick={(e) => selectDay(e, d)}
-                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={(e) => !isDisabledDay && selectDay(e, d)}
+                  disabled={isDisabledDay}
                   className={clsx(
                     'h-8 w-8 mx-auto rounded-md text-sm grid place-items-center',
                     'transition-colors',
-                    selected && 'bg-primary text-primary-foreground',
-                    !selected && !outside && 'hover:bg-secondary',
-                    outside && 'text-muted-foreground opacity-60',
-                    disabledDay && 'opacity-50 cursor-not-allowed'
+                    !isCurrentMonth && 'opacity-40 text-muted-foreground',
+                    isSelected 
+                        ? 'bg-primary text-primary-foreground' 
+                        : isDisabledDay 
+                            ? 'opacity-20 cursor-not-allowed' 
+                            : 'hover:bg-secondary'
                   )}
                 >
                   {d.getDate()}
                 </button>
-              );
-            })}
+            )})}
           </div>
         </PopoverContent>
       </Popover>

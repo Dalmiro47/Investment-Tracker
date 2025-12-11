@@ -70,6 +70,9 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
   const isIA = watchedType === 'Interest Account';
   const isEditing = !!investment;
 
+  // Create a stable "today" reference to pass to maxDate
+  const today = new Date();
+
   // Reset form when dialog opens
   useEffect(() => {
     if (isOpen) {
@@ -118,7 +121,13 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] max-w-lg p-0 flex flex-col max-h-[85vh]">
+      <DialogContent 
+        className="w-[96vw] max-w-lg p-0 flex flex-col max-h-[85vh]"
+        onCloseAutoFocus={(e) => {
+            e.preventDefault();
+            document.body.focus();
+        }}
+      >
         {/* Fixed Header */}
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>{investment ? 'Edit Investment' : 'Add Investment'}</DialogTitle>
@@ -206,7 +215,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                               value={field.value ?? null}
                               onChange={(d) => field.onChange(d)}
                               placeholder="dd/mm/yyyy"
-                              maxDate={new Date()}
+                              maxDate={today}
                           />
                           )}
                       />

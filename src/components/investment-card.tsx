@@ -1,7 +1,7 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { Investment, TaxSettings } from '@/lib/types';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -71,6 +71,21 @@ export default function InvestmentCard({
   onManageRates,
   soldOn,
 }: InvestmentCardProps) {
+  const debugRenderCount = useRef(0);
+  debugRenderCount.current += 1;
+
+  // If the card renders more than 200 times, it throws an error.
+  // This STOPS the freeze and shows you a stack trace in the browser.
+  if (debugRenderCount.current > 200) {
+    throw new Error("Infinite Loop detected in InvestmentCard!");
+  }
+
+  useEffect(() => {
+      // Reset counter if we successfully render and stay idle
+      const t = setTimeout(() => { debugRenderCount.current = 0; }, 500);
+      return () => clearTimeout(t);
+  });
+  
   const { name, type, status, ticker, purchaseDate, realizedPnL } = investment;
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   

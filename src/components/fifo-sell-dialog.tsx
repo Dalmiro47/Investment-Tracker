@@ -67,7 +67,10 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, onSuccess }: Fifo
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] sm:max-w-[500px] p-0 flex flex-col max-h-[85vh]">
+      <DialogContent 
+        className="w-[96vw] sm:max-w-[500px] p-0 flex flex-col max-h-[85vh]"
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         {/* Fixed Header */}
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>Sell {symbol} (FIFO)</DialogTitle>
