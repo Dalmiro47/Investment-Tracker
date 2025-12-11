@@ -1,5 +1,4 @@
 
-
 "use client";
 
 import React from 'react';
@@ -40,7 +39,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MobileAppShell } from '@/components/shell/MobileAppShell';
 import { MobileFilters } from '@/components/filters/MobileFilters';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { FifoSellDialog } from "@/components/fifo-sell-dialog"; // Add this import
+import { FifoSellDialog } from "@/components/fifo-sell-dialog";
 
 
 const todayISO = () => new Date().toISOString().slice(0,10);
@@ -84,7 +83,7 @@ function DashboardPageContent() {
   const [taxSettings, setTaxSettings] = React.useState<TaxSettings>({
     filingStatus: 'single',
     churchTaxRate: 0,
-    cryptoMarginalRate: 0.42, // Default to a higher rate
+    cryptoMarginalRate: 0.42, 
   });
 
   const [yearFilter, setYearFilter] = React.useState<YearFilter>({ kind: 'all', mode: 'holdings' });
@@ -96,18 +95,14 @@ function DashboardPageContent() {
   const [pendingOpenEstimate, setPendingOpenEstimate] = React.useState(false);
   const isMobile = useIsMobile();
 
-  // -- Add NEW state for FIFO handling --
   const [fifoWarnSymbol, setFifoWarnSymbol] = React.useState<string | null>(null);
   const [isFifoDialogOpen, setIsFifoDialogOpen] = React.useState(false);
   const [fifoSellSymbol, setFifoSellSymbol] = React.useState<string | null>(null);
 
-  // Keeps 'holdings' as the default mode and preserves current mode on year changes
   const setYearFilterHoldingsSafe = React.useCallback((next: YearFilter) => {
     setYearFilter(prev => ({
       kind: next.kind,
-      // carry year only if provided for 'year' kind
       ...(next.kind === 'year' ? { year: next.year } : {}),
-      // if caller doesn't specify mode, keep previous; default to 'holdings'
       mode: next.mode ?? prev.mode ?? 'holdings',
     }));
   }, []);
@@ -217,7 +212,6 @@ function DashboardPageContent() {
         return;
     }
 
-
     if (result.success) {
       await fetchAllData(user.uid);
     }
@@ -232,7 +226,6 @@ function DashboardPageContent() {
     setIsRefreshing(false);
 }
 
-  // Investments scoped to the selected year for the LIST + tab counts
   const investmentsYearScoped = React.useMemo(() => {
     if (yearFilter.kind === 'all') {
       return investments;
@@ -251,10 +244,6 @@ function DashboardPageContent() {
   }, [investments, transactionsMap, yearFilter]);
 
   const typeCounts = React.useMemo(() => {
-    // 1) Start with the year-scoped pool.
-    // 2) Apply the SAME status logic used for the cards:
-    //    - Tax view ? only Sold
-    //    - Otherwise ? honor the statusFilter (or All)
     const base = investmentsYearScoped.filter(inv =>
       isTaxView
         ? inv.status === 'Sold'
@@ -279,25 +268,20 @@ function DashboardPageContent() {
     return counts;
   }, [investmentsYearScoped, isTaxView, statusFilter]);
 
-  // Build Investment Name options from the currently scoped pool
   const investmentNameOptions = React.useMemo(() => {
-    // Start with the year-scoped list
     let base = investmentsYearScoped.filter(inv =>
       isTaxView
-        ? inv.status === 'Sold'                      // Tax view: Sold only
+        ? inv.status === 'Sold'             
         : (statusFilter === 'All' ? true : inv.status === statusFilter)
     );
-    // Respect the Type tab
     if (typeFilter !== 'All') {
       base = base.filter(inv => inv.type === typeFilter);
     }
-    // Collect unique names (skip falsy just in case)
     const names = Array.from(new Set(base.map(inv => inv.name).filter(Boolean as unknown as (x: string | null | undefined) => x is string)));
     names.sort((a, b) => a.localeCompare(b));
     return names;
   }, [investmentsYearScoped, isTaxView, statusFilter, typeFilter]);
 
-  // If current selection disappears after filters change, reset to All
   React.useEffect(() => {
     if (investmentNameFilter !== 'All' && !investmentNameOptions.includes(investmentNameFilter)) {
       setInvestmentNameFilter('All');
@@ -380,12 +364,9 @@ function DashboardPageContent() {
   }
 
   const handleAddTransactionClick = (investment: Investment) => {
-    // 1. Check for older active lots of the same symbol (FIFO check)
-    // Only applies to taxable assets (Stock, ETF, Crypto) with a ticker
     if (investment.type !== 'Interest Account' && investment.ticker && investment.status === 'Active') {
         const investmentDate = new Date(investment.purchaseDate).getTime();
         
-        // Find if there is ANY active investment with same ticker but OLDER date
         const olderLotExists = investments.some(other => 
             other.id !== investment.id && 
             other.ticker === investment.ticker &&
@@ -394,13 +375,10 @@ function DashboardPageContent() {
         );
 
         if (olderLotExists) {
-            // Intercept: Trigger the warning
             setFifoWarnSymbol(investment.ticker);
             return;
         }
     }
-
-    // Standard behavior (No older lots, or Interest Account)
     setViewingHistoryInvestment(investment);
     setHistoryDialogView('form');
     setIsHistoryOpen(true);
@@ -414,7 +392,10 @@ function DashboardPageContent() {
   const confirmDelete = async () => {
     if (deletingInvestmentId && user) {
       await deleteInvestment(user.uid, deletingInvestmentId);
-      await fetchAllData(user.uid);
+      // FIX: Update local state immediately instead of waiting for full fetch
+      // This prevents the list from re-sorting while dialogs are closing
+      setInvestments(prev => prev.filter(inv => inv.id !== deletingInvestmentId));
+      
       toast({ title: "Success", description: "Investment deleted successfully." });
     }
     setIsDeleteDialogOpen(false);
@@ -433,7 +414,14 @@ function DashboardPageContent() {
     try {
         if (isEditing && editingInvestment) {
           await updateInvestment(user.uid, editingInvestment.id, values);
+          
+          // FIX: Optimistic update for edits
+          // Prevents the list from re-sorting and destroying the focus trigger
+          setInvestments(prev => prev.map(inv => 
+             inv.id === editingInvestment.id ? { ...inv, ...values, purchaseDate: values.purchaseDate.toISOString() } : inv
+          ));
         } else {
+          // For adding, re-fetch is fine as focus isn't on a moving list item
           const invId = await addInvestment(user.uid, values, initialRatePct);
           if (values.type === 'Interest Account' && startingBalance && startingBalance > 0) {
               await addTransaction(user.uid, invId, {
@@ -444,8 +432,9 @@ function DashboardPageContent() {
                   pricePerUnit: 0,
               });
           }
+          await fetchAllData(user.uid);
         }
-        await fetchAllData(user.uid);
+        
         setIsFormOpen(false);
         setEditingInvestment(undefined);
         toast({
@@ -730,7 +719,7 @@ function DashboardPageContent() {
   }, [canToggleTaxReport, isTaxView]);
 
   if (isMobile === undefined) {
-    return <div className="h-screen w-full bg-background" />; // Prevent flash of desktop view on mobile
+    return <div className="h-screen w-full bg-background" />;
   }
 
   const mobileView = (
@@ -1015,9 +1004,6 @@ function DashboardPageContent() {
 }
 
 export default function DashboardPage() {
-  // The Suspense boundary is necessary because useSearchParams() might suspend.
-  // By wrapping the page content, we allow the rest of the layout to render
-  // while Next.js fetches the initial search parameters.
   return (
     <React.Suspense fallback={<div className="h-screen w-full bg-background" />}>
       <DashboardPageContent />
