@@ -20,21 +20,23 @@ import {
 import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
-// ... (Helper functions clamp, expand2DigitYear, parseUserInput remain the same)
-// Use the same helper functions from your previous file here to save space
+// --- Helper Functions ---
 const INPUT_FORMAT = 'dd/MM/yyyy';
 const PIVOT_2DIGIT = 50; 
 const startOfDayLocal = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+
 function clamp(date: Date, min?: Date, max?: Date) {
   const d = +startOfDayLocal(date);
   if (min && d < +startOfDayLocal(min)) return startOfDayLocal(min);
   if (max && d > +startOfDayLocal(max)) return startOfDayLocal(max);
   return startOfDayLocal(date);
 }
+
 function expand2DigitYear(two: string) {
   const n = Number(two);
   return n <= PIVOT_2DIGIT ? `20${two.padStart(2, '0')}` : `19${two.padStart(2, '0')}`;
 }
+
 function parseUserInput(raw: string, fmt: string): Date | null {
   const v = raw.trim();
   if (!v) return null;
@@ -80,32 +82,36 @@ export default function AppDatePicker({
   const [view, setView] = React.useState<Date>(value ?? new Date());
   const [text, setText] = React.useState<string>(value ? format(value, inputFormat) : '');
   
-  // Ref to track if we are currently clicking a day
+  // Safety Refs
   const isSelectingRef = React.useRef(false);
-  
-  // 1. Log whenever the component receives a new value prop
+  const isMountedRef = React.useRef(false); // New safety check
+
   const valueTimestamp = value?.getTime();
   
+  // 1. Track Mount State
   React.useEffect(() => {
-    // console.log('DEBUG: useEffect triggered', { valueTimestamp, text });
-    
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // 2. Sync with External Prop
+  React.useEffect(() => {
     const distinctDate = valueTimestamp ? new Date(valueTimestamp) : null;
 
     if (distinctDate) {
       const formatted = format(distinctDate, inputFormat);
-      // Only update state if different
       if (text !== formatted) {
-        console.log('DEBUG: Syncing text from Prop', { old: text, new: formatted });
         setText(formatted);
       }
-      
       if (!isSameMonth(distinctDate, view)) {
          setView(distinctDate);
       }
     } else {
        if (text !== '') setText('');
     }
-  }, [valueTimestamp, inputFormat]); // Removed 'text' and 'view' from dependencies to be safe
+  }, [valueTimestamp, inputFormat, text, view]); 
 
   const onChangeRaw = (e: React.ChangeEvent<HTMLInputElement>) => {
     let digits = e.target.value.replace(/\D/g, '').slice(0, 8);
@@ -116,19 +122,19 @@ export default function AppDatePicker({
     setText(out);
   };
 
-  const commitText = (source: string) => {
+  const commitText = () => {
+    // STOP if unmounted
+    if (!isMountedRef.current) return;
+
     const parsed = parseUserInput(text, inputFormat);
     
     // Safety: If parsed is same as current value, DO NOT FIRE onChange
     if (parsed && value && isSameDay(parsed, value)) {
-        console.log(`DEBUG: commitText (${source}) -> IGNORED (Same Day)`);
-        // Just ensure text format is pretty
         const pretty = format(value, inputFormat);
         if (text !== pretty) setText(pretty);
         return;
     }
 
-    console.log(`DEBUG: commitText (${source}) -> FIRING onChange`, parsed);
     if (parsed) onChange(clamp(parsed, minDate, maxDate));
     else if (!text.trim()) onChange(null);
     else setText(value ? format(value, inputFormat) : ''); 
@@ -142,43 +148,37 @@ export default function AppDatePicker({
 
   const selectDay = (e: React.MouseEvent, d: Date) => {
     e.preventDefault();
-    e.stopPropagation(); // Stop event bubbling
+    e.stopPropagation();
 
     if (disabled) return;
+    if (!isMountedRef.current) return;
 
-    // MARKER: We are selecting via click
     isSelectingRef.current = true;
-    console.log('DEBUG: selectDay clicked', d);
     
     const picked = startOfDayLocal(d);
 
-    // Update text IMMEDIATELY to prevent stale commits
+    // Update text IMMEDIATELY 
     setText(format(picked, inputFormat));
 
-    // Fire change
     if (!value || !isSameDay(picked, value)) {
-        console.log('DEBUG: selectDay -> firing onChange');
         onChange(picked);
     }
     
     setOpen(false);
     
     // Reset marker after a safe delay
-    setTimeout(() => { isSelectingRef.current = false; }, 200);
+    setTimeout(() => { 
+        if(isMountedRef.current) isSelectingRef.current = false; 
+    }, 200);
   };
 
   return (
     <div className={clsx('w-full', className)}>
       <Popover modal={true} open={open} onOpenChange={(o) => {
         setOpen(o);
-        // CRITICAL CHECK: Only commit on CLOSE if we are NOT selecting a day
-        if (!o) {
-            if (!isSelectingRef.current) {
-                console.log('DEBUG: Popover closing -> Committing text');
-                commitText('onClose');
-            } else {
-                console.log('DEBUG: Popover closing -> SKIPPING commit (Selection active)');
-            }
+        // CRITICAL: Only commit on CLOSE if we are NOT currently selecting a day
+        if (!o && !isSelectingRef.current && isMountedRef.current) {
+            commitText();
         }
       }}>
         <PopoverTrigger asChild>
@@ -197,7 +197,7 @@ export default function AppDatePicker({
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  commitText('EnterKey');
+                  commitText();
                   setOpen(false);
                 }
               }}
@@ -210,7 +210,6 @@ export default function AppDatePicker({
 
         <PopoverContent
           align="start"
-          // Prevent auto-focus stealing issues
           onCloseAutoFocus={(e) => e.preventDefault()} 
           className="p-0 w-[280px] rounded-md border bg-popover text-popover-foreground shadow-md"
         >
@@ -222,7 +221,6 @@ export default function AppDatePicker({
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-             {/* Simplified header for debug */}
              <div className="flex-1 text-center font-medium">
                 {format(view, 'MMMM yyyy')}
              </div>
