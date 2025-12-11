@@ -118,7 +118,10 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[96vw] max-w-lg p-0 flex flex-col max-h-[85vh]">
+      <DialogContent 
+        className="w-[96vw] max-w-lg p-0 flex flex-col max-h-[85vh]"
+        onCloseAutoFocus={(e) => e.preventDefault()}
+      >
         {/* Fixed Header */}
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>{investment ? 'Edit Investment' : 'Add Investment'}</DialogTitle>
