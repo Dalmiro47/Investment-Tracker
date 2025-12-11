@@ -12,7 +12,7 @@ import { TaxSettingsDialog } from '@/components/tax-settings-dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, SlidersHorizontal, Loader2, RefreshCw, ReceiptPercent } from 'lucide-react';
+import { PlusCircle, SlidersHorizontal, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAutoRefreshPrices } from '@/hooks/use-auto-refresh-prices';
@@ -39,7 +39,6 @@ import { MobileAppShell } from '@/components/shell/MobileAppShell';
 import { MobileFilters } from '@/components/filters/MobileFilters';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { FifoSellDialog } from "@/components/fifo-sell-dialog";
-
 
 const todayISO = () => new Date().toISOString().slice(0,10);
 const getCurrentRate = (rates?: SavingsRateChange[]) => {
