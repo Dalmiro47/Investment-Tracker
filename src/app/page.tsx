@@ -56,7 +56,7 @@ function DashboardPageContent() {
   const [transactionsMap, setTransactionsMap] = React.useState<Record<string, Transaction[]>>({});
   const [rateSchedulesMap, setRateSchedulesMap] = React.useState<Record<string, SavingsRateChange[]>>({});
   const [sellYears, setSellYears] = React.useState<number[]>([]);
-  const [loading, setLoading] = React.useState(true);
+  const [initialLoading, setInitialLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isTaxView, setIsTaxView] = React.useState(false);
   const [typeFilter, setTypeFilter] = React.useState<InvestmentType | 'All'>('All');
@@ -106,7 +106,6 @@ function DashboardPageContent() {
   }, []);
 
   const fetchAllData = React.useCallback(async (userId: string) => {
-    setLoading(true);
     try {
       const parseYear = (y: unknown): number | null => {
         const n = typeof y === "number" ? y : parseInt(String(y), 10);
@@ -169,7 +168,7 @@ function DashboardPageContent() {
        console.error("Error fetching page data:", error);
        toast({ title: "Error", description: "Could not fetch portfolio data.", variant: "destructive" });
     } finally {
-      setLoading(false);
+      setInitialLoading(false);
     }
   }, [toast]);
 
@@ -657,7 +656,7 @@ function DashboardPageContent() {
         {advancedFilters}
       </div>
 
-      {loading ? (
+      {initialLoading ? (
           <div className="flex justify-center items-center py-16">
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
@@ -870,7 +869,7 @@ function DashboardPageContent() {
             {advancedFilters}
           </div>
           
-          {loading ? (
+          {initialLoading ? (
              <div className="flex justify-center items-center py-16">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
@@ -967,8 +966,12 @@ function DashboardPageContent() {
         onSave={handleSaveTaxSettings}
       />
        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        {/* FIX: Add onCloseAutoFocus here to prevent crash on delete */}
-        <AlertDialogContent onCloseAutoFocus={(e) => e.preventDefault()}>
+        <AlertDialogContent 
+            onCloseAutoFocus={(e) => {
+                e.preventDefault();
+                document.body.focus();
+            }}
+        >
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure you want to delete this investment?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -984,7 +987,6 @@ function DashboardPageContent() {
       
       {/* --- NEW: FIFO Warning Alert --- */}
       <AlertDialog open={!!fifoWarnSymbol} onOpenChange={(open) => !open && setFifoWarnSymbol(null)}>
-        {/* FIX: Add onCloseAutoFocus here too */}
         <AlertDialogContent onCloseAutoFocus={(e) => e.preventDefault()}>
             <AlertDialogHeader>
                 <AlertDialogTitle>FIFO Rule Applies</AlertDialogTitle>
