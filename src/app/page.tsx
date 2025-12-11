@@ -350,14 +350,19 @@ function DashboardPageContent() {
   };
 
   const handleEditClick = (investment: Investment) => {
-    setEditingInvestment(investment);
-    setIsFormOpen(true);
+    // Wait for dropdown to close to avoid focus trap
+    setTimeout(() => {
+      setEditingInvestment(investment);
+      setIsFormOpen(true);
+    }, 150);
   };
 
   const handleHistoryClick = (investment: Investment) => {
-    setViewingHistoryInvestment(investment);
-    setHistoryDialogView('list');
-    setIsHistoryOpen(true);
+    setTimeout(() => {
+      setViewingHistoryInvestment(investment);
+      setHistoryDialogView('list');
+      setIsHistoryOpen(true);
+    }, 150);
   }
 
   const handleAddTransactionClick = (investment: Investment) => {
@@ -376,14 +381,19 @@ function DashboardPageContent() {
             return;
         }
     }
-    setViewingHistoryInvestment(investment);
-    setHistoryDialogView('form');
-    setIsHistoryOpen(true);
+    // Wait for dropdown to close
+    setTimeout(() => {
+      setViewingHistoryInvestment(investment);
+      setHistoryDialogView('form');
+      setIsHistoryOpen(true);
+    }, 150);
   };
   
   const handleDeleteClick = (id: string) => {
-    setDeletingInvestmentId(id);
-    setIsDeleteDialogOpen(true);
+    setTimeout(() => {
+      setDeletingInvestmentId(id);
+      setIsDeleteDialogOpen(true);
+    }, 150);
   }
 
   const confirmDelete = async () => {
