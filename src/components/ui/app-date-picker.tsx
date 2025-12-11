@@ -84,18 +84,32 @@ export default function AppDatePicker({
   inputFormat = INPUT_FORMAT,
 }: AppDatePickerProps) {
   const [open, setOpen] = React.useState(false);
+  
+  // Use a stable reference for the view date to avoid loops
   const [view, setView] = React.useState<Date>(value ?? new Date());
   const [text, setText] = React.useState<string>(value ? format(value, inputFormat) : '');
   
-  // Ref to track if we are currently clicking a day.
-  // This prevents the "Close" event from overwriting the selection with the text input value.
   const isSelectingRef = React.useRef(false);
+
+  // FIX: Track the primitive timestamp to break reference equality loops
+  const valueTimestamp = value?.getTime();
 
   // keep input text and the calendar month in sync with external value
   React.useEffect(() => {
-    setText(value ? format(value, inputFormat) : '');
-    if (value) setView(value);
-  }, [value, inputFormat]);
+    // 1. Reconstruct date from primitive (avoids new object ref causing infinite loop)
+    const distinctDate = valueTimestamp ? new Date(valueTimestamp) : null;
+
+    if (distinctDate) {
+      const formatted = format(distinctDate, inputFormat);
+      // Only update state if different
+      setText((prev) => (prev !== formatted ? formatted : prev));
+      
+      // Only switch calendar view if month is different
+      setView((prev) => (isSameMonth(distinctDate, prev) ? prev : distinctDate));
+    } else {
+      setText('');
+    }
+  }, [valueTimestamp, inputFormat]);
 
   // auto-insert slashes while typing
   const onChangeRaw = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -109,6 +123,15 @@ export default function AppDatePicker({
 
   const commitText = () => {
     const parsed = parseUserInput(text, inputFormat);
+    
+    // FIX: Don't fire onChange if the date hasn't effectively changed
+    // This prevents unnecessary Firestore updates and re-renders
+    if (parsed && value && isSameDay(parsed, value)) {
+        // Just ensure text is formatted nicely and exit
+        setText(format(value, inputFormat));
+        return;
+    }
+
     if (parsed) onChange(clamp(parsed, minDate, maxDate));
     else if (!text.trim()) onChange(null);
     else setText(value ? format(value, inputFormat) : ''); // snap back to valid
@@ -132,14 +155,15 @@ export default function AppDatePicker({
 
     if (disabled || dayIsDisabled(d)) return;
     
-    // MARK as selecting to block commitText
     isSelectingRef.current = true;
     
     const picked = startOfDayLocal(d);
-    onChange(picked);
+    // FIX: Only trigger change if different
+    if (!value || !isSameDay(picked, value)) {
+        onChange(picked);
+    }
     setOpen(false);
 
-    // Reset flag after a tick
     setTimeout(() => { isSelectingRef.current = false; }, 0);
   };
 
@@ -147,7 +171,6 @@ export default function AppDatePicker({
     new Date(2020, i, 1).toLocaleString('en-GB', { month: 'long' }),
   );
 
-  // years list (tight to min/max if provided)
   const thisYear = new Date().getFullYear();
   const yStart = minDate ? minDate.getFullYear() : 1900;
   const yEnd = maxDate ? maxDate.getFullYear() : thisYear + 50;
@@ -155,11 +178,9 @@ export default function AppDatePicker({
 
   return (
     <div className={clsx('w-full', className)}>
-      {/* FIX 1: modal={true} ensures correct focus management inside Dialogs 
-         FIX 2: Check isSelectingRef before committing text
-      */}
       <Popover modal={true} open={open} onOpenChange={(o) => {
         setOpen(o);
+        // FIX: Ensure we don't commit text on simple toggles if we are clicking a day
         if (!o && !isSelectingRef.current) commitText(); 
       }}>
         <PopoverTrigger asChild>
