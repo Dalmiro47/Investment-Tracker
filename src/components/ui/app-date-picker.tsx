@@ -195,6 +195,7 @@ export default function AppDatePicker({
 
         <PopoverContent
           align="start"
+          onCloseAutoFocus={(e) => e.preventDefault()}
           className={clsx(
             'p-0 w-[280px] rounded-md border bg-popover text-popover-foreground shadow-md',
             'border-border'
