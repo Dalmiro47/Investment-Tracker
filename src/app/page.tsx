@@ -350,7 +350,6 @@ function DashboardPageContent() {
   };
 
   const handleEditClick = (investment: Investment) => {
-    // Wait for dropdown to close to avoid focus trap
     setTimeout(() => {
       setEditingInvestment(investment);
       setIsFormOpen(true);
@@ -381,7 +380,6 @@ function DashboardPageContent() {
             return;
         }
     }
-    // Wait for dropdown to close
     setTimeout(() => {
       setViewingHistoryInvestment(investment);
       setHistoryDialogView('form');
@@ -496,8 +494,10 @@ function DashboardPageContent() {
   };
 
   const handleManageRates = (inv: Investment) => {
-    setRatesInv(inv);
-    setIsRatesOpen(true);
+    setTimeout(() => {
+      setRatesInv(inv);
+      setIsRatesOpen(true);
+    }, 150);
   };
   
   const canToggleTaxReport = yearFilter.kind === 'year' && (isMobile ? viewMode === 'grid' : true);
