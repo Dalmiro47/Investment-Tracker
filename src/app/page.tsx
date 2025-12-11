@@ -390,16 +390,13 @@ function DashboardPageContent() {
     if (deletingInvestmentId && user) {
       await deleteInvestment(user.uid, deletingInvestmentId);
       
-      // FIX: Close the dialog FIRST.
       setIsDeleteDialogOpen(false);
 
-      // FIX: Wait a tick before removing the item from the DOM.
-      // This prevents Radix from trying to focus a destroyed element.
       setTimeout(() => {
         setInvestments(prev => prev.filter(inv => inv.id !== deletingInvestmentId));
         setDeletingInvestmentId(null);
         toast({ title: "Success", description: "Investment deleted successfully." });
-      }, 100); // 100ms is imperceptible to user but eternity for the event loop
+      }, 300); 
     } else {
         setIsDeleteDialogOpen(false);
         setDeletingInvestmentId(null);
@@ -419,10 +416,8 @@ function DashboardPageContent() {
         if (isEditing && editingInvestment) {
           await updateInvestment(user.uid, editingInvestment.id, values);
           
-          // FIX: Close dialog FIRST
           setIsFormOpen(false);
 
-          // FIX: Delay the state update that causes re-sorting
           setTimeout(() => {
             setInvestments(prev => prev.map(inv => 
                inv.id === editingInvestment.id ? { ...inv, ...values, purchaseDate: values.purchaseDate.toISOString() } : inv
@@ -432,12 +427,11 @@ function DashboardPageContent() {
                 title: "Success",
                 description: "Investment updated successfully.",
             });
-          }, 100);
+          }, 300);
 
         } else {
           const invId = await addInvestment(user.uid, values, initialRatePct);
           
-          // Handle Initial Balance logic...
           if (values.type === 'Interest Account' && startingBalance && startingBalance > 0) {
               await addTransaction(user.uid, invId, {
                   type: 'Deposit',
@@ -448,10 +442,8 @@ function DashboardPageContent() {
               });
           }
           
-          // FIX: Close dialog FIRST
           setIsFormOpen(false);
 
-          // FIX: Delay the fetch
           setTimeout(async () => {
             await fetchAllData(user.uid);
             setEditingInvestment(undefined);
@@ -459,11 +451,10 @@ function DashboardPageContent() {
                 title: "Success",
                 description: "Investment added successfully.",
             });
-          }, 100);
+          }, 300);
         }
         
     } catch (error) {
-        // Error handling remains the same, but ensure dialog stays open or handles error appropriately
         toast({
             title: "Error",
             description: `There was a problem ${isEditing ? 'updating' : 'adding'} the investment.`,
@@ -474,9 +465,11 @@ function DashboardPageContent() {
   };
 
   const onTransactionAdded = async () => {
-    if(user) {
-        await fetchAllData(user.uid);
-    }
+    setTimeout(async () => {
+        if(user) {
+            await fetchAllData(user.uid);
+        }
+    }, 300); 
   }
 
   const handleSaveTaxSettings = async (newSettings: TaxSettings) => {
