@@ -1,4 +1,3 @@
-
 'use client';
 
 import * as React from 'react';
@@ -111,7 +110,9 @@ export default function AppDatePicker({
     } else {
        if (text !== '') setText('');
     }
-  }, [valueTimestamp, inputFormat, text, view]); 
+    // FIX: Remove 'view' from dependencies to prevent "snap back" loop when navigating months
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [valueTimestamp, inputFormat, text]); 
 
   const onChangeRaw = (e: React.ChangeEvent<HTMLInputElement>) => {
     let digits = e.target.value.replace(/\D/g, '').slice(0, 8);
