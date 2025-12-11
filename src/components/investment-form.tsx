@@ -70,6 +70,9 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
   const isIA = watchedType === 'Interest Account';
   const isEditing = !!investment;
 
+  // Create a stable "today" reference to pass to maxDate
+  const today = new Date();
+
   // Reset form when dialog opens
   useEffect(() => {
     if (isOpen) {
@@ -212,7 +215,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                               value={field.value ?? null}
                               onChange={(d) => field.onChange(d)}
                               placeholder="dd/mm/yyyy"
-                              maxDate={new Date()}
+                              maxDate={today}
                           />
                           )}
                       />
