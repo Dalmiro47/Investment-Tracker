@@ -1,4 +1,3 @@
-
 "use client";
 
 import React from 'react';
@@ -700,6 +699,13 @@ function DashboardPageContent() {
             <p className="text-muted-foreground mt-2">
                {isTaxView ? "No sold positions match the current filters." : "Add a new investment to get started."}
             </p>
+            <div className="mt-4 flex items-center justify-center gap-3">
+              <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add First Investment
+              </Button>
+             {typeFilter === 'ETF' && <EtfPlansButton />}
+            </div>
           </div>
         )}
          <button
@@ -937,7 +943,8 @@ function DashboardPageContent() {
         onSave={handleSaveTaxSettings}
       />
        <AlertDialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-        <AlertDialogContent>
+        {/* FIX: Add onCloseAutoFocus here to prevent crash on delete */}
+        <AlertDialogContent onCloseAutoFocus={(e) => e.preventDefault()}>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you sure you want to delete this investment?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -953,7 +960,8 @@ function DashboardPageContent() {
       
       {/* --- NEW: FIFO Warning Alert --- */}
       <AlertDialog open={!!fifoWarnSymbol} onOpenChange={(open) => !open && setFifoWarnSymbol(null)}>
-        <AlertDialogContent>
+        {/* FIX: Add onCloseAutoFocus here too */}
+        <AlertDialogContent onCloseAutoFocus={(e) => e.preventDefault()}>
             <AlertDialogHeader>
                 <AlertDialogTitle>FIFO Rule Applies</AlertDialogTitle>
                 <AlertDialogDescription>
