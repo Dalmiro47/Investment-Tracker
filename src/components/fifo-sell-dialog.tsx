@@ -54,7 +54,7 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, availableExchange
     try {
       await processFifoSell(user.uid, symbol, {
         ...values,
-        exchange: values.exchange === "Unknown" ? undefined : values.exchange
+        exchange: values.exchange === "Unassigned" ? "null_sentinel" : values.exchange 
       });
       toast({ title: "Success", description: `Sold ${values.quantity} units of ${symbol} (FIFO).` });
       form.reset();

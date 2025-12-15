@@ -442,17 +442,28 @@ export async function processFifoSell(
     where('status', '==', 'Active')
   ];
 
-  if (data.exchange) {
+  if (data.exchange === "null_sentinel") {
+    // User specifically wants items with NO exchange defined (legacy data)
+    // Note: Firestore cannot query for 'undefined', so we usually query for 'exchange' == null 
+    // OR we just fetch all and filter in memory if the dataset is small.
+    // Since we are already fetching candidates, let's filter in memory below to be safe.
+  } else if (data.exchange) {
     constraints.push(where('exchange', '==', data.exchange));
   }
   
   const q = query(investmentsCol(uid), ...constraints);
   
   const snap = await getDocs(q);
-  const candidates = snap.docs.map(fromInvestmentDoc);
+  let candidates = snap.docs.map(fromInvestmentDoc);
+
+  // --- ADD THIS MEMORY FILTER ---
+  if (data.exchange === "null_sentinel") {
+      candidates = candidates.filter(c => !c.exchange);
+  }
+  // ------------------------------
 
   if (candidates.length === 0) {
-    throw new Error(`No active investments found for symbol: ${symbol}`);
+    throw new Error(`No active investments found for symbol: ${symbol}${data.exchange && data.exchange !== 'null_sentinel' ? ` on ${data.exchange}` : ''}`);
   }
 
   // 2. Sort by purchase date (Oldest First for FIFO)

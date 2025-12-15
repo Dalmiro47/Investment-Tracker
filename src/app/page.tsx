@@ -575,8 +575,17 @@ function DashboardPageContent() {
   const getExchangesForSymbol = (sym: string | null) => {
     if (!sym) return [];
     const relevant = investments.filter(i => i.ticker === sym && i.status === 'Active');
-    const exchanges = new Set(relevant.map(i => i.exchange).filter(Boolean));
-    return Array.from(exchanges) as string[];
+    
+    // Include "Unassigned" if there are investments without an exchange
+    const hasUnassigned = relevant.some(i => !i.exchange);
+    
+    const exchanges = new Set(relevant.map(i => i.exchange).filter(Boolean) as string[]);
+    
+    const result = Array.from(exchanges).sort();
+    if (hasUnassigned) {
+      result.push("Unassigned"); 
+    }
+    return result;
   };
 
   const advancedFilters = (
