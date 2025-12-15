@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -16,7 +15,6 @@ import AppDatePicker from "./ui/app-date-picker";
 import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// Simplified schema for just selling
 const fifoSellSchema = z.object({
   date: z.date(),
   quantity: z.number().positive("Quantity must be greater than 0"),
@@ -78,7 +76,6 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, availableExchange
         className="w-[96vw] sm:max-w-[500px] p-0 flex flex-col max-h-[85vh]"
         onCloseAutoFocus={(e) => e.preventDefault()}
       >
-        {/* Fixed Header */}
         <DialogHeader className="px-6 pt-6 pb-2 shrink-0">
           <DialogTitle>Sell {symbol} (FIFO)</DialogTitle>
           <DialogDescription>
@@ -86,7 +83,6 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, availableExchange
           </DialogDescription>
         </DialogHeader>
         
-        {/* Scrollable Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
             <Form {...form}>
             <form id="fifo-sell-form" onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
@@ -144,7 +140,6 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, availableExchange
                     />
                 </div>
 
-                {/* Exchange Selection */}
                 {availableExchanges.length > 0 && (
                   <FormField
                     control={form.control}
@@ -173,7 +168,6 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, availableExchange
             </Form>
         </div>
 
-        {/* Fixed Footer */}
         <DialogFooter className="px-6 py-4 bg-background/50 backdrop-blur border-t shrink-0">
             <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" form="fifo-sell-form" disabled={isSubmitting}>
