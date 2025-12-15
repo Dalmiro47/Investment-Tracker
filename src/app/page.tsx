@@ -373,6 +373,7 @@ function DashboardPageContent() {
             other.id !== investment.id && 
             other.ticker === investment.ticker &&
             other.status === 'Active' &&
+            other.exchange === investment.exchange &&
             new Date(other.purchaseDate).getTime() < investmentDate
         );
 
