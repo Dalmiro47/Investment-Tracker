@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from "react";
@@ -13,12 +14,14 @@ import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "
 import { Input } from "@/components/ui/input";
 import AppDatePicker from "./ui/app-date-picker";
 import { Loader2 } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Simplified schema for just selling
 const fifoSellSchema = z.object({
   date: z.date(),
   quantity: z.number().positive("Quantity must be greater than 0"),
   pricePerUnit: z.number().nonnegative("Price cannot be negative"),
+  exchange: z.string().optional(),
 });
 
 type FifoSellValues = z.infer<typeof fifoSellSchema>;
@@ -27,10 +30,11 @@ interface FifoSellDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   symbol: string | null;
+  availableExchanges: string[];
   onSuccess: () => void;
 }
 
-export function FifoSellDialog({ isOpen, onOpenChange, symbol, onSuccess }: FifoSellDialogProps) {
+export function FifoSellDialog({ isOpen, onOpenChange, symbol, availableExchanges, onSuccess }: FifoSellDialogProps) {
   const { user } = useAuth();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -48,7 +52,10 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, onSuccess }: Fifo
     if (!user || !symbol) return;
     setIsSubmitting(true);
     try {
-      await processFifoSell(user.uid, symbol, values);
+      await processFifoSell(user.uid, symbol, {
+        ...values,
+        exchange: values.exchange === "Unknown" ? undefined : values.exchange
+      });
       toast({ title: "Success", description: `Sold ${values.quantity} units of ${symbol} (FIFO).` });
       form.reset();
       onSuccess();
@@ -136,6 +143,32 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, onSuccess }: Fifo
                     )}
                     />
                 </div>
+
+                {/* Exchange Selection */}
+                {availableExchanges.length > 0 && (
+                  <FormField
+                    control={form.control}
+                    name="exchange"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Sell from (Broker/Exchange)</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value}>
+                          <FormControl>
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select Exchange" />
+                            </SelectTrigger>
+                          </FormControl>
+                          <SelectContent>
+                             {availableExchanges.map(ex => (
+                               <SelectItem key={ex} value={ex}>{ex}</SelectItem>
+                             ))}
+                          </SelectContent>
+                        </Select>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                )}
             </form>
             </Form>
         </div>

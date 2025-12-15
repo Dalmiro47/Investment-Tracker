@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -571,6 +572,13 @@ function DashboardPageContent() {
     }
   };
 
+  const getExchangesForSymbol = (sym: string | null) => {
+    if (!sym) return [];
+    const relevant = investments.filter(i => i.ticker === sym && i.status === 'Active');
+    const exchanges = new Set(relevant.map(i => i.exchange).filter(Boolean));
+    return Array.from(exchanges) as string[];
+  };
+
   const advancedFilters = (
     <>
       <div className="flex flex-col sm:flex-row items-center gap-4 mt-4">
@@ -1013,6 +1021,7 @@ function DashboardPageContent() {
         isOpen={isFifoDialogOpen}
         onOpenChange={setIsFifoDialogOpen}
         symbol={fifoSellSymbol}
+        availableExchanges={getExchangesForSymbol(fifoSellSymbol)}
         onSuccess={async () => {
              if (user) await fetchAllData(user.uid);
         }}

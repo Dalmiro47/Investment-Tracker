@@ -434,15 +434,19 @@ export async function addRateChange(
 export async function processFifoSell(
   uid: string, 
   symbol: string, 
-  data: { date: Date; quantity: number; pricePerUnit: number }
+  data: { date: Date; quantity: number; pricePerUnit: number; exchange?: string }
 ) {
-  // 1. Identify candidates: Query all active investments with this symbol
-  // We use the 'symbol' field which corresponds to the ticker.
-  const q = query(
-    investmentsCol(uid), 
+  // 1. Identify candidates: Query all active investments with this symbol AND exchange
+  const constraints = [
     where('symbol', '==', symbol), 
     where('status', '==', 'Active')
-  );
+  ];
+
+  if (data.exchange) {
+    constraints.push(where('exchange', '==', data.exchange));
+  }
+  
+  const q = query(investmentsCol(uid), ...constraints);
   
   const snap = await getDocs(q);
   const candidates = snap.docs.map(fromInvestmentDoc);
