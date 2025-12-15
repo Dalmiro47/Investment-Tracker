@@ -1,3 +1,4 @@
+
 "use client"
 
 import { zodResolver } from "@hookform/resolvers/zod"
@@ -54,6 +55,7 @@ const defaultFormValues: InvestmentFormValues = {
   purchaseQuantity: undefined as any,
   purchasePricePerUnit: undefined as any,
   ticker: "",
+  exchange: "",
   stakingOrLending: false,
 };
 
@@ -83,6 +85,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                 ...investment,
                 purchaseDate: new Date(investment.purchaseDate),
                 ticker: investment.ticker ?? "",
+                exchange: investment.exchange ?? "",
                 stakingOrLending: investment.stakingOrLending ?? false,
               }
             : {
@@ -156,7 +159,7 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                 )}
               />
               
-              {/* Row 2: Type & Ticker */}
+              {/* Row 2: Type & Ticker & Exchange */}
               <div className="grid grid-cols-2 gap-4">
                   <FormField
                   control={form.control}
@@ -185,23 +188,40 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                   />
 
                   {!isIA && (
-                      <FormField
-                      control={form.control}
-                      name="ticker"
-                      render={({ field }) => (
-                          <FormItem>
-                          <FormLabel>Ticker / Symbol</FormLabel>
-                          <FormControl>
-                              <Input placeholder={
-                              watchedType === 'Crypto' ? "e.g. bitcoin (id)" : "e.g. NVD.F"
-                              } {...field} />
-                          </FormControl>
-                          <FormMessage />
-                          </FormItem>
-                      )}
-                      />
+                      <div className="space-y-4">
+                        <FormField
+                        control={form.control}
+                        name="ticker"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Ticker / Symbol</FormLabel>
+                            <FormControl>
+                                <Input placeholder={
+                                watchedType === 'Crypto' ? "e.g. bitcoin (id)" : "e.g. NVD.F"
+                                } {...field} />
+                            </FormControl>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                        />
+                         {/* --- NEW EXCHANGE FIELD --- */}
+                         <FormField
+                          control={form.control}
+                          name="exchange"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel>Broker / Exchange</FormLabel>
+                              <FormControl>
+                                <Input placeholder="e.g. Trade Republic, Coinbase" {...(field as any)} />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
                   )}
               </div>
+
 
               {/* Row 3: Date & Quantity */}
               <div className="grid grid-cols-2 gap-4">

@@ -86,7 +86,7 @@ export default function InvestmentCard({
       return () => clearTimeout(t);
   });
   
-  const { name, type, status, ticker, purchaseDate, realizedPnL } = investment;
+  const { name, type, status, ticker, purchaseDate, realizedPnL, exchange } = investment;
   const [isInfoOpen, setIsInfoOpen] = useState(false);
   
   const isIA = investment.type === 'Interest Account';
@@ -195,6 +195,7 @@ export default function InvestmentCard({
               <CardDescription className="font-medium text-primary">
                 {type} {ticker ? `(${ticker})` : ""}
                 {isIA && typeof currentRatePct === "number" ? ` • ${currentRatePct.toFixed(2)}%` : ""}
+                {exchange && ` • ${exchange}`}
               </CardDescription>
               {isETF && metrics?.planId && <EtfSimLink planId={metrics.planId} showSummary={false} className="mt-1" />}
             </div>
@@ -586,4 +587,3 @@ export default function InvestmentCard({
     </>
   );
 }
-
