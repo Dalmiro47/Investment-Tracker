@@ -233,8 +233,9 @@ export function InvestmentForm({ isOpen, onOpenChange, onSubmit, investment, ini
                           render={({ field }) => (
                           <AppDatePicker
                               value={field.value ?? null}
-                              onChange={(d) => field.onChange(d)}
-                              placeholder="dd/mm/yyyy"
+                          onChange={(d) => field.onChange(d)}
+                          placeholder="dd/mm/yyyy hh:mm"
+                          includeTime={true}
                               maxDate={today}
                           />
                           )}

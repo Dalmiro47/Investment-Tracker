@@ -15,32 +15,39 @@ import {
   format,
   parse,
   isValid,
-  isAfter,
   startOfDay,
+  setHours,
+  setMinutes,
 } from 'date-fns';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 
 // --- Helper Functions ---
-const INPUT_FORMAT = 'dd/MM/yyyy';
+const DATE_FORMAT = 'dd/MM/yyyy';
+const TIME_FORMAT = 'HH:mm';
+const FULL_FORMAT = 'dd/MM/yyyy HH:mm';
+
 const PIVOT_2DIGIT = 50; 
 const startOfDayLocal = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
-
-function clamp(date: Date, min?: Date, max?: Date) {
-  const d = +startOfDayLocal(date);
-  if (min && d < +startOfDayLocal(min)) return startOfDayLocal(min);
-  if (max && d > +startOfDayLocal(max)) return startOfDayLocal(max);
-  return startOfDayLocal(date);
-}
 
 function expand2DigitYear(two: string) {
   const n = Number(two);
   return n <= PIVOT_2DIGIT ? `20${two.padStart(2, '0')}` : `19${two.padStart(2, '0')}`;
 }
 
-function parseUserInput(raw: string, fmt: string): Date | null {
+function parseUserInput(raw: string, includeTime: boolean): Date | null {
   const v = raw.trim();
   if (!v) return null;
+
+  // Try parsing with time first if enabled
+  if (includeTime) {
+      const parsedFull = parse(v, FULL_FORMAT, new Date());
+      if (isValid(parsedFull)) return parsedFull;
+  }
+
+  // Fallbacks for Date only
   if (/^\d{6}$/.test(v)) {
     const d = v.slice(0, 2); const m = v.slice(2, 4); const y = expand2DigitYear(v.slice(4));
     const parsed = parse(`${d}${m}${y}`, 'ddMMyyyy', new Date());
@@ -51,7 +58,9 @@ function parseUserInput(raw: string, fmt: string): Date | null {
     const parsed = parse(`${d}/${m}/${y}`, 'dd/MM/yyyy', new Date());
     return isValid(parsed) ? startOfDayLocal(parsed) : null;
   }
-  for (const f of [fmt, 'ddMMyyyy', 'd/M/yyyy', 'dd/M/yyyy', 'MM/dd/yyyy', 'yyyy-MM-dd', 'dd.MM.yyyy']) {
+  
+  const formats = [DATE_FORMAT, 'ddMMyyyy', 'd/M/yyyy', 'dd/M/yyyy', 'MM/dd/yyyy', 'yyyy-MM-dd', 'dd.MM.yyyy'];
+  for (const f of formats) {
     const parsed = parse(v, f, new Date());
     if (isValid(parsed)) return startOfDayLocal(parsed);
   }
@@ -66,22 +75,24 @@ export type AppDatePickerProps = {
   minDate?: Date;
   maxDate?: Date;
   className?: string;
-  inputFormat?: string;
+  includeTime?: boolean; // New Prop
 };
 
 export default function AppDatePicker({
   value,
   onChange,
-  placeholder = 'dd/mm/yyyy',
+  placeholder,
   disabled,
   minDate,
   maxDate,
   className,
-  inputFormat = INPUT_FORMAT,
+  includeTime = false,
 }: AppDatePickerProps) {
   const [open, setOpen] = React.useState(false);
   const [view, setView] = React.useState<Date>(value ?? new Date());
-  const [text, setText] = React.useState<string>(value ? format(value, inputFormat) : '');
+  
+  const activeFormat = includeTime ? FULL_FORMAT : DATE_FORMAT;
+  const [text, setText] = React.useState<string>(value ? format(value, activeFormat) : '');
   
   // Safety Refs
   const isSelectingRef = React.useRef(false);
@@ -89,7 +100,6 @@ export default function AppDatePicker({
 
   const valueTimestamp = value?.getTime();
   
-  // 1. Track Mount State
   React.useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -97,13 +107,11 @@ export default function AppDatePicker({
     };
   }, []);
 
-  // 2. Sync with External Prop
   React.useEffect(() => {
     const distinctDate = valueTimestamp ? new Date(valueTimestamp) : null;
 
     if (distinctDate) {
-      const formatted = format(distinctDate, inputFormat);
-      // Only update if visually different to avoid cursor jumps, but ALWAYS allow if coming from prop
+      const formatted = format(distinctDate, activeFormat);
       if (text !== formatted) {
         setText(formatted);
       }
@@ -113,33 +121,35 @@ export default function AppDatePicker({
     } else {
        if (text !== '') setText('');
     }
-    // FIX: Removed 'text' from dependencies to stop the infinite loop / frozen screen
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [valueTimestamp, inputFormat]); 
+  }, [valueTimestamp, activeFormat]); 
 
   const onChangeRaw = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let digits = e.target.value.replace(/\D/g, '').slice(0, 8);
-    let out = '';
-    if (digits.length <= 2) out = digits;
-    else if (digits.length <= 4) out = `${digits.slice(0, 2)}/${digits.slice(2)}`;
-    else out = `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
-    setText(out);
+    setText(e.target.value);
   };
 
   const commitText = () => {
     if (!isMountedRef.current) return;
 
-    const parsed = parseUserInput(text, inputFormat);
+    const parsed = parseUserInput(text, includeTime);
     
-    if (parsed && value && isSameDay(parsed, value)) {
-        const pretty = format(value, inputFormat);
-        if (text !== pretty) setText(pretty);
-        return;
+    // If we have a value and the parsed value is basically the same (ignoring seconds/ms if we want), don't update
+    if (parsed && value && parsed.getTime() === value.getTime()) {
+         // just fix format
+         const pretty = format(value, activeFormat);
+         if (text !== pretty) setText(pretty);
+         return;
     }
 
-    if (parsed) onChange(clamp(parsed, minDate, maxDate));
+    if (parsed) {
+        // Validation clamping
+        let final = parsed;
+        if (minDate && final < minDate) final = minDate;
+        if (maxDate && final > maxDate) final = maxDate;
+        onChange(final);
+    }
     else if (!text.trim()) onChange(null);
-    else setText(value ? format(value, inputFormat) : ''); 
+    else setText(value ? format(value, activeFormat) : ''); 
   };
 
   const days = React.useMemo(() => {
@@ -152,7 +162,7 @@ export default function AppDatePicker({
     e.preventDefault();
     e.stopPropagation();
 
-    // Check bounds before selecting
+    // Check bounds
     if (disabled) return;
     if (minDate && startOfDay(d) < startOfDay(minDate)) return;
     if (maxDate && startOfDay(d) > startOfDay(maxDate)) return;
@@ -161,22 +171,51 @@ export default function AppDatePicker({
 
     isSelectingRef.current = true;
     
-    const picked = startOfDayLocal(d);
+    // Create new date: The selected Day + The current Time (or 00:00)
+    let picked = new Date(
+        d.getFullYear(), 
+        d.getMonth(), 
+        d.getDate(), 
+        value ? value.getHours() : 0, 
+        value ? value.getMinutes() : 0
+    );
 
-    setText(format(picked, inputFormat));
-
-    if (!value || !isSameDay(picked, value)) {
-        onChange(picked);
-    }
+    setText(format(picked, activeFormat));
+    onChange(picked);
     
-    setOpen(false);
+    // Only close if we are NOT using time, otherwise user might want to set time next
+    if (!includeTime) {
+        setOpen(false);
+    }
     
     setTimeout(() => { 
         if(isMountedRef.current) isSelectingRef.current = false; 
     }, 200);
   };
 
-  // Logic to disable "Next Month" button if we are already at the maxDate's month
+  const updateTime = (type: 'hours' | 'minutes', val: string) => {
+      let num = parseInt(val, 10);
+      if (isNaN(num)) return;
+      
+      const current = value || new Date(); // Fallback to now if null
+      let next = new Date(current);
+
+      if (type === 'hours') {
+          num = Math.max(0, Math.min(23, num));
+          next = setHours(next, num);
+      } else {
+          num = Math.max(0, Math.min(59, num));
+          next = setMinutes(next, num);
+      }
+      
+      // Clamp logic for time changes
+      if (minDate && next < minDate) next = minDate;
+      if (maxDate && next > maxDate) next = maxDate;
+
+      onChange(next);
+      setText(format(next, activeFormat));
+  };
+
   const canGoNext = React.useMemo(() => {
     if (!maxDate) return true;
     const nextMonth = addMonths(view, 1);
@@ -212,7 +251,7 @@ export default function AppDatePicker({
                 }
               }}
               className="bg-transparent outline-none border-0 p-0 m-0 w-full text-sm"
-              inputMode="numeric"
+              placeholder={placeholder || (includeTime ? "dd/mm/yyyy hh:mm" : "dd/mm/yyyy")}
             />
             <CalendarIcon className="h-4 w-4 text-muted-foreground" />
           </button>
@@ -223,6 +262,7 @@ export default function AppDatePicker({
           onCloseAutoFocus={(e) => e.preventDefault()} 
           className="p-0 w-[280px] rounded-md border bg-popover text-popover-foreground shadow-md"
         >
+          {/* Calendar Header */}
           <div className="flex items-center gap-2 p-2 border-b border-border bg-popover">
             <button
               type="button"
@@ -247,6 +287,7 @@ export default function AppDatePicker({
             </button>
           </div>
 
+          {/* Calendar Grid */}
           <div className="grid grid-cols-7 gap-y-1 p-2">
             {['Mo','Tu','We','Th','Fr','Sa','Su'].map(day => (
                  <div key={day} className="text-center text-xs text-muted-foreground font-medium py-1">{day}</div>
@@ -254,7 +295,7 @@ export default function AppDatePicker({
             {days.map((d) => {
                 const isSelected = !!value && isSameDay(d, value);
                 const isCurrentMonth = isSameMonth(d, view);
-                // Check disabling
+                
                 const isBeforeMin = minDate ? startOfDay(d) < startOfDay(minDate) : false;
                 const isAfterMax = maxDate ? startOfDay(d) > startOfDay(maxDate) : false;
                 const isDisabledDay = isBeforeMin || isAfterMax;
@@ -280,6 +321,41 @@ export default function AppDatePicker({
                 </button>
             )})}
           </div>
+
+          {/* TIME SECTION */}
+          {includeTime && (
+            <div className="p-3 border-t border-border bg-muted/20">
+                <div className="flex items-center gap-2 mb-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-xs font-medium text-muted-foreground">Time (HH:mm)</span>
+                </div>
+                <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                        <Label className="text-[10px] text-muted-foreground mb-1 block">Hours</Label>
+                        <Input 
+                            type="number" 
+                            min={0} 
+                            max={23} 
+                            className="h-8 text-center"
+                            value={value ? format(value, 'HH') : '00'}
+                            onChange={(e) => updateTime('hours', e.target.value)}
+                        />
+                    </div>
+                    <span className="text-muted-foreground font-bold mt-4">:</span>
+                    <div className="flex-1">
+                        <Label className="text-[10px] text-muted-foreground mb-1 block">Mins</Label>
+                        <Input 
+                            type="number" 
+                            min={0} 
+                            max={59} 
+                            className="h-8 text-center"
+                            value={value ? format(value, 'mm') : '00'}
+                            onChange={(e) => updateTime('minutes', e.target.value)}
+                        />
+                    </div>
+                </div>
+            </div>
+          )}
         </PopoverContent>
       </Popover>
     </div>
