@@ -158,7 +158,7 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                         )}
                     />
                      <FormItem>
-                        <FormLabel>Date</FormLabel>
+                        <FormLabel>Date & Time</FormLabel>
                          <Controller
                             control={form.control}
                             name="date"
@@ -166,8 +166,9 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                                 <AppDatePicker
                                 value={field.value ?? null}
                                 onChange={field.onChange}
-                                placeholder="dd/mm/yyyy"
+                                placeholder="dd/mm/yyyy hh:mm"
                                 maxDate={new Date()}
+                                includeTime={true}
                                 />
                             )}
                         />
@@ -370,7 +371,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                                             {investment.type !== 'Interest Account' && (
                                                 <TableRow className="bg-muted/20 hover:bg-muted/40">
                                                     <TableCell><span className="font-medium text-green-600">Buy</span></TableCell>
-                                                    <TableCell className="text-muted-foreground">{format(parseISO(investment.purchaseDate), 'dd MMM yyyy')}</TableCell>
+                                                    <TableCell className="text-muted-foreground">{format(parseISO(investment.purchaseDate), 'dd MMM yyyy HH:mm')}</TableCell>
                                                     <TableCell className="text-right font-mono text-muted-foreground">{formatQuantity(investment.purchaseQuantity)}</TableCell>
                                                     <TableCell className="text-right font-mono text-muted-foreground">{formatCurrency(investment.purchasePricePerUnit)}</TableCell>
                                                     <TableCell className="text-right font-mono text-muted-foreground">{formatCurrency(investment.purchaseQuantity * investment.purchasePricePerUnit)}</TableCell>
@@ -393,7 +394,7 @@ export function TransactionHistoryDialog({ isOpen, onOpenChange, investment, onT
                                                             {tx.type}
                                                         </span>
                                                     </TableCell>
-                                                    <TableCell>{format(parseISO(tx.date), 'dd MMM yyyy')}</TableCell>
+                                                    <TableCell>{format(parseISO(tx.date), 'dd MMM yyyy HH:mm')}</TableCell>
                                                     <TableCell className="text-right font-mono">
                                                         {tx.type === 'Sell' ? formatQuantity(tx.quantity) : isIA ? formatCurrency(tx.totalAmount) : '—'}
                                                     </TableCell>
