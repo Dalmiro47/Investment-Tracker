@@ -93,6 +93,8 @@ export default function AppDatePicker({
   
   const activeFormat = includeTime ? FULL_FORMAT : DATE_FORMAT;
   const [text, setText] = React.useState<string>(value ? format(value, activeFormat) : '');
+  const [hoursDraft, setHoursDraft] = React.useState<string>(value ? format(value, 'HH') : '');
+  const [minutesDraft, setMinutesDraft] = React.useState<string>(value ? format(value, 'mm') : '');
   
   // Safety Refs
   const isSelectingRef = React.useRef(false);
@@ -115,11 +117,17 @@ export default function AppDatePicker({
       if (text !== formatted) {
         setText(formatted);
       }
+      const hh = format(distinctDate, 'HH');
+      const mm = format(distinctDate, 'mm');
+      if (hoursDraft !== hh) setHoursDraft(hh);
+      if (minutesDraft !== mm) setMinutesDraft(mm);
       if (!isSameMonth(distinctDate, view)) {
          setView(distinctDate);
       }
     } else {
        if (text !== '') setText('');
+       if (hoursDraft !== '') setHoursDraft('');
+       if (minutesDraft !== '') setMinutesDraft('');
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [valueTimestamp, activeFormat]); 
@@ -193,9 +201,8 @@ export default function AppDatePicker({
     }, 200);
   };
 
-  const updateTime = (type: 'hours' | 'minutes', val: string) => {
-      let num = parseInt(val, 10);
-      if (isNaN(num)) return;
+  const updateTime = (type: 'hours' | 'minutes', num: number | null) => {
+      if (num == null || Number.isNaN(num)) return;
       
       const current = value || new Date(); // Fallback to now if null
       let next = new Date(current);
@@ -214,6 +221,18 @@ export default function AppDatePicker({
 
       onChange(next);
       setText(format(next, activeFormat));
+      // keep drafts in sync after commit
+      setHoursDraft(format(next, 'HH'));
+      setMinutesDraft(format(next, 'mm'));
+  };
+
+  const commitTimeField = (type: 'hours' | 'minutes') => {
+      const raw = type === 'hours' ? hoursDraft : minutesDraft;
+      const trimmed = raw.trim();
+      if (!trimmed) return;
+      const n = Number(trimmed);
+      if (Number.isNaN(n)) return;
+      updateTime(type, n);
   };
 
   const canGoNext = React.useMemo(() => {
@@ -332,25 +351,43 @@ export default function AppDatePicker({
                 <div className="flex items-center gap-2">
                     <div className="flex-1">
                         <Label className="text-[10px] text-muted-foreground mb-1 block">Hours</Label>
-                        <Input 
-                            type="number" 
-                            min={0} 
-                            max={23} 
-                            className="h-8 text-center"
-                            value={value ? format(value, 'HH') : '00'}
-                            onChange={(e) => updateTime('hours', e.target.value)}
+                        <Input
+                          type="number"
+                          min={0}
+                          max={23}
+                          step={1}
+                          className="h-8 text-center"
+                          value={hoursDraft}
+                          placeholder={value ? format(value, 'HH') : '00'}
+                          onChange={(e) => setHoursDraft(e.target.value)}
+                          onBlur={() => commitTimeField('hours')}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              commitTimeField('hours');
+                            }
+                          }}
                         />
                     </div>
                     <span className="text-muted-foreground font-bold mt-4">:</span>
                     <div className="flex-1">
                         <Label className="text-[10px] text-muted-foreground mb-1 block">Mins</Label>
-                        <Input 
-                            type="number" 
-                            min={0} 
-                            max={59} 
-                            className="h-8 text-center"
-                            value={value ? format(value, 'mm') : '00'}
-                            onChange={(e) => updateTime('minutes', e.target.value)}
+                        <Input
+                          type="number"
+                          min={0}
+                          max={59}
+                          step={1}
+                          className="h-8 text-center"
+                          value={minutesDraft}
+                          placeholder={value ? format(value, 'mm') : '00'}
+                          onChange={(e) => setMinutesDraft(e.target.value)}
+                          onBlur={() => commitTimeField('minutes')}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              commitTimeField('minutes');
+                            }
+                          }}
                         />
                     </div>
                 </div>
