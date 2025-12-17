@@ -40,6 +40,7 @@ import { MobileAppShell } from '@/components/shell/MobileAppShell';
 import { MobileFilters } from '@/components/filters/MobileFilters';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { FifoSellDialog } from "@/components/fifo-sell-dialog";
+import FuturesPositionsTable from '@/components/futures-positions-table';
 
 const todayISO = () => new Date().toISOString().slice(0,10);
 const getCurrentRate = (rates?: SavingsRateChange[]) => {
@@ -48,6 +49,8 @@ const getCurrentRate = (rates?: SavingsRateChange[]) => {
   const eligible = rates.filter(r => r.from <= t).sort((a,b)=>a.from.localeCompare(b.from));
   return eligible.length ? eligible[eligible.length-1].annualRatePct : rates[0].annualRatePct;
 };
+
+type TypeFilterValue = InvestmentType | 'All' | 'Futures';
 
 function DashboardPageContent() {
   const { user } = useAuth();
@@ -60,7 +63,7 @@ function DashboardPageContent() {
   const [initialLoading, setInitialLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isTaxView, setIsTaxView] = React.useState(false);
-  const [typeFilter, setTypeFilter] = React.useState<InvestmentType | 'All'>('All');
+  const [typeFilter, setTypeFilter] = React.useState<TypeFilterValue>('All');
   const [statusFilter, setStatusFilter] = React.useState<InvestmentStatus | 'All'>('All');
   const [sortKey, setSortKey] = React.useState<SortKey>('purchaseDate');
   const [investmentNameFilter, setInvestmentNameFilter] = React.useState<'All' | string>('All');
@@ -269,10 +272,10 @@ function DashboardPageContent() {
   const investmentNameOptions = React.useMemo(() => {
     let base = investmentsYearScoped.filter(inv =>
       isTaxView
-        ? inv.status === 'Sold'             
+        ? inv.status === 'Sold'
         : (statusFilter === 'All' ? true : inv.status === statusFilter)
     );
-    if (typeFilter !== 'All') {
+    if (typeFilter !== 'All' && typeFilter !== 'Futures') {
       base = base.filter(inv => inv.type === typeFilter);
     }
     const names = Array.from(new Set(base.map(inv => inv.name).filter(Boolean as unknown as (x: string | null | undefined) => x is string)));
@@ -290,7 +293,7 @@ function DashboardPageContent() {
   const filteredAndSortedInvestments = React.useMemo(() => {
     let filtered = [...investmentsYearScoped];
 
-    if (typeFilter !== 'All') {
+    if (typeFilter !== 'All' && typeFilter !== 'Futures') {
       filtered = filtered.filter(inv => inv.type === typeFilter);
     }
     
@@ -593,7 +596,7 @@ function DashboardPageContent() {
     <>
       <div className="flex flex-col sm:flex-row items-center gap-4 mt-4">
         <div className="w-full sm:w-auto">
-          <Tabs value={typeFilter} onValueChange={(value) => setTypeFilter(value as InvestmentType | 'All')}>
+          <Tabs value={typeFilter} onValueChange={(value) => setTypeFilter(value as TypeFilterValue)}>
             <TabsList className="h-auto overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
               <TabsTrigger value="All">All Types ({typeCounts.All})</TabsTrigger>
               <TabsTrigger value="Stock">Stocks ({typeCounts.Stock})</TabsTrigger>
@@ -602,6 +605,7 @@ function DashboardPageContent() {
               <TabsTrigger value="Interest Account">Interest Accounts ({typeCounts['Interest Account']})</TabsTrigger>
               <TabsTrigger value="Bond">Bonds ({typeCounts.Bond})</TabsTrigger>
               <TabsTrigger value="Real Estate">Real Estate ({typeCounts['Real Estate']})</TabsTrigger>
+              <TabsTrigger value="Futures">Futures</TabsTrigger>
             </TabsList>
           </Tabs>
         </div>
@@ -682,29 +686,37 @@ function DashboardPageContent() {
             <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         ) : viewMode === 'list' ? (
-            <Card>
-              <CardContent>
-                <InvestmentListView
-                  investments={filteredAndSortedInvestments}
-                  transactionsMap={transactionsMap}
-                  rateSchedulesMap={rateSchedulesMap}
-                  yearFilter={yearFilter}
-                  showTypeColumn={typeFilter === 'All'}
-                  mode={listMode}
-                  sortKey={sortKey}
-                  statusFilter={statusFilter}
-                  activeTypeFilter={typeFilter}
-                  onViewHistory={(id) => {
-                    const inv = investments.find((i) => i.id === id);
-                    if (inv) handleHistoryClick(inv);
-                  }}
-                  onAddTransaction={(id) => {
-                    const inv = investments.find((i) => i.id === id);
-                    if (inv) handleAddTransactionClick(inv);
-                  }}
-                />
-              </CardContent>
-            </Card>
+            typeFilter === 'Futures' ? (
+              <Card>
+                <CardContent>
+                  <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? null} />
+                </CardContent>
+              </Card>
+            ) : (
+              <Card>
+                <CardContent>
+                  <InvestmentListView
+                    investments={filteredAndSortedInvestments}
+                    transactionsMap={transactionsMap}
+                    rateSchedulesMap={rateSchedulesMap}
+                    yearFilter={yearFilter}
+                    showTypeColumn={typeFilter === 'All'}
+                    mode={listMode}
+                    sortKey={sortKey}
+                    statusFilter={statusFilter}
+                    activeTypeFilter={typeFilter as InvestmentType | 'All'}
+                    onViewHistory={(id) => {
+                      const inv = investments.find((i) => i.id === id);
+                      if (inv) handleHistoryClick(inv);
+                    }}
+                    onAddTransaction={(id) => {
+                      const inv = investments.find((i) => i.id === id);
+                      if (inv) handleAddTransactionClick(inv);
+                    }}
+                  />
+                </CardContent>
+              </Card>
+            )
           ) : filteredAndSortedInvestments.length > 0 ? (
           <div className="space-y-4">
             {filteredAndSortedInvestments.map(investment => {
@@ -744,7 +756,7 @@ function DashboardPageContent() {
                {isTaxView ? "No sold positions match the current filters." : "Add a new investment to get started."}
             </p>
             <div className="mt-4 flex items-center justify-center gap-3">
-              <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}>
+              <Button onClick={() => handleAddClick(typeFilter !== 'All' && typeFilter !== 'Futures' ? typeFilter : undefined)}>
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Add First Investment
               </Button>
@@ -753,7 +765,7 @@ function DashboardPageContent() {
           </div>
         )}
          <button
-          onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}
+          onClick={() => handleAddClick(typeFilter !== 'All' && typeFilter !== 'Futures' ? typeFilter : undefined)}
           className="md:hidden fixed right-4 z-50 rounded-full bg-primary text-primary-foreground shadow-lg px-5 py-3 font-medium"
           style={{ bottom: "calc(72px + env(safe-area-inset-bottom) + 8px)" }}
         >
@@ -881,7 +893,7 @@ function DashboardPageContent() {
                   Refresh Prices
                 </Button>
                 <EtfPlansButton />
-                 <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}>
+                 <Button onClick={() => handleAddClick(typeFilter !== 'All' && typeFilter !== 'Futures' ? typeFilter : undefined)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add Investment
                 </Button>
@@ -895,29 +907,37 @@ function DashboardPageContent() {
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : viewMode === 'list' ? (
-              <Card>
-                <CardContent>
-                  <InvestmentListView
-                    investments={filteredAndSortedInvestments}
-                    transactionsMap={transactionsMap}
-                    rateSchedulesMap={rateSchedulesMap}
-                    yearFilter={yearFilter}
-                    showTypeColumn={typeFilter === 'All'}
-                    mode={listMode}
-                    sortKey={sortKey}
-                    statusFilter={statusFilter}
-                    activeTypeFilter={typeFilter}
-                    onViewHistory={(id) => {
-                      const inv = investments.find((i) => i.id === id);
-                      if (inv) handleHistoryClick(inv);
-                    }}
-                    onAddTransaction={(id) => {
-                      const inv = investments.find((i) => i.id === id);
-                      if (inv) handleAddTransactionClick(inv);
-                    }}
-                  />
-                </CardContent>
-              </Card>
+              typeFilter === 'Futures' ? (
+                <Card>
+                  <CardContent>
+                    <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? null} />
+                  </CardContent>
+                </Card>
+              ) : (
+                <Card>
+                  <CardContent>
+                    <InvestmentListView
+                      investments={filteredAndSortedInvestments}
+                      transactionsMap={transactionsMap}
+                      rateSchedulesMap={rateSchedulesMap}
+                      yearFilter={yearFilter}
+                      showTypeColumn={typeFilter === 'All'}
+                      mode={listMode}
+                      sortKey={sortKey}
+                      statusFilter={statusFilter}
+                      activeTypeFilter={typeFilter as InvestmentType | 'All'}
+                      onViewHistory={(id) => {
+                        const inv = investments.find((i) => i.id === id);
+                        if (inv) handleHistoryClick(inv);
+                      }}
+                      onAddTransaction={(id) => {
+                        const inv = investments.find((i) => i.id === id);
+                        if (inv) handleAddTransactionClick(inv);
+                      }}
+                    />
+                  </CardContent>
+                </Card>
+              )
             ) : filteredAndSortedInvestments.length > 0 ? (
             <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
               {filteredAndSortedInvestments.map(investment => {
@@ -957,7 +977,7 @@ function DashboardPageContent() {
                  {isTaxView ? "No sold positions match the current filters." : "Add a new investment to get started."}
               </p>
               <div className="mt-4 flex items-center justify-center gap-3">
-                <Button onClick={() => handleAddClick(typeFilter !== 'All' ? typeFilter : undefined)}>
+                <Button onClick={() => handleAddClick(typeFilter !== 'All' && typeFilter !== 'Futures' ? typeFilter : undefined)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add First Investment
                 </Button>

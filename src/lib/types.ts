@@ -1,5 +1,6 @@
 
 import { z } from 'zod';
+import type { Timestamp } from 'firebase/firestore';
 
 export type InvestmentType = 'Stock' | 'Bond' | 'Crypto' | 'Real Estate' | 'ETF' | 'Interest Account';
 export type InvestmentStatus = 'Active' | 'Sold';
@@ -57,6 +58,40 @@ export interface Investment {
 
   createdAt?: string;
   updatedAt?: string;
+}
+
+/**
+ * Futures / Derivatives position (Tax bucket: §20 Kapitalerträge)
+ * Kept separate from `Investment` because the mechanics (leverage, funding, liquidation)
+ * and tax treatment differ from spot assets (§23 private sales).
+ */
+export interface FuturePosition {
+  id: string;
+
+  // Instrument & direction
+  asset: string;                 // e.g. "ETH/USD Perp"
+  side: 'LONG' | 'SHORT';
+
+  // Risk parameters
+  leverage: number;              // e.g. 5 for 5x
+  entryPrice: number;            // average entry price
+  markPrice: number;             // current mark/index price
+  liquidationPrice: number;      // broker‑calculated liquidation level
+
+  // Margin & size
+  collateral: number;            // margin posted for this position (in account currency)
+  size: number;                  // notional size of the contract (same units as asset quote)
+
+  // PnL & funding
+  unrealizedPnL: number;         // current floating PnL (can be negative)
+  accumulatedFunding: number;    // net paid/received funding over lifetime (for §20)
+  feePaidEur?: number;           // optional: funding converted to EUR for tax reporting
+  realizedPnL?: number;          // optional realized PnL when position is closed
+
+  // Lifecycle
+  status: 'OPEN' | 'CLOSED' | 'LIQUIDATED';
+  openedAt: Timestamp;           // when the position was opened
+  closedAt?: Timestamp | null;   // optional close/liquidation time
 }
 
 export interface EtfSimYearBucket {
