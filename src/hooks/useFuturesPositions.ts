@@ -120,10 +120,9 @@ export function useFuturesPositions(
 
     setState((prev) => ({ ...prev, loading: true, error: null, isMock: false }));
 
-    const colRef = collection(db, FUTURES_COLLECTION);
-
-    // We expect documents to carry a `userId` field so each user only sees their own positions.
-    const q = query(colRef, where('userId', '==', userId), orderBy('openedAt', 'desc'));
+    // Read the per-user futures positions subcollection so Firestore rules match
+    const colRef = collection(db, 'users', userId!, FUTURES_COLLECTION);
+    const q = query(colRef, orderBy('openedAt', 'desc'));
 
     const unsubscribe = onSnapshot(
       q,

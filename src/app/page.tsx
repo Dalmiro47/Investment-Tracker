@@ -910,7 +910,7 @@ function DashboardPageContent() {
               typeFilter === 'Futures' ? (
                 <Card>
                   <CardContent>
-                    <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? null} />
+                    <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? ""} />
                   </CardContent>
                 </Card>
               ) : (
