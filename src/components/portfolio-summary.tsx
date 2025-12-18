@@ -284,6 +284,25 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                       <li>Taxed at your <strong>marginal income tax rate</strong> ({Math.round((taxSettings?.cryptoMarginalRate ?? 0)*100)}%) + soli {Math.round(TAX.soliRate*100)}% (+ church tax if applicable).</li>
                     </ul>
                   </div>
+
+                  <div className="p-4 rounded-md bg-muted/30 border">
+                    <h4 className="font-semibold text-base mb-2">Futures & Derivatives (§20 Abs. 6 EStG)</h4>
+                    <ul className="list-disc pl-5 text-muted-foreground space-y-2 leading-relaxed">
+                      <li>
+                        <strong>Loss Offset Limit (€20,000):</strong>{' '}
+                        Unlike stocks/crypto, losses from term transactions (futures, options, CFDs) can only be offset against gains from the <i>same category</i>, capped at <span className="text-foreground">€20,000 per year</span>.
+                      </li>
+                      <li>
+                        <strong>Carry Forward:</strong> Losses exceeding the €20k cap are <strong>not lost</strong>; they are carried forward to offset future gains in subsequent years.
+                      </li>
+                      <li>
+                        <strong>The "Tax Trap":</strong> Be careful. You can owe taxes on gross gains even if your net PnL is negative (if gross losses exceed €20k).
+                      </li>
+                      <li>
+                        Taxed at the flat <strong>25% Abgeltungsteuer</strong> rate (+ Soli/Church).
+                      </li>
+                    </ul>
+                  </div>
                 </div>
             </div>
             <div className="p-4 border-t bg-background flex justify-end">
