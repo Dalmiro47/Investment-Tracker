@@ -196,13 +196,17 @@ export function calculatePositionMetrics(
         }
       });
     } else if (inv.type === 'Future') {
-      // NEW: Futures (§20 Abs. 6) — separate gains and losses
-      if (realizedPLYear.gt(0)) {
-        futuresGainsYear = realizedPLYear;
-      } else if (realizedPLYear.lt(0)) {
-        // Store as positive absolute value
-        futuresLossesYear = realizedPLYear.abs();
-      }
+      // NEW: Futures (§20 Abs. 6) — separate gains and losses per transaction
+      // Iterate individual PnL events to avoid premature netting.
+      sellsInYear.forEach((t) => {
+        const val = getEur(t);
+        if (val.gt(0)) {
+          futuresGainsYear = add(futuresGainsYear, val);
+        } else if (val.lt(0)) {
+          futuresLossesYear = add(futuresLossesYear, val.abs());
+        }
+      });
+      // Note: We ignore realizedPLYear for tax buckets but keep it for Total PL UI.
     } else {
         // Stocks, ETFs, Bonds are capital gains
         capitalGainsYear = realizedPLYear;

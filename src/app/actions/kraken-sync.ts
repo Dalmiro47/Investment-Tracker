@@ -3,39 +3,43 @@
 import crypto from 'crypto';
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import { getDailyEurRate } from '@/lib/providers/frankfurter';
+import type { InvestmentType } from '@/lib/types';
 
-// Dos URLs base distintas según el tipo de endpoint
 const KRAKEN_FUTURES_TRADING_URL = 'https://futures.kraken.com/derivatives/api/v3';
 const KRAKEN_FUTURES_HISTORY_URL = 'https://futures.kraken.com/api/history/v3';
 
-// --- Tipos de Datos ---
+// --- Types ---
 type KrakenFuturesSyncResult = { ok: boolean; message: string; };
-type KrakenFill = { symbol: string; side: 'buy' | 'sell'; quantity: number; price: number; fee: number; timestamp: number; };
-// account-log tiene una estructura diferente, nos interesa 'info' y 'amount'/'funding_rate'
+
+// Account logs contain the PnL and Funding data we need
 type KrakenAccountLog = { 
   id: number;
   date: string; 
   asset: string; 
-  info: string; // Ej: "funding rate change", "realized funding"
+  info: string; 
   booking_uid: string;
-  amount: number; // Funding suele venir en 'amount' o calculado
-  realized_funding?: number; // A veces viene explícito
-  type: string;
+  amount: number;
+  realized_funding?: number;
+  type: string; // 'realized_pnl', 'funding', 'commission', etc.
 };
 
-type KrakenFillsResponse = { result: string; fills: KrakenFill[]; };
-type KrakenLogsResponse = { result: string; logs: KrakenAccountLog[]; }; // La API devuelve 'logs'
+type KrakenLogsResponse = { result: string; logs: KrakenAccountLog[]; };
 
-function buildKrakenFuturesAuthHeaders(
-  apiKey: string,
-  apiSecret: string,
-  endpointPath: string, // El path RELATIVO exacto que se usará en la URL
-  body: string = '' 
-) {
-  const nonce = Date.now().toString(); // Milisegundos
+// Helper: Map Kraken Futures symbols (e.g., kf_ETH) to your App Tickers
+function mapKrakenFuturesSymbol(asset: string): { ticker: string; name: string; type: InvestmentType } {
+  // Common mapping for Kraken Futures collateral/assets
+  if (asset === 'kf_ETH' || asset === 'ETH') return { ticker: 'ETH-PERP', name: 'Ethereum Perpetual', type: 'Future' };
+  if (asset === 'kf_XBT' || asset === 'XBT' || asset === 'BTC') return { ticker: 'BTC-PERP', name: 'Bitcoin Perpetual', type: 'Future' };
+  if (asset === 'kf_SOL' || asset === 'SOL') return { ticker: 'SOL-PERP', name: 'Solana Perpetual', type: 'Future' };
+  // Fallback
+  return { ticker: `${asset}-PERP`, name: `${asset} Perpetual`, type: 'Future' };
+}
+
+// --- Auth Helper (Unchanged) ---
+function buildKrakenFuturesAuthHeaders(apiKey: string, apiSecret: string, endpointPath: string, body: string = '') {
+  const nonce = Date.now().toString();
   const secretBuffer = Buffer.from(apiSecret, 'base64');
-
-  // Algoritmo Futures v3: HMAC-SHA512( SHA256(postData + nonce + endpointPath), secret )
   const concatenated = (body ?? '') + nonce + endpointPath;
   const sha256Digest = crypto.createHash('sha256').update(concatenated).digest();
   const hmac = crypto.createHmac('sha512', secretBuffer).update(sha256Digest).digest('base64');
@@ -48,103 +52,94 @@ function buildKrakenFuturesAuthHeaders(
   };
 }
 
-async function krakenFuturesFetch<T>(
-  apiKey: string, apiSecret: string, endpoint: string, type: 'trading' | 'history'
-): Promise<T> {
-  // 1. Determinar URL Base y Path de Firma
-  let baseUrl;
-  let signaturePath;
-
-  if (type === 'trading') {
-    baseUrl = KRAKEN_FUTURES_TRADING_URL;
-    // Para endpoints de trading, la doc suele indicar /api/v3/... 
-    // pero la URL real lleva /derivatives. 
-    // IMPORTANTE: La firma para fills suele requerir "/api/v3/fills" (sin derivatives)
-    // OJO: Si falla, prueba incluir /derivatives en signaturePath.
-    signaturePath = `/api/v3/${endpoint}`;
-  } else {
-    baseUrl = KRAKEN_FUTURES_HISTORY_URL;
-    // Para history, la URL es .../api/history/v3/account-log
-    // La firma suele requerir "/api/history/v3/account-log"
-    signaturePath = `/api/history/v3/${endpoint}`;
-  }
-
-  const fetchUrl = `${baseUrl}/${endpoint}`;
+async function krakenFuturesFetch<T>(apiKey: string, apiSecret: string, endpoint: string, type: 'trading' | 'history'): Promise<T> {
+  let baseUrl = type === 'trading' ? KRAKEN_FUTURES_TRADING_URL : KRAKEN_FUTURES_HISTORY_URL;
+  let signaturePath = type === 'trading' ? `/api/v3/${endpoint}` : `/api/history/v3/${endpoint}`;
   
-  // Generar headers con el signaturePath correcto
   const headers = buildKrakenFuturesAuthHeaders(apiKey, apiSecret, signaturePath, '');
-
-  try {
-    const res = await fetch(fetchUrl, {
-      method: 'GET',
-      headers,
-      cache: 'no-store',
-    });
-
-    const text = await res.text();
-    if (!res.ok) throw new Error(`Error Kraken (${res.status}): ${text}`);
-
-    const jsonBody: any = JSON.parse(text);
-    if (jsonBody.result === 'error') throw new Error(`Error API: ${JSON.stringify(jsonBody)}`);
-
-    return jsonBody as T;
-  } catch (err: any) {
-    console.error(`Fallo fetch ${endpoint}:`, err.message);
-    throw err;
-  }
+  
+  const res = await fetch(`${baseUrl}/${endpoint}`, { method: 'GET', headers, cache: 'no-store' });
+  const text = await res.text();
+  
+  if (!res.ok) throw new Error(`Kraken Error (${res.status}): ${text}`);
+  
+  const jsonBody: any = JSON.parse(text);
+  if (jsonBody.result === 'error') throw new Error(`Error API: ${JSON.stringify(jsonBody)}`);
+  
+  return jsonBody as T;
 }
 
 export async function syncKrakenFutures(userId: string): Promise<KrakenFuturesSyncResult> {
-  console.log('--- 1. Iniciando Sync para userId:', userId);
   const apiKey = process.env.KRAKEN_FUTURES_KEY;
   const apiSecret = process.env.KRAKEN_FUTURES_SECRET;
-
-  if (!userId || !apiKey || !apiSecret) return { ok: false, message: 'Faltan credenciales' };
+  if (!userId || !apiKey || !apiSecret) return { ok: false, message: 'Missing credentials' };
 
   try {
-    // 1. Fills (Trading API)
-    console.log('--- 2. Fetching Fills ---');
-    const fillsRes = await krakenFuturesFetch<KrakenFillsResponse>(apiKey, apiSecret, 'fills', 'trading');
-    
-    // 2. Account Log (History API) - Para Funding Fees
-    console.log('--- 3. Fetching Account Log (Funding) ---');
-    // Usamos 'account-log' que es el endpoint correcto en History API v3
+    console.log('--- Fetching Kraken Futures Logs ---');
+    // Fetch logs to get Realized PnL, Funding, and Fees
     const logsRes = await krakenFuturesFetch<KrakenLogsResponse>(apiKey, apiSecret, 'account-log', 'history');
-
-    console.log(`--- 4. Datos recibidos. Fills: ${fillsRes.fills?.length || 0}, Logs: ${logsRes.logs?.length || 0}`);
-
-    // 3. Procesamiento (Misma lógica, adaptada al log de Futures)
+    
     const batch = adminDb.batch();
-    const futuresCol = adminDb.collection(`users/${userId}/futures_positions`);
-    const fundingMap = new Map<string, number>();
+    const investmentsCol = adminDb.collection(`users/${userId}/investments`);
 
-    (logsRes.logs || []).forEach((log) => {
-      // Kraken Futures suele marcar el funding con info="funding rate change" o types específicos
-      // Busca logs donde haya un movimiento de saldo negativo o positivo asociado a funding
-      if (log.info.includes('funding') || log.type === 'funding') {
-         // El asset suele venir como 'kf_ETH' o similar. Ajusta según veas los logs reales.
-         // 'realized_funding' es el campo ideal si existe, sino usa amount.
-         const amount = log.realized_funding || log.amount || 0;
-         const symbol = log.asset; // Ojo, puede necesitar map: kf_ETH -> ETH
-         
-         if (amount !== 0) {
-             fundingMap.set(symbol, (fundingMap.get(symbol) || 0) + amount);
-         }
-      }
-    });
+    let processedCount = 0;
 
-    // Guardado (Simplificado para el ejemplo)
-    for (const [symbol, totalFunding] of fundingMap.entries()) {
-      const ref = futuresCol.doc(symbol);
-      batch.set(ref, {
-        asset: symbol,
-        accumulatedFunding: FieldValue.increment(totalFunding),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
+    for (const log of (logsRes.logs || [])) {
+        // Filter: We only care about events that affect PnL/Tax
+        const isTaxEvent = ['realized_pnl', 'funding', 'commission'].includes(log.type) || log.info.includes('funding');
+        
+        if (!isTaxEvent) continue;
+
+        // 1. Identify Asset
+        const { ticker, name, type } = mapKrakenFuturesSymbol(log.asset);
+        const investmentId = `FUTURE-${ticker}`; // Consistent ID: FUTURE-ETH-PERP
+        
+        // 2. Prepare Data
+        const amount = log.amount; // This is the USD amount (or collateral currency)
+        const date = new Date(log.date); // Kraken sends ISO string in 'date' field
+        
+        // 3. Convert to EUR for Tax Report
+        // Note: Assuming collateral is USD. If Kraken uses other collateral, check log.asset
+        const currency = 'USD'; 
+        const eurRate = await getDailyEurRate(date, currency); 
+        const valueInEur = amount * eurRate;
+
+        // 4. Create References
+        const invRef = investmentsCol.doc(investmentId);
+        const txRef = invRef.collection('transactions').doc(`log-${log.id}`); // Unique ID based on Log ID
+
+        // 5. Upsert Investment Parent (So it shows up in the portfolio list)
+        batch.set(invRef, {
+            id: investmentId,
+            type: type, // 'Future' - Critical for portfolio.ts logic
+            ticker: ticker,
+            name: name,
+            status: 'Active',
+            updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+
+        // 6. Save Transaction (Granular Data for Tax Report)
+        // We map everything to 'Sell' so portfolio.ts sums it into Realized PnL.
+        // For Futures, we treat "TotalAmount" as the Net PnL of that event.
+        batch.set(txRef, {
+            id: `log-${log.id}`,
+            type: 'Sell', 
+            date: date.toISOString(),
+            quantity: 0, // 0 quantity ensures cost basis is 0, so PnL = totalAmount
+            pricePerUnit: 0,
+            totalAmount: amount, // The Gain/Loss in original currency
+            currency: currency,
+            exchangeRate: eurRate,
+            valueInEur: valueInEur, // The Taxable Gain/Loss in EUR
+            rawType: log.type, // Store original type for debugging
+            rawInfo: log.info
+        }, { merge: true });
+
+        processedCount++;
     }
 
     await batch.commit();
-    return { ok: true, message: 'Sync Completo' };
+    return { ok: true, message: `Synced ${processedCount} PnL events` };
 
   } catch (err: any) {
     console.error('Sync error:', err);
