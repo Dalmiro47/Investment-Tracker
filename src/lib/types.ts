@@ -2,7 +2,7 @@
 import { z } from 'zod';
 import type { Timestamp } from 'firebase/firestore';
 
-export type InvestmentType = 'Stock' | 'Bond' | 'Crypto' | 'Real Estate' | 'ETF' | 'Interest Account';
+export type InvestmentType = 'Stock' | 'Bond' | 'Crypto' | 'Future' | 'Real Estate' | 'ETF' | 'Interest Account';
 export type InvestmentStatus = 'Active' | 'Sold';
 export type SortKey = 'purchaseDate' | 'performance' | 'totalAmount';
 
@@ -27,6 +27,9 @@ export interface Transaction {
   quantity: number;      // for Sell; 0 for Div/Interest
   pricePerUnit: number;  // for Sell; 0 for Div/Interest
   totalAmount: number;   // quantity * pricePerUnit (Sell) or payment amount (Div/Int)
+  currency?: string;     // 'USD', 'EUR', etc.
+  exchangeRate?: number; // e.g. 0.92 (EUR/USD rate on that day)
+  valueInEur?: number;   // e.g. 27,600 (The totalAmount converted to EUR)
 }
 
 export interface Investment {

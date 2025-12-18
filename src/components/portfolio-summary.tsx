@@ -45,11 +45,11 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
     if (isOpen) setView('estimate');
   }, [isOpen]);
 
-  if (!taxSummary || !taxSettings || !taxSummary.capitalTaxResult || !taxSummary.cryptoTaxResult) {
+  if (!taxSummary || !taxSettings || !taxSummary.capitalTaxResult || !taxSummary.cryptoTaxResult || !taxSummary.futuresTaxResult) {
     return null;
   }
 
-  const { capitalTaxResult: capital, cryptoTaxResult: crypto } = taxSummary;
+  const { capitalTaxResult: capital, cryptoTaxResult: crypto, futuresTaxResult: futuresTax } = taxSummary;
   const shortTermGainsTotal = taxSummary.totalShortTermGains;
 
   const capitalAllowanceRemaining = Math.max(0, (capital.allowance ?? 0) - (capital.allowanceUsed ?? 0));
@@ -166,6 +166,67 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                     <span className="font-mono text-base">{formatCurrency(crypto.total)}</span>
                     </div>
                 </div>
+              </div>
+
+              {/* Futures & Derivatives Section */}
+              <div className="p-4 rounded-md bg-muted/30 border">
+                <h4 className="font-semibold mb-3 flex items-center gap-2">
+                  Futures & Derivatives <span className="text-xs font-normal text-muted-foreground">(§20 Abs. 6 EStG)</span>
+                </h4>
+                {futuresTax.totalGains === 0 && futuresTax.totalLosses === 0 ? (
+                  <p className="text-sm text-muted-foreground italic">No futures trading data available for this year.</p>
+                ) : (
+                  <div className="space-y-2 text-sm">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-muted-foreground">Total Gains</p>
+                        <p className="font-medium text-green-600">+{formatCurrency(futuresTax.totalGains)}</p>
+                      </div>
+                      <div>
+                        <p className="text-muted-foreground">Total Losses</p>
+                        <p className="font-medium text-red-600">-{formatCurrency(futuresTax.totalLosses)}</p>
+                      </div>
+                    </div>
+
+                    <Separator className="my-2" />
+                    
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Deductible Losses (Max {formatCurrency(futuresTax.lossCap)})</span>
+                      <span className="font-medium text-red-500">-{formatCurrency(futuresTax.deductibleLosses)}</span>
+                    </div>
+
+                    {futuresTax.unusedLosses > 0 && (
+                      <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400">
+                        <span>Unused Losses (Carry Forward)</span>
+                        <span>{formatCurrency(futuresTax.unusedLosses)}</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between font-semibold mt-2 pt-2 border-t border-dashed">
+                      <span>Taxable Base</span>
+                      <span>{formatCurrency(futuresTax.taxableBase)}</span>
+                    </div>
+
+                    <div className="pl-2 border-l-2 border-primary/20 mt-2 space-y-1">
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Base Tax ({formatPercent(TAX.abgeltungsteuer)})</span>
+                        <span className="font-mono">{formatCurrency(futuresTax.baseTax)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Solidarity Surcharge ({formatPercent(TAX.soliRate)})</span>
+                        <span className="font-mono">{formatCurrency(futuresTax.soli)}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">Church Tax ({taxSettings.churchTaxRate ? formatPercent(taxSettings.churchTaxRate) : '0%'})</span>
+                        <span className="font-mono">{formatCurrency(futuresTax.church)}</span>
+                      </div>
+                    </div>
+                    <div className="flex justify-between font-bold mt-2 pt-2 border-t border-dashed">
+                      <span>Total Futures Tax</span>
+                      <span className="font-mono text-base">{formatCurrency(futuresTax.total)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Grand Total */}
