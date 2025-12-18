@@ -3,6 +3,7 @@
 import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary, ViewMode } from './types';
 import { dec, add, sub, mul, div, toNum } from './money';
 import { isCryptoSellTaxFree, calcCapitalTax, calcCryptoTax, CapitalTaxResult, CryptoTaxResult } from './tax';
+import { calcFuturesTax, FuturesTaxResult } from './futures-tax';
 import { differenceInDays, parseISO, endOfYear } from 'date-fns';
 import { computeSavings } from '@/lib/savings';
 import type { SavingsRateChange } from './types-savings';
@@ -31,6 +32,8 @@ export interface PositionMetrics {
   capitalGainsYear: number; // Realized P/L from stocks, etfs, bonds
   dividendsYear: number;
   interestYear: number;
+  futuresGainsYear: number;  // Profitable futures trades (separate for §20 Abs. 6)
+  futuresLossesYear: number; // Losing futures trades (separate for §20 Abs. 6)
 
   // Display-centric metrics
   realizedPLDisplay: number; // P/L to show based on filter (all or year)
@@ -80,7 +83,7 @@ export function calculatePositionMetrics(
   const zeroMetrics: Omit<PositionMetrics, 'type'> & {type: Investment['type']} = {
     buyQty: 0, buyPrice: 0, soldQtyAll: 0, soldQtyYear: 0, availableQty: 0, purchaseValue: 0, marketValue: 0,
     realizedPLAll: 0, realizedPLYear: 0, unrealizedPL: 0, shortTermCryptoGainYear: 0,
-    capitalGainsYear: 0, dividendsYear: 0, interestYear: 0,
+    capitalGainsYear: 0, dividendsYear: 0, interestYear: 0, futuresGainsYear: 0, futuresLossesYear: 0,
     realizedProceedsAll: 0, realizedProceedsYear: 0,
     realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0,
     soldCostBasis: 0,
@@ -147,8 +150,11 @@ export function calculatePositionMetrics(
 
   const sells = txs.filter(t => t.type === 'Sell');
   
+  // Helper to get EUR value safely (prefers valueInEur if available, falls back to totalAmount)
+  const getEur = (t: Transaction) => dec(t.valueInEur ?? t.totalAmount);
+  
   const soldQtyAll = sells.reduce((sum, t) => add(sum, dec(t.quantity)), dec(0));
-  const realizedProceedsAll = sells.reduce((sum, t) => add(sum, dec(t.totalAmount)), dec(0));
+  const realizedProceedsAll = sells.reduce((sum, t) => add(sum, getEur(t)), dec(0));
   const sellCostBasisAll = mul(soldQtyAll.gt(buyQty) ? buyQty : soldQtyAll, buyPrice);
   const realizedPLAll = sub(realizedProceedsAll, sellCostBasisAll);
   
@@ -163,12 +169,14 @@ export function calculatePositionMetrics(
 
   let dividendsYear = dec(0);
   let interestYear = dec(0);
+  let futuresGainsYear = dec(0);
+  let futuresLossesYear = dec(0);
 
   if (yearFilter.kind === 'year') {
     const sellsInYear = sells.filter(t => new Date(t.date).getFullYear() === yearFilter.year);
     if (sellsInYear.length > 0) {
       soldQtyYear = sellsInYear.reduce((sum, t) => add(sum, dec(t.quantity)), dec(0));
-      const realizedProceedsYearRaw = sellsInYear.reduce((sum, t) => add(sum, dec(t.totalAmount)), dec(0));
+      const realizedProceedsYearRaw = sellsInYear.reduce((sum, t) => add(sum, getEur(t)), dec(0));
       realizedProceedsYear = realizedProceedsYearRaw;
       const sellCostBasisYear = mul(soldQtyYear, buyPrice);
       realizedPLYear = sub(realizedProceedsYear, sellCostBasisYear);
@@ -187,6 +195,14 @@ export function calculatePositionMetrics(
             }
         }
       });
+    } else if (inv.type === 'Future') {
+      // NEW: Futures (§20 Abs. 6) — separate gains and losses
+      if (realizedPLYear.gt(0)) {
+        futuresGainsYear = realizedPLYear;
+      } else if (realizedPLYear.lt(0)) {
+        // Store as positive absolute value
+        futuresLossesYear = realizedPLYear.abs();
+      }
     } else {
         // Stocks, ETFs, Bonds are capital gains
         capitalGainsYear = realizedPLYear;
@@ -194,11 +210,11 @@ export function calculatePositionMetrics(
 
     dividendsYear = dividends
       .filter(t => new Date(t.date).getFullYear() === yearFilter.year)
-      .reduce((sum, t) => add(sum, dec(t.totalAmount)), dec(0));
+      .reduce((sum, t) => add(sum, getEur(t)), dec(0));
 
     interestYear = interests
       .filter(t => new Date(t.date).getFullYear() === yearFilter.year)
-      .reduce((sum, t) => add(sum, dec(t.totalAmount)), dec(0));
+      .reduce((sum, t) => add(sum, getEur(t)), dec(0));
   }
 
   const availableQty = buyQty.sub(soldQtyAll).gt(0) ? buyQty.sub(soldQtyAll) : dec(0);
@@ -236,6 +252,8 @@ export function calculatePositionMetrics(
     capitalGainsYear: toNum(capitalGainsYear),
     dividendsYear: toNum(dividendsYear),
     interestYear: toNum(interestYear),
+      futuresGainsYear: toNum(futuresGainsYear),
+      futuresLossesYear: toNum(futuresLossesYear),
     realizedPLDisplay: toNum(realizedPLDisplay),
     totalPLDisplay: toNum(totalPLDisplay),
     performancePct: toNum(performancePct, 4),
@@ -344,6 +362,7 @@ export function aggregateBySymbol(
 export interface YearTaxSummary {
   capitalTaxResult: CapitalTaxResult;
   cryptoTaxResult: CryptoTaxResult;
+  futuresTaxResult: FuturesTaxResult;
   grandTotal: number;
   totalShortTermGains: number;
 }
@@ -618,10 +637,23 @@ export function aggregateByType(
         shortTermGains: shortTermCryptoGains,
       });
     
+      // Calculate Futures tax - sum up the data from all investments
+      const totalFuturesGains = metricsForTax.reduce((sum, p) => sum + p.futuresGainsYear, 0);
+      const totalFuturesLosses = metricsForTax.reduce((sum, p) => sum + p.futuresLossesYear, 0);
+
+      const futuresTaxResult = calcFuturesTax({
+        year: yearFilter.year,
+        filing: taxSettings.filingStatus,
+        churchRate,
+        totalGains: totalFuturesGains,
+        totalLosses: totalFuturesLosses,
+      });
+    
       taxSummary = {
         capitalTaxResult,
         cryptoTaxResult,
-        grandTotal: capitalTaxResult.total + cryptoTaxResult.total,
+        futuresTaxResult,
+        grandTotal: capitalTaxResult.total + cryptoTaxResult.total + futuresTaxResult.total,
         totalShortTermGains: shortTermCryptoGains,
       };
     }

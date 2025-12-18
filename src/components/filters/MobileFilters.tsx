@@ -11,10 +11,11 @@ interface Props {
   setView: (v: View) => void;
   mode: Mode;
   setMode: (m: Mode) => void;
+  isFuturesView?: boolean;
   children?: React.ReactNode;
 }
 
-export function MobileFilters({ view, setView, mode, setMode, children }: Props) {
+export function MobileFilters({ view, setView, mode, setMode, isFuturesView, children }: Props) {
   return (
     <div className="md:hidden my-3 flex items-center justify-between">
       <div className="inline-flex rounded-md border border-border bg-muted p-1">
@@ -29,7 +30,7 @@ export function MobileFilters({ view, setView, mode, setMode, children }: Props)
           List
         </button>
       </div>
-      {view==="list" && (
+      {view==="list" && !isFuturesView && (
         <div className="ml-2 inline-flex rounded-md border border-border bg-muted p-1">
           <button
             onClick={() => setMode("aggregated")}

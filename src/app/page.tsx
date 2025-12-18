@@ -557,11 +557,27 @@ function DashboardPageContent() {
       ? 'Turn on German Tax Report to view the estimate.'
       : undefined;
 
+  // Force List view when Futures is selected
+  React.useEffect(() => {
+    if (typeFilter === 'Futures') {
+      setViewMode('list');
+    }
+  }, [typeFilter]);
+
+  const isFuturesView = typeFilter === 'Futures';
+
   const setModeSafely = (mode: 'grid' | 'list') => {
     if (isTaxView && mode === 'list') {
       toast({
         title: 'German Tax Report',
         description: 'Turn off German Tax Report to use List view.',
+      });
+      return;
+    }
+    if (isFuturesView && mode === 'grid') {
+      toast({
+        title: 'Futures View',
+        description: 'Futures trades require List view to display the table properly.',
       });
       return;
     }
@@ -671,7 +687,7 @@ function DashboardPageContent() {
 
   const investmentsView = (
     <>
-      <MobileFilters view={viewMode} setView={setViewMode} mode={listMode} setMode={setListMode}>
+      <MobileFilters view={viewMode} setView={setViewMode} mode={listMode} setMode={setListMode} isFuturesView={isFuturesView}>
         <div className="mt-2 -mx-4 px-4">
          {advancedFilters}
         </div>
@@ -843,8 +859,10 @@ function DashboardPageContent() {
               <div className="flex items-center gap-2 ml-4">
                 <div className="rounded-md border p-1">
                   <button
-                    className={`px-3 py-1 rounded ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                    className={`px-3 py-1 rounded ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'} ${isFuturesView ? 'opacity-50 cursor-not-allowed' : ''}`}
                     onClick={() => setModeSafely('grid')}
+                    disabled={isFuturesView}
+                    aria-disabled={isFuturesView}
                   >
                     Cards
                   </button>
@@ -865,11 +883,14 @@ function DashboardPageContent() {
                       {isTaxView && (
                         <TooltipContent>Turn off German Tax Report to use List view.</TooltipContent>
                       )}
+                      {isFuturesView && (
+                        <TooltipContent>Futures trades require List view (already active).</TooltipContent>
+                      )}
                     </Tooltip>
                   </TooltipProvider>
                 </div>
 
-                {viewMode === 'list' && (
+                {viewMode === 'list' && !isFuturesView && (
                   <div className="rounded-md border p-1">
                     <button
                       className={`px-3 py-1 rounded ${listMode === 'aggregated' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
