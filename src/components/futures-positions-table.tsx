@@ -5,6 +5,7 @@ import { useState, useTransition } from "react";
 import { format } from "date-fns";
 import type { FuturePosition } from "@/lib/types";
 import { useFuturesPositions } from "@/hooks/useFuturesPositions";
+import { useKrakenTaxData } from "@/hooks/useKrakenTaxData";
 import { syncKrakenFutures } from "@/app/actions/kraken-sync";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -32,6 +33,7 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
   });
 
   const rows: FuturePosition[] = positions ?? hookPositions;
+  const currentUserId = userId ?? user?.uid;
 
   const handleSync = () => {
     if (!user) {
@@ -71,7 +73,8 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
               <TableHead>Asset</TableHead>
               <TableHead className="text-right">Side</TableHead>
               <TableHead className="text-right">Entry</TableHead>
-              <TableHead className="text-right">Collateral</TableHead>
+              <TableHead className="text-right">Notional Value (EUR)</TableHead>
+              <TableHead className="text-right">Realized P&L</TableHead>
               <TableHead className="text-right">Funding (Net)</TableHead>
               <TableHead className="text-right">Status</TableHead>
             </TableRow>
@@ -80,24 +83,62 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
             {rows.length === 0 ? (
               <TableRow><TableCell colSpan={6} className="h-24 text-center">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
             ) : rows.map((pos) => (
-              <TableRow key={pos.id}>
-                <TableCell className="font-medium">{pos.asset}</TableCell>
-                <TableCell className="text-right">
-                  <Badge variant="outline" className={pos.side === 'LONG' ? "text-emerald-500 border-emerald-500/30" : "text-red-500 border-red-500/30"}>
-                    {pos.side}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">{formatCurrency(pos.entryPrice)}</TableCell>
-                <TableCell className="text-right">{formatCurrency(pos.collateral)}</TableCell>
-                <TableCell className={cn("text-right font-mono", (pos.accumulatedFunding || 0) < 0 ? "text-red-500" : "text-emerald-500")}>
-                  {formatCurrency(pos.accumulatedFunding ?? 0)}
-                </TableCell>
-                <TableCell className="text-right text-xs text-muted-foreground">{pos.status}</TableCell>
-              </TableRow>
+              <FuturesRowWithTaxData key={pos.id} position={pos} userId={currentUserId} />
             ))}
           </TableBody>
         </Table>
       </div>
     </div>
+  );
+}
+
+// Separate component to handle tax data fetching per row
+function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition; userId?: string | null }) {
+  const taxData = useKrakenTaxData(userId || undefined, position.asset);
+  
+  // HEAVY LIFTING: Dynamic Currency Conversion
+  const exchangeRate = position.exchangeRate || 0.85332;
+  const entryPriceEur = position.entryPriceEur || (position.entryPrice * exchangeRate);
+  const notionalValueEur = position.collateral || (position.size * entryPriceEur);
+  
+  // German number formatting
+  const formatEuro = (val: number) => 
+    new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(val);
+  
+  return (
+    <TableRow>
+      <TableCell className="font-medium">{position.asset}</TableCell>
+      <TableCell className="text-right">
+        <Badge variant="outline" className={position.side === 'LONG' ? "text-emerald-500 border-emerald-500/30" : "text-red-500 border-red-500/30"}>
+          {position.side}
+        </Badge>
+      </TableCell>
+      <TableCell className="text-right">
+        <span className="font-semibold text-primary block">
+          {formatEuro(entryPriceEur)}
+        </span>
+        <span className="text-[10px] text-muted-foreground">
+          ({position.entryPrice?.toLocaleString('en-US') || 0} USD @ {exchangeRate.toFixed(5)})
+        </span>
+      </TableCell>
+      <TableCell className="text-right">{formatEuro(notionalValueEur)}</TableCell>
+      <TableCell className={cn("text-right font-mono", taxData.realizedPnlEur < 0 ? "text-red-500" : "text-emerald-500")}>
+        {formatEuro(taxData.realizedPnlEur)}
+        {taxData.count > 0 && (
+          <span className="block text-[10px] text-muted-foreground">
+            ({taxData.count} entries)
+          </span>
+        )}
+      </TableCell>
+      <TableCell className={cn("text-right font-mono", taxData.fundingNetEur < 0 ? "text-red-500" : "text-emerald-500")}>
+        {formatEuro(taxData.fundingNetEur)}
+        {taxData.count > 0 && (
+          <span className="block text-[10px] text-muted-foreground">
+            ({taxData.count} entries)
+          </span>
+        )}
+      </TableCell>
+      <TableCell className="text-right text-xs text-muted-foreground">{position.status}</TableCell>
+    </TableRow>
   );
 }

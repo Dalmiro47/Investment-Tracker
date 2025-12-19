@@ -41,6 +41,7 @@ import { MobileFilters } from '@/components/filters/MobileFilters';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { FifoSellDialog } from "@/components/fifo-sell-dialog";
 import FuturesPositionsTable from '@/components/futures-positions-table';
+import KrakenTaxSummaryCards from '@/components/KrakenTaxSummaryCards';
 
 const todayISO = () => new Date().toISOString().slice(0,10);
 const getCurrentRate = (rates?: SavingsRateChange[]) => {
@@ -703,11 +704,14 @@ function DashboardPageContent() {
           </div>
         ) : viewMode === 'list' ? (
             typeFilter === 'Futures' ? (
-              <Card>
-                <CardContent>
-                  <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? null} />
-                </CardContent>
-              </Card>
+              <div className="space-y-6">
+                <KrakenTaxSummaryCards userId={user?.uid ?? null} year={new Date().getFullYear()} />
+                <Card>
+                  <CardContent>
+                    <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? null} />
+                  </CardContent>
+                </Card>
+              </div>
             ) : (
               <Card>
                 <CardContent>
