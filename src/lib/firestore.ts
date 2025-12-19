@@ -15,10 +15,25 @@ const toTS = (d: Date) => Timestamp.fromDate(d);
 
 const fromInvestmentDoc = (snap: any): Investment => {
   const d = snap.data();
+  
+  // Safely handle purchaseDate conversion
+  let purchaseDate: string | undefined;
+  try {
+    if (d.purchaseDate?.toDate) {
+      purchaseDate = d.purchaseDate.toDate().toISOString();
+    } else if (d.purchaseDate) {
+      const date = new Date(d.purchaseDate);
+      purchaseDate = isNaN(date.getTime()) ? undefined : date.toISOString();
+    }
+  } catch (e) {
+    console.warn('Invalid purchaseDate for investment', snap.id, e);
+    purchaseDate = undefined;
+  }
+  
   return {
     id: snap.id,
     ...d,
-    purchaseDate: (d.purchaseDate?.toDate?.() ?? new Date(d.purchaseDate)).toISOString(),
+    purchaseDate,
     createdAt: d.createdAt?.toDate?.().toISOString() ?? undefined,
     updatedAt: d.updatedAt?.toDate?.().toISOString() ?? undefined,
   } as Investment;
