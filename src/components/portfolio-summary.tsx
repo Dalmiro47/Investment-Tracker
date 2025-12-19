@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { TAX, defaultCapitalAllowance, defaultCryptoThreshold } from '@/lib/tax';
 import { Separator } from './ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { AuditExportButton } from './tax/AuditExportButton';
 
 
 const CHART_COLORS = [
@@ -35,9 +36,10 @@ interface TaxEstimateDialogProps {
     taxSummary: YearTaxSummary | null;
     year: number;
     taxSettings: TaxSettings | null;
+    futuresTransactions?: Transaction[];
 }
 
-function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings }: TaxEstimateDialogProps) {
+function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings, futuresTransactions = [] }: TaxEstimateDialogProps) {
   const [view, setView] = useState<'estimate' | 'law'>('estimate');
 
   // Reset to main view on open
@@ -54,6 +56,9 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
 
   const capitalAllowanceRemaining = Math.max(0, (capital.allowance ?? 0) - (capital.allowanceUsed ?? 0));
   const cryptoThresholdRemaining = Math.max(0, (crypto.threshold ?? 0) - (shortTermGainsTotal ?? 0));
+
+  // Prepare Futures transactions for audit export
+  const investmentsForAudit = futuresTransactions.filter(t => new Date(t.date).getFullYear() === year);
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
@@ -224,6 +229,14 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                     <div className="flex justify-between font-bold mt-2 pt-2 border-t border-dashed">
                       <span>Total Futures Tax</span>
                       <span className="font-mono text-base">{formatCurrency(futuresTax.total)}</span>
+                    </div>
+                    
+                    {/* Export Audit CSV Button */}
+                    <div className="mt-4 pt-4 border-t">
+                      <AuditExportButton 
+                        transactions={investmentsForAudit} 
+                          year={year}
+                      />
                     </div>
                   </div>
                 )}
@@ -798,6 +811,14 @@ function PortfolioSummaryImpl({
                 taxSettings={taxSettings}
             />
         )}
+                <TaxEstimateDialog 
+                  isOpen={isEstimateOpen}
+                  onOpenChange={setIsEstimateOpen}
+                  taxSummary={taxSummary}
+                  year={yearFilter.year}
+                  taxSettings={taxSettings}
+                  futuresTransactions={summaryData?.futuresTransactions}
+                />
         </TooltipProvider>
     );
 }

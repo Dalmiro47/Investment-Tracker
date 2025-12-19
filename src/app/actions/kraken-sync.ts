@@ -95,18 +95,17 @@ export async function syncKrakenFutures(userId: string): Promise<KrakenFuturesSy
         const investmentId = `FUTURE-${ticker}`; // Consistent ID: FUTURE-ETH-PERP
         
         // 2. Prepare Data
-        const amount = log.amount; // This is the USD amount (or collateral currency)
+        const amount = log.amount; // Gain/Loss amount in collateral currency
         const date = new Date(log.date); // Kraken sends ISO string in 'date' field
-        
-        // 3. Convert to EUR for Tax Report
-        // Note: Assuming collateral is USD. If Kraken uses other collateral, check log.asset
-        const currency = 'USD'; 
-        const eurRate = await getDailyEurRate(date, currency); 
+
+        // 3. Convert to EUR for Tax Report using collateral currency
+        const currency = mapKrakenCollateralCurrency(log.asset);
+        const eurRate = await getDailyEurRate(date, currency);
         const valueInEur = amount * eurRate;
 
-        // 4. Create References
+        // 4. Create References (Use log.id as Firestore doc ID for idempotency)
         const invRef = investmentsCol.doc(investmentId);
-        const txRef = invRef.collection('transactions').doc(`log-${log.id}`); // Unique ID based on Log ID
+        const txRef = invRef.collection('transactions').doc(String(log.id)); // IDEMPOTENCY KEY: log.id
 
         // 5. Upsert Investment Parent (So it shows up in the portfolio list)
         batch.set(invRef, {
@@ -119,10 +118,10 @@ export async function syncKrakenFutures(userId: string): Promise<KrakenFuturesSy
         }, { merge: true });
 
         // 6. Save Transaction (Granular Data for Tax Report)
-        // We map everything to 'Sell' so portfolio.ts sums it into Realized PnL.
-        // For Futures, we treat "TotalAmount" as the Net PnL of that event.
+        // Use Kraken's log.id as the document ID to prevent duplicates (merge: true)
         batch.set(txRef, {
-            id: `log-${log.id}`,
+            krakenId: String(log.id), // Store Kraken ID for audit trail
+            id: String(log.id),
             type: 'Sell', 
             date: date.toISOString(),
             quantity: 0, // 0 quantity ensures cost basis is 0, so PnL = totalAmount
@@ -131,8 +130,13 @@ export async function syncKrakenFutures(userId: string): Promise<KrakenFuturesSy
             currency: currency,
             exchangeRate: eurRate,
             valueInEur: valueInEur, // The Taxable Gain/Loss in EUR
-            rawType: log.type, // Store original type for debugging
-            rawInfo: log.info
+            status: 'COMPLETED',
+            rawType: log.type, // Store original type for debugging (realiz_pnl, funding, commission)
+            rawInfo: log.info,
+            metadata: {
+              fxSource: 'Frankfurter API',
+              rawKrakenType: log.type
+            }
         }, { merge: true });
 
         processedCount++;

@@ -393,6 +393,7 @@ export interface AggregatedSummary {
     economicValue: number;
   };
   taxSummary: YearTaxSummary | null;
+  futuresTransactions?: Transaction[];  // For audit export
 }
 
 function getEtfMetrics(etfSummaries: EtfSimSummary[], yearFilter: YearFilter): {
@@ -662,5 +663,15 @@ export function aggregateByType(
       };
     }
 
-    return { rows, totals: finalTotals, taxSummary };
+    // Collect Futures transactions for audit export
+    let futuresTransactionsForAudit: Transaction[] = [];
+    if (yearFilter.kind === 'year') {
+      futuresTransactionsForAudit = investments
+        .filter(inv => inv.type === 'Future')
+        .flatMap(inv =>
+          (transactionsMap[inv.id] ?? []).filter(tx => new Date(tx.date).getFullYear() === yearFilter.year)
+        );
+    }
+
+    return { rows, totals: finalTotals, taxSummary, futuresTransactions: futuresTransactionsForAudit };
 }
