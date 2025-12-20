@@ -1,7 +1,7 @@
 // components/futures-positions-table.tsx
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect, useMemo } from "react";
 import { format } from "date-fns";
 import type { FuturePosition } from "@/lib/types";
 import { useFuturesPositions } from "@/hooks/useFuturesPositions";
@@ -72,16 +72,18 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
             <TableRow>
               <TableHead>Asset</TableHead>
               <TableHead className="text-right">Side</TableHead>
-              <TableHead className="text-right">Entry</TableHead>
-              <TableHead className="text-right">Notional Value (EUR)</TableHead>
+              <TableHead className="text-right">Entry (Avg)</TableHead>
+              <TableHead className="text-right">Notional (EUR)</TableHead>
+              {/* Grouped P&L Columns */}
               <TableHead className="text-right">Realized P&L</TableHead>
+              <TableHead className="text-right">Unrealized P&L</TableHead>
               <TableHead className="text-right">Funding (Net)</TableHead>
               <TableHead className="text-right">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
-              <TableRow><TableCell colSpan={6} className="h-24 text-center">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={8} className="h-24 text-center">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
             ) : rows.map((pos) => (
               <FuturesRowWithTaxData key={pos.id} position={pos} userId={currentUserId} />
             ))}
@@ -95,16 +97,63 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
 // Separate component to handle tax data fetching per row
 function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition; userId?: string | null }) {
   const taxData = useKrakenTaxData(userId || undefined, position.asset);
-  
+  const [currentPrice, setCurrentPrice] = useState<number | null>(null);
+
   // HEAVY LIFTING: Dynamic Currency Conversion
   const exchangeRate = position.exchangeRate || 0.85332;
   const entryPriceEur = position.entryPriceEur || (position.entryPrice * exchangeRate);
   const notionalValueEur = position.collateral || (position.size * entryPriceEur);
-  
+
   // German number formatting
   const formatEuro = (val: number) => 
     new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(val);
-  
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchPrice = async () => {
+      try {
+        const response = await fetch(`/api/kraken/prices?asset=${position.asset}`);
+
+        if (!response.ok) {
+          throw new Error(`Failed to fetch price: ${response.statusText}`);
+        }
+
+        const contentType = response.headers.get('content-type');
+        if (!contentType || !contentType.includes('application/json')) {
+          throw new Error('Invalid response format');
+        }
+
+        const data = await response.json();
+        if (isMounted) {
+          setCurrentPrice(parseFloat(data.price));
+        }
+      } catch (error) {
+        console.error('Error fetching price:', error);
+        setCurrentPrice(null); // Reset price on error
+      }
+    };
+
+    fetchPrice();
+
+    const interval = setInterval(fetchPrice, 10000); // Refresh every 10 seconds
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [position.asset]);
+
+  const unrealizedPnL = useMemo(() => {
+    if (currentPrice === null) return null;
+
+    const entryPrice = parseFloat(position.entryPrice);
+    const size = parseFloat(position.size);
+    const exchangeRate = parseFloat(position.exchangeRate);
+
+    const pnl = (currentPrice - entryPrice) * size * exchangeRate;
+    return position.side === 'SHORT' ? -pnl : pnl;
+  }, [currentPrice, position.entryPrice, position.size, position.exchangeRate, position.side]);
+
   return (
     <TableRow>
       <TableCell className="font-medium">{position.asset}</TableCell>
@@ -114,31 +163,28 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
         </Badge>
       </TableCell>
       <TableCell className="text-right">
-        <span className="font-semibold text-primary block">
-          {formatEuro(entryPriceEur)}
-        </span>
-        <span className="text-[10px] text-muted-foreground">
-          ({position.entryPrice?.toLocaleString('en-US') || 0} USD @ {exchangeRate.toFixed(5)})
-        </span>
+        <span className="font-semibold text-primary block">{formatEuro(entryPriceEur)}</span>
+        <span className="text-[10px] text-muted-foreground">({position.entryPriceUsd} USD)</span>
       </TableCell>
       <TableCell className="text-right">{formatEuro(notionalValueEur)}</TableCell>
+
+      {/* Grouped P&L Data */}
       <TableCell className={cn("text-right font-mono", taxData.realizedPnlEur < 0 ? "text-red-500" : "text-emerald-500")}>
         {formatEuro(taxData.realizedPnlEur)}
-        {taxData.count > 0 && (
-          <span className="block text-[10px] text-muted-foreground">
-            ({taxData.count} entries)
-          </span>
-        )}
       </TableCell>
+
+      <TableCell className={cn("text-right font-mono", 
+        unrealizedPnL === null ? "text-muted-foreground" : 
+        unrealizedPnL < 0 ? "text-red-500" : "text-emerald-500",
+        "animate-pulse" // Keep the live feedback pulse
+      )}>
+        {unrealizedPnL === null ? "-" : formatEuro(unrealizedPnL)}
+      </TableCell>
+
       <TableCell className={cn("text-right font-mono", taxData.fundingNetEur < 0 ? "text-red-500" : "text-emerald-500")}>
         {formatEuro(taxData.fundingNetEur)}
-        {taxData.count > 0 && (
-          <span className="block text-[10px] text-muted-foreground">
-            ({taxData.count} entries)
-          </span>
-        )}
       </TableCell>
-      <TableCell className="text-right text-xs text-muted-foreground">{position.status}</TableCell>
+      <TableCell className="text-right text-xs text-muted-foreground uppercase">{position.status}</TableCell>
     </TableRow>
   );
 }
