@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useMemo, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
@@ -460,9 +459,7 @@ function PortfolioSummaryImpl({
                     fill: CHART_COLORS[summaryData.rows.findIndex(r => r.type === row.type) % CHART_COLORS.length]
                 };
             })
-            .filter(item => item.value > 0)
-            .sort((a, b) => b.value - a.value);
-
+            .filter(row => row.value > 0); // Ensure 'Future' is included if it has value
     }, [summaryData, donutMode]);
 
     if (!summaryData) {

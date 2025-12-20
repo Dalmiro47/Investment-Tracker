@@ -79,7 +79,7 @@ export async function buildAllYearsSummaryAction(
     calculatePositionMetrics(
       inv,
       transactionsMap[inv.id] ?? [],
-      { kind: 'all' },
+      { kind: 'all', mode: 'combined' },
       rateSchedulesMap[inv.id]
     )
   );
@@ -181,3 +181,5 @@ export async function buildAllYearsSummaryAction(
     totals: { ...totals, performancePct: totalPerformancePct },
   };
 }
+
+export { getInvestments, getAllTransactions };

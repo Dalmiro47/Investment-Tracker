@@ -56,6 +56,7 @@ function buildMockFuturesPositions(userId?: string | null): FuturePosition[] {
       status: 'OPEN',
       openedAt: baseOpened,
       closedAt: null,
+      exchangeRate: 0.92, // USD to EUR conversion rate
     },
     {
       id: 'mock-short-btc-perp',
@@ -72,6 +73,7 @@ function buildMockFuturesPositions(userId?: string | null): FuturePosition[] {
       status: 'OPEN',
       openedAt: Timestamp.fromDate(new Date('2025-01-10T14:00:00Z')),
       closedAt: null,
+      exchangeRate: 0.92, // USD to EUR conversion rate
     },
   ].map((p) => ({
     ...p,

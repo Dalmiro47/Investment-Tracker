@@ -103,11 +103,10 @@ function DashboardPageContent() {
   const [fifoSellSymbol, setFifoSellSymbol] = React.useState<string | null>(null);
 
   const setYearFilterHoldingsSafe = React.useCallback((next: YearFilter) => {
-    setYearFilter(prev => ({
-      kind: next.kind,
-      ...(next.kind === 'year' ? { year: next.year } : {}),
-      mode: next.mode ?? prev.mode ?? 'holdings',
-    }));
+    setYearFilter(next.kind === 'year' 
+      ? { kind: 'year', year: next.year, mode: next.mode ?? 'holdings' }
+      : { kind: 'all', mode: next.mode ?? 'holdings' }
+    );
   }, []);
 
   const fetchAllData = React.useCallback(async (userId: string) => {
@@ -260,6 +259,7 @@ function DashboardPageContent() {
       'Interest Account': 0,
       Bond: 0,
       'Real Estate': 0,
+      Future: 0,
     };
   
     base.forEach(inv => {
@@ -566,6 +566,7 @@ function DashboardPageContent() {
   }, [typeFilter]);
 
   const isFuturesView = typeFilter === 'Futures';
+  const [futuresStatusFilter, setFuturesStatusFilter] = React.useState<'All' | 'OPEN' | 'CLOSED' | 'LIQUIDATED'>('All');
 
   const setModeSafely = (mode: 'grid' | 'list') => {
     if (isTaxView && mode === 'list') {
@@ -627,61 +628,79 @@ function DashboardPageContent() {
           </Tabs>
         </div>
         <div className="flex-grow" />
-        <div className="flex items-center gap-3 w-full sm:w-auto min-w-0">
-          <div className="w-full sm:w-[220px]">
-            <Select
-              value={investmentNameFilter}
-              onValueChange={(v) => setInvestmentNameFilter(v as 'All' | string)}
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Filter by investment" />
+        {!isFuturesView ? (
+          // General filters for investments
+          <div className="flex items-center gap-3 w-full sm:w-auto min-w-0">
+            <div className="w-full sm:w-[220px]">
+              <Select
+                value={investmentNameFilter}
+                onValueChange={(v) => setInvestmentNameFilter(v as 'All' | string)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Filter by investment" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="All">All Investments</SelectItem>
+                  {investmentNameOptions.map((n) => (
+                    <SelectItem key={n} value={n}>{n}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <div className="w-full sm:w-[180px]">
+                      <Select 
+                          value={isTaxView ? 'Sold' : statusFilter}
+                          onValueChange={(value) => setStatusFilter(value as InvestmentStatus | 'All')}
+                          disabled={isTaxView}
+                      >
+                      <SelectTrigger>
+                          <SelectValue placeholder="Filter by status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                          <SelectItem value="All">All Statuses</SelectItem>
+                          <SelectItem value="Active">Active</SelectItem>
+                          <SelectItem value="Sold">Sold</SelectItem>
+                      </SelectContent>
+                      </Select>
+                  </div>
+                </TooltipTrigger>
+                {isTaxView && (
+                  <TooltipContent>
+                    <p>Status is locked to &quot;Sold&quot; in Tax Report view.</p>
+                  </TooltipContent>
+                )}
+              </Tooltip>
+            </TooltipProvider>
+            <Select value={sortKey} onValueChange={(value) => setSortKey(value as SortKey)}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Sort by" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="All">All Investments</SelectItem>
-                {investmentNameOptions.map((n) => (
-                  <SelectItem key={n} value={n}>{n}</SelectItem>
-                ))}
+                <SelectItem value="purchaseDate">Sort by Date</SelectItem>
+                <SelectItem value="performance">Sort by Performance</SelectItem>
+                <SelectItem value="totalAmount">Sort by Total Amount</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <div className="w-full sm:w-[180px]">
-                    <Select 
-                        value={isTaxView ? 'Sold' : statusFilter}
-                        onValueChange={(value) => setStatusFilter(value as InvestmentStatus | 'All')}
-                        disabled={isTaxView}
-                    >
-                    <SelectTrigger>
-                        <SelectValue placeholder="Filter by status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value="All">All Statuses</SelectItem>
-                        <SelectItem value="Active">Active</SelectItem>
-                        <SelectItem value="Sold">Sold</SelectItem>
-                    </SelectContent>
-                    </Select>
-                </div>
-              </TooltipTrigger>
-              {isTaxView && (
-                <TooltipContent>
-                  <p>Status is locked to &quot;Sold&quot; in Tax Report view.</p>
-                </TooltipContent>
-              )}
-            </Tooltip>
-          </TooltipProvider>
-          <Select value={sortKey} onValueChange={(value) => setSortKey(value as SortKey)}>
-            <SelectTrigger className="w-full sm:w-[180px]">
-              <SelectValue placeholder="Sort by" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="purchaseDate">Sort by Date</SelectItem>
-              <SelectItem value="performance">Sort by Performance</SelectItem>
-              <SelectItem value="totalAmount">Sort by Total Amount</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        ) : (
+          // Futures-specific filter
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <Select value={futuresStatusFilter} onValueChange={(value) => setFuturesStatusFilter(value as 'All' | 'OPEN' | 'CLOSED' | 'LIQUIDATED')}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Filter by status" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="All">All Statuses</SelectItem>
+                <SelectItem value="OPEN">Open</SelectItem>
+                <SelectItem value="CLOSED">Closed</SelectItem>
+                <SelectItem value="LIQUIDATED">Liquidated</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
     </>
   );
@@ -708,7 +727,7 @@ function DashboardPageContent() {
                 <KrakenTaxSummaryCards userId={user?.uid ?? null} year={new Date().getFullYear()} />
                 <Card>
                   <CardContent>
-                    <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? null} />
+                    <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? null} statusFilter={futuresStatusFilter} />
                   </CardContent>
                 </Card>
               </div>
@@ -935,7 +954,7 @@ function DashboardPageContent() {
               typeFilter === 'Futures' ? (
                 <Card>
                   <CardContent>
-                    <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? ""} />
+                    <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? ""} statusFilter={futuresStatusFilter} />
                   </CardContent>
                 </Card>
               ) : (
