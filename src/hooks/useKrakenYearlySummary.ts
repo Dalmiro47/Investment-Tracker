@@ -11,7 +11,7 @@ export interface YearlyTaxSummary {
   taxableAmount: number;   // Preliminary taxable base
 }
 
-export function useKrakenYearlySummary(userId: string | undefined, year: number = 2025) {
+export function useKrakenYearlySummary(userId: string | undefined, year?: number | null) {
   const [summary, setSummary] = useState<YearlyTaxSummary>({
     grossGainsEur: 0, grossLossesEur: 0, netPnlEur: 0,
     totalFundingEur: 0, totalFeesEur: 0, taxableAmount: 0
@@ -20,16 +20,22 @@ export function useKrakenYearlySummary(userId: string | undefined, year: number 
   useEffect(() => {
     if (!userId) return;
 
-    const startOfYear = Timestamp.fromDate(new Date(`${year}-01-01T00:00:00Z`));
-    const endOfYear = Timestamp.fromDate(new Date(`${year}-12-31T23:59:59Z`));
-
     const logsRef = collection(db, 'users', userId, 'kraken_logs');
-    // We fetch everything for the year to perform the complex German tax math
-    const q = query(
-      logsRef,
-      where('timestamp', '>=', startOfYear),
-      where('timestamp', '<=', endOfYear)
-    );
+    
+    // If year is provided, filter by year; otherwise fetch all (lifetime)
+    let q;
+    if (year != null) {
+      const startOfYear = Timestamp.fromDate(new Date(`${year}-01-01T00:00:00Z`));
+      const endOfYear = Timestamp.fromDate(new Date(`${year}-12-31T23:59:59Z`));
+      q = query(
+        logsRef,
+        where('timestamp', '>=', startOfYear),
+        where('timestamp', '<=', endOfYear)
+      );
+    } else {
+      // No year filter - fetch all records for lifetime summary
+      q = query(logsRef);
+    }
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const totals = snapshot.docs.reduce((acc, doc) => {

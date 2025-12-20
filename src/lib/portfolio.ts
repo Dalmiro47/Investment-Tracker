@@ -1,5 +1,3 @@
-
-
 import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary, ViewMode } from './types';
 import { dec, add, sub, mul, div, toNum } from './money';
 import { isCryptoSellTaxFree, calcCapitalTax, calcCryptoTax, CapitalTaxResult, CryptoTaxResult } from './tax';
@@ -7,6 +5,7 @@ import { calcFuturesTax, FuturesTaxResult } from './futures-tax';
 import { differenceInDays, parseISO, endOfYear } from 'date-fns';
 import { computeSavings } from '@/lib/savings';
 import type { SavingsRateChange } from './types-savings';
+import { YearlyTaxSummary } from '@/hooks/useKrakenYearlySummary';
 
 
 export interface PositionMetrics {
@@ -429,8 +428,16 @@ export function aggregateByType(
   etfSummaries: EtfSimSummary[],
   yearFilter: YearFilter,
   taxSettings: TaxSettings | null,
-  rateSchedulesMap: Record<string, SavingsRateChange[]>
+  rateSchedulesMap: Record<string, SavingsRateChange[]>,
+  krakenSummary?: YearlyTaxSummary,
+  krakenUnrealized?: number,     // New: Live Floating P&L
+  krakenOpenNotional?: number,   // New: Live Market Value
+  krakenEntryValueEur?: number,  // New: Cost Basis of open positions
+  hasOpenPositions?: boolean     // New: Track if there are active open positions
 ): AggregatedSummary {
+    
+    // 📊 Telemetry: Log aggregator inputs for debugging
+    console.log(`📊 Aggregator Input: mode=${yearFilter.mode}, hasOpen=${hasOpenPositions}, unrealized=${krakenUnrealized}`);
     
     // active today?
     const isActiveToday = (inv: Investment) => (inv.purchaseQuantity ?? 0) > (inv.totalSoldQty ?? 0) || inv.type === 'Interest Account';
@@ -475,9 +482,13 @@ export function aggregateByType(
         }
     }
     
-    const metricsPerInvestment = includedInvestments.map(inv => 
+    // HEAVY LIFTING: Prevent duplication - Filter out 'Future' type investments
+    // Future row will be handled entirely through manual push logic with live data
+    const metricsPerInvestment = includedInvestments
+      .filter(inv => inv.type !== 'Future') // Exclude Future type from metrics aggregation
+      .map(inv => 
         calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], yearFilter, rateSchedulesMap[inv.id])
-    );
+      );
     
     const byType: Record<string, any> = {};
     metricsPerInvestment.forEach(p => {
@@ -581,7 +592,67 @@ export function aggregateByType(
         });
       }
     }
-    
+
+    // Decouple Visibility from Value: Determine if the Future row should be shown
+    const realizedPL = krakenSummary?.taxableAmount || 0;
+    const unrealizedPL = krakenUnrealized || 0;
+    const isHoldings = yearFilter.mode === 'holdings';
+    const isRealized = yearFilter.mode === 'realized';
+    const hasRealizedData = (krakenSummary?.taxableAmount !== 0);
+
+    // Absolute Visibility Logic - Single unified condition
+    const shouldShowFuture = isHoldings 
+      ? !!hasOpenPositions 
+      : isRealized 
+      ? hasRealizedData 
+      : (!!hasOpenPositions || hasRealizedData);
+
+    // Consolidated Values: All open positions summed into ONE row
+    if (shouldShowFuture) {
+      let displayMarketValue = krakenOpenNotional || 0;  // Notional from all open positions
+      let displayUnrealized = unrealizedPL;              // Floating P&L from all open positions
+      let displayRealized = realizedPL;
+      let displayCostBasis = krakenEntryValueEur || 0;   // Cost basis from all open positions
+
+      // Mode-specific value calculation
+      if (isRealized) {
+        // Realized mode: show only closed positions (realized P&L)
+        displayMarketValue = realizedPL;
+        displayUnrealized = 0;
+        displayCostBasis = 0;
+      } else if (isHoldings) {
+        // Holdings mode: show only open positions (unrealized P&L)
+        displayRealized = 0;
+      }
+      // Combined mode: show both open and closed positions
+
+      const displayTotalPL = displayRealized + displayUnrealized;
+      // Economic Value: marketValue + realizedPL for accurate Donut chart
+      const displayEconomicValue = displayMarketValue + displayRealized;
+
+      // Robust Performance Calculation - Prevent NaN
+      // Uses displayTotalPL for consistency with the selected view mode
+      let displayPerformancePct = 0;
+      if (displayCostBasis > 0) {
+        displayPerformancePct = displayTotalPL / displayCostBasis;
+      } else if (displayTotalPL !== 0) {
+        // Fallback: use direction of P&L when no cost basis
+        displayPerformancePct = displayTotalPL > 0 ? 1 : -1;
+      }
+
+      // Single consolidated row for all Future positions
+      rows.push({
+        type: 'Future',
+        costBasis: displayCostBasis,
+        marketValue: displayMarketValue,
+        realizedPL: displayRealized,
+        unrealizedPL: displayUnrealized,
+        totalPL: displayTotalPL,
+        performancePct: displayPerformancePct,
+        economicValue: displayEconomicValue,
+      });
+    }
+
     const totals = rows.reduce((acc, row) => {
         acc.costBasis += row.costBasis;
         acc.marketValue += row.marketValue;

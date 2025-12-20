@@ -19,9 +19,10 @@ type Props = {
   positions?: FuturePosition[];
   useMockData?: boolean;
   userId?: string | null;
+  statusFilter?: 'All' | 'OPEN' | 'CLOSED' | 'LIQUIDATED';
 };
 
-export default function FuturesPositionsTable({ positions, useMockData = true, userId }: Props) {
+export default function FuturesPositionsTable({ positions, useMockData = true, userId, statusFilter = 'All' }: Props) {
   const { user } = useAuth();
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -32,7 +33,10 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
     useMockData,
   });
 
-  const rows: FuturePosition[] = positions ?? hookPositions;
+  const rows: FuturePosition[] = (positions ?? hookPositions).filter(pos => {
+    if (statusFilter === 'All') return true;
+    return pos.status === statusFilter;
+  });
   const currentUserId = userId ?? user?.uid;
 
   const handleSync = () => {
@@ -101,7 +105,7 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
 
   // HEAVY LIFTING: Dynamic Currency Conversion
   const exchangeRate = position.exchangeRate || 0.85332;
-  const entryPriceEur = position.entryPriceEur || (position.entryPrice * exchangeRate);
+  const entryPriceEur = position.entryPrice * exchangeRate;
   const notionalValueEur = position.collateral || (position.size * entryPriceEur);
 
   // German number formatting
@@ -113,7 +117,10 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
 
     const fetchPrice = async () => {
       try {
-        const response = await fetch(`/api/kraken/prices?asset=${position.asset}`);
+        // Normalize asset: "ETH/USD Perp" → "ETH"
+        const cleanAsset = position.asset.split('/')[0].split(' ')[0].split('-')[0].toUpperCase();
+        
+        const response = await fetch(`/api/kraken/prices?asset=${cleanAsset}`);
 
         if (!response.ok) {
           throw new Error(`Failed to fetch price: ${response.statusText}`);
@@ -146,9 +153,9 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
   const unrealizedPnL = useMemo(() => {
     if (currentPrice === null) return null;
 
-    const entryPrice = parseFloat(position.entryPrice);
-    const size = parseFloat(position.size);
-    const exchangeRate = parseFloat(position.exchangeRate);
+    const entryPrice = position.entryPrice;
+    const size = position.size;
+    const exchangeRate = position.exchangeRate;
 
     const pnl = (currentPrice - entryPrice) * size * exchangeRate;
     return position.side === 'SHORT' ? -pnl : pnl;
@@ -164,7 +171,7 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
       </TableCell>
       <TableCell className="text-right">
         <span className="font-semibold text-primary block">{formatEuro(entryPriceEur)}</span>
-        <span className="text-[10px] text-muted-foreground">({position.entryPriceUsd} USD)</span>
+        <span className="text-[10px] text-muted-foreground">({position.entryPrice.toFixed(2)} USD)</span>
       </TableCell>
       <TableCell className="text-right">{formatEuro(notionalValueEur)}</TableCell>
 

@@ -1,42 +1,40 @@
 import { NextResponse } from 'next/server';
 
 const krakenSymbolMap: Record<string, string> = {
-  ETH: 'PI_ETHUSD',
-  BTC: 'PI_XBTUSD',
+  ETH: 'PF_ETHUSD',  // Perpetual Futures contract for exact mark price
+  BTC: 'PF_XBTUSD',  // Perpetual Futures contract for exact mark price
   // Agregar más mapeos según sea necesario
 };
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const asset = searchParams.get('asset');
+  const asset = searchParams.get('asset')?.toUpperCase(); // Ensure uppercase
 
-  if (!asset) {
-    return NextResponse.json({ error: 'Asset parameter is required' }, { status: 400 });
+  if (!asset || !krakenSymbolMap[asset]) {
+    return NextResponse.json({ price: 0, error: 'Unsupported asset' }, { status: 200 }); // Return 0 instead of 400 to prevent front-end crashes
   }
 
   try {
-    const response = await fetch(`https://futures.kraken.com/derivatives/api/v3/tickers`);
-
+    const response = await fetch(`https://futures.kraken.com/derivatives/api/v3/tickers`, {
+      next: { revalidate: 30 } // Cache for 30 seconds
+    });
+    
     if (!response.ok) {
-      return NextResponse.json({ error: 'Failed to fetch data from Kraken API' }, { status: 500 });
+      console.error('❌ Kraken API returned non-OK status:', response.status);
+      return NextResponse.json({ price: 0 }, { status: 200 });
     }
 
     const data = await response.json();
-    const krakenSymbol = krakenSymbolMap[asset];
-
-    if (!krakenSymbol) {
-      return NextResponse.json({ error: 'Unsupported asset' }, { status: 400 });
-    }
-
-    const ticker = data.tickers.find((t: any) => t.symbol === krakenSymbol);
+    const ticker = data.tickers.find((t: any) => t.symbol === krakenSymbolMap[asset]);
 
     if (!ticker) {
-      return NextResponse.json({ error: 'Ticker not found' }, { status: 404 });
+      console.warn(`⚠️ Ticker not found for ${asset}`);
+      return NextResponse.json({ price: 0 }, { status: 200 });
     }
 
-    return NextResponse.json({ price: ticker.markPrice });
+    return NextResponse.json({ price: parseFloat(ticker.markPrice) });
   } catch (error) {
-    console.error('Error fetching Kraken prices:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('❌ Kraken API Error:', error);
+    return NextResponse.json({ price: 0 }, { status: 200 });
   }
 }

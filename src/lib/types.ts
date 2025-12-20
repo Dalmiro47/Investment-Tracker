@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 import type { Timestamp } from 'firebase/firestore';
 
@@ -95,6 +94,8 @@ export interface FuturePosition {
   status: 'OPEN' | 'CLOSED' | 'LIQUIDATED';
   openedAt: Timestamp;           // when the position was opened
   closedAt?: Timestamp | null;   // optional close/liquidation time
+
+  exchangeRate: number;            // conversion rate to EUR
 }
 
 export interface EtfSimYearBucket {
