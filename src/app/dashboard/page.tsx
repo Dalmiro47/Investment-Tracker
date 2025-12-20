@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { aggregateByType } from '@/lib/portfolio';
 import { useKrakenYearlySummary } from '@/hooks/useKrakenYearlySummary';
