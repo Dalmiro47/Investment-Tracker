@@ -29,10 +29,25 @@ export default function DashboardPage() {
 
   const { positions: futuresPositions } = useFuturesPositions({ 
     userId: user?.uid,
-    useMockData: true // Temporary: Enable mock data for testing
+    useMockData: false // Now using real Kraken data
   });
 
-  console.log('📊 Futures Positions:', futuresPositions);
+  console.log('📊 Futures Positions from hook:', {
+    positions: futuresPositions,
+    length: futuresPositions?.length,
+    type: typeof futuresPositions,
+    isArray: Array.isArray(futuresPositions)
+  });
+
+  if (futuresPositions && futuresPositions.length > 0) {
+    console.log('📋 Detailed Position Data:', futuresPositions.map(p => ({
+      asset: p.asset,
+      status: p.status,
+      statusType: typeof p.status,
+      statusTrimmed: p.status?.trim(),
+      statusUpperCase: p.status?.trim().toUpperCase()
+    })));
+  }
 
   const [futuresLive, setFuturesLive] = useState({
     unrealizedPnLSum: 0,
@@ -45,61 +60,45 @@ export default function DashboardPage() {
     let intervalId: NodeJS.Timeout;
 
     const updatePrices = async () => {
-      if (!futuresPositions || futuresPositions.length === 0) {
-        console.log('⚠️ No futures positions found');
-        setFuturesLive({ unrealizedPnLSum: 0, totalNotionalEur: 0, totalEntryValueEur: 0 });
-        return;
-      }
-      
-      console.log(`🔄 Updating prices for ${futuresPositions.length} positions...`);
-      let unrealizedPnLSum = 0;
-      let totalNotionalEur = 0;
-      let totalEntryValueEur = 0;
+      let uPnL = 0;
+      let totalNotional = 0;
+      let totalEntryValue = 0;
 
-      for (const pos of futuresPositions) {
-        // Robust status check
-        const isPosOpen = pos.status?.trim().toUpperCase() === 'OPEN';
-        console.log(`  ➡️ ${pos.asset}: status=${pos.status}, isPosOpen=${isPosOpen}`);
-        if (!isPosOpen) continue;
+      for (const pos of (futuresPositions || [])) {
+        if (pos.status?.trim().toUpperCase() !== 'OPEN') continue;
 
-        // HEAVY LIFTING: Normalización del Asset
-        // Convierte "ETH/USD Perp" o "eth-usd" en "ETH" para que route.ts lo entienda
         const cleanAsset = pos.asset.split('/')[0].split(' ')[0].split('-')[0].toUpperCase();
-
+        
         try {
-          const response = await fetch(`/api/kraken/prices?asset=${cleanAsset}`);
-          const data = await response.json();
-          
-          // Force number conversion
+          const res = await fetch(`/api/kraken/prices?asset=${cleanAsset}`);
+          const data = await res.json();
           const markPrice = Number(data.price);
-          console.log(`📡 Price for ${cleanAsset}: ${markPrice}`);
 
-          // Only calculate if we got a valid price
           if (markPrice > 0) {
             const entryPrice = Number(pos.entryPrice || 0);
-            const size = Number(pos.size || 0);
+            const qty = Number(pos.size || 0); // Cantidad de monedas (e.g., 550 ADA)
             const rate = Number(pos.exchangeRate || 1);
 
-            // Cálculo de P&L (Invertido para SHORT)
-            const diff = markPrice - entryPrice;
-            const unrealized = diff * size * rate;
-            const pnl = pos.side === 'SHORT' ? -unrealized : unrealized;
+            // 1. Cost Basis (Entry Notional en EUR)
+            const entryValueEur = qty * entryPrice * rate;
 
-            unrealizedPnLSum += pnl;
-            totalNotionalEur += size * markPrice * rate;
-            totalEntryValueEur += size * entryPrice * rate;
-            console.log(`    ✅ ${cleanAsset}: PnL=${pnl.toFixed(2)}€, Notional=${(size * markPrice * rate).toFixed(2)}€`);
-          } else {
-            console.log(`    ⚠️ ${cleanAsset}: Invalid price ${markPrice}`);
+            // 2. P&L Real para SHORT y LONG
+            // SHORT: (Entrada - Actual) * Cantidad → Si entrada > actual = Ganancia
+            // LONG: (Actual - Entrada) * Cantidad → Si actual > entrada = Ganancia
+            const diffUsd = pos.side === 'SHORT' ? (entryPrice - markPrice) * qty : (markPrice - entryPrice) * qty;
+            const pnlEur = diffUsd * rate;
+
+            // 3. Market Value (Nocional Actual en EUR)
+            const marketValueEur = qty * markPrice * rate;
+
+            uPnL += pnlEur;
+            totalNotional += marketValueEur;
+            totalEntryValue += entryValueEur;
           }
-        } catch (err) {
-          console.error(`    ❌ ${cleanAsset}: Fetch error`, err);
-          // Ignore individual fetch errors
-        }
+        } catch (e) { console.error(`Error en ${cleanAsset}`); }
       }
 
-      console.log(`💰 Final totals: PnL=${unrealizedPnLSum.toFixed(2)}€, Notional=${totalNotionalEur.toFixed(2)}€, Entry=${totalEntryValueEur.toFixed(2)}€`);
-      setFuturesLive(prev => ({ ...prev, unrealizedPnLSum, totalNotionalEur, totalEntryValueEur }));
+      setFuturesLive({ unrealizedPnLSum: uPnL, totalNotionalEur: totalNotional, totalEntryValueEur: totalEntryValue });
     };
 
     updatePrices();
@@ -150,30 +149,35 @@ export default function DashboardPage() {
     fetchEtfSummaries();
   }, [user]);
 
+  // Update: Ensure live values are passed to the aggregator
   const summaryData = useMemo(() => {
-    // Track if there are any open positions to control visibility (bulletproof)
-    const hasOpenPositions = (futuresPositions ?? []).some(p => p.status?.trim().toUpperCase() === 'OPEN');
+    // 1. Calculate the visibility flag explicitly - Ensure futuresPositions is always an array
+    const positionsArray = Array.isArray(futuresPositions) ? futuresPositions : [];
     
-    // Temporary console.table for debugging data flow
-    console.table({ hasOpen: hasOpenPositions, uPnL: futuresLive.unrealizedPnLSum, realized: krakenSummary?.taxableAmount });
-    
-    // Bridge verification: Ensure hasOpenPositions reaches aggregator
-    console.log('🚀 Pushing to Aggregator:', { hasOpenPositions, unrealized: futuresLive.unrealizedPnLSum });
-    
+    const hasOpenPositions = positionsArray.length > 0 && positionsArray
+      .some(p => p.status?.trim().toUpperCase() === 'OPEN');
+
+    console.log('✅ Calculated hasOpenPositions:', hasOpenPositions, 'from', positionsArray.length, 'positions');
+
+    // 2. HEAVY LIFTING: Precise Argument Mapping
     return aggregateByType(
-      investments,
-      transactionsMap,
-      etfSummaries,
-      yearFilter,
-      isTaxView ? taxSettings : null,
-      rateSchedulesMap,
-      krakenSummary,
-      futuresLive.unrealizedPnLSum,
-      futuresLive.totalNotionalEur,
-      futuresLive.totalEntryValueEur,
-      hasOpenPositions
+      investments,           // 1
+      transactionsMap,       // 2
+      etfSummaries,          // 3
+      yearFilter,            // 4
+      isTaxView ? taxSettings : null, // 5
+      rateSchedulesMap,      // 6
+      krakenSummary,         // 7
+      futuresLive.unrealizedPnLSum,   // 8 (krakenUnrealized)
+      futuresLive.totalNotionalEur,   // 9 (krakenOpenNotional)
+      futuresLive.totalEntryValueEur, // 10 (krakenEntryValueEur)
+      hasOpenPositions       // 11 (hasOpenPositions)
     );
-  }, [investments, transactionsMap, etfSummaries, yearFilter, isTaxView, taxSettings, rateSchedulesMap, krakenSummary, futuresLive, futuresPositions]);
+  }, [
+    investments, transactionsMap, etfSummaries, yearFilter, 
+    isTaxView, taxSettings, rateSchedulesMap, krakenSummary, 
+    futuresLive, futuresPositions
+  ]);
 
   return (
     <div>

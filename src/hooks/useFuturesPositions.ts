@@ -44,7 +44,7 @@ function buildMockFuturesPositions(userId?: string | null): FuturePosition[] {
     {
       id: 'mock-long-eth-perp',
       asset: 'ETH/USD Perp',
-      side: 'LONG',
+      side: 'LONG' as const,
       leverage: 5,
       entryPrice: 2400,
       markPrice: 2550,
@@ -53,7 +53,7 @@ function buildMockFuturesPositions(userId?: string | null): FuturePosition[] {
       size: 6000, // notional
       unrealizedPnL: 150, // simplified for demo
       accumulatedFunding: -12.5,
-      status: 'OPEN',
+      status: 'OPEN' as const,
       openedAt: baseOpened,
       closedAt: null,
       exchangeRate: 0.92, // USD to EUR conversion rate
@@ -61,7 +61,7 @@ function buildMockFuturesPositions(userId?: string | null): FuturePosition[] {
     {
       id: 'mock-short-btc-perp',
       asset: 'BTC/USD Perp',
-      side: 'SHORT',
+      side: 'SHORT' as const,
       leverage: 3,
       entryPrice: 65000,
       markPrice: 63000,
@@ -70,7 +70,7 @@ function buildMockFuturesPositions(userId?: string | null): FuturePosition[] {
       size: 15000,
       unrealizedPnL: 450,
       accumulatedFunding: 22.1,
-      status: 'OPEN',
+      status: 'OPEN' as const,
       openedAt: Timestamp.fromDate(new Date('2025-01-10T14:00:00Z')),
       closedAt: null,
       exchangeRate: 0.92, // USD to EUR conversion rate
@@ -88,6 +88,7 @@ export function useFuturesPositions(
   opts: UseFuturesPositionsOptions = {}
 ): UseFuturesPositionsState {
   const { userId, useMockData = false } = opts;
+  
   const [state, setState] = useState<UseFuturesPositionsState>({
     positions: [],
     loading: true,

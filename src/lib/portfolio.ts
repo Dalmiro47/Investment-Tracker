@@ -430,319 +430,327 @@ export function aggregateByType(
   taxSettings: TaxSettings | null,
   rateSchedulesMap: Record<string, SavingsRateChange[]>,
   krakenSummary?: YearlyTaxSummary,
-  krakenUnrealized?: number,     // New: Live Floating P&L
-  krakenOpenNotional?: number,   // New: Live Market Value
-  krakenEntryValueEur?: number,  // New: Cost Basis of open positions
-  hasOpenPositions?: boolean     // New: Track if there are active open positions
+  krakenUnrealized?: number,
+  krakenOpenNotional?: number,
+  krakenEntryValueEur?: number,
+  hasOpenPositions?: boolean
 ): AggregatedSummary {
-    
-    // 📊 Telemetry: Log aggregator inputs for debugging
-    console.log(`📊 Aggregator Input: mode=${yearFilter.mode}, hasOpen=${hasOpenPositions}, unrealized=${krakenUnrealized}`);
-    
-    // active today?
-    const isActiveToday = (inv: Investment) => (inv.purchaseQuantity ?? 0) > (inv.totalSoldQty ?? 0) || inv.type === 'Interest Account';
-    // existed by the end of the selected year?
-    const existedByYearEnd = (inv: Investment, year: number) => {
-        const p = parseISO(inv.purchaseDate);
-        const eoy = endOfYear(new Date(Date.UTC(year, 0, 1)));
-        return p.getTime() <= eoy.getTime();
-    };
-    const hasSellsInYear = (txs: Transaction[], year: number) => txs.some(tx => tx.type === 'Sell' && new Date(tx.date).getFullYear() === year);
+  const isActiveToday = (inv: Investment) =>
+    (inv.purchaseQuantity ?? 0) > (inv.totalSoldQty ?? 0) || inv.type === 'Interest Account';
 
-    let includedInvestments = investments;
+  const existedByYearEnd = (inv: Investment, year: number) => {
+    const p = parseISO(inv.purchaseDate);
+    const eoy = endOfYear(new Date(Date.UTC(year, 0, 1)));
+    return p.getTime() <= eoy.getTime();
+  };
 
-    if (yearFilter.kind === 'year') {
-        switch (yearFilter.mode) {
-            case 'realized':
-                includedInvestments = investments.filter(inv => hasSellsInYear(transactionsMap[inv.id] ?? [], yearFilter.year));
-                break;
-            case 'holdings':
-                includedInvestments = investments.filter(inv => isActiveToday(inv) && existedByYearEnd(inv, yearFilter.year));
-                break;
-            case 'combined':
-            default:
-                includedInvestments = investments.filter(inv => 
-                    hasSellsInYear(transactionsMap[inv.id] ?? [], yearFilter.year) || 
-                    (isActiveToday(inv) && existedByYearEnd(inv, yearFilter.year))
-                );
-                break;
-        }
-    } else { // kind is 'all'
-         switch (yearFilter.mode) {
-            case 'realized':
-                includedInvestments = investments.filter(inv => (inv.totalSoldQty ?? 0) > 0);
-                break;
-            case 'holdings':
-                includedInvestments = investments.filter(isActiveToday);
-                break;
-            case 'combined':
-            default:
-                includedInvestments = investments; // all investments
-                break;
-        }
+  const hasSellsInYear = (txs: Transaction[], year: number) =>
+    txs.some(tx => tx.type === 'Sell' && new Date(tx.date).getFullYear() === year);
+
+  let includedInvestments = investments;
+
+  if (yearFilter.kind === 'year') {
+    switch (yearFilter.mode) {
+      case 'realized':
+        includedInvestments = investments.filter(inv =>
+          hasSellsInYear(transactionsMap[inv.id] ?? [], yearFilter.year)
+        );
+        break;
+      case 'holdings':
+        includedInvestments = investments.filter(
+          inv => isActiveToday(inv) && existedByYearEnd(inv, yearFilter.year)
+        );
+        break;
+      case 'combined':
+      default:
+        includedInvestments = investments.filter(
+          inv =>
+            hasSellsInYear(transactionsMap[inv.id] ?? [], yearFilter.year) ||
+            (isActiveToday(inv) && existedByYearEnd(inv, yearFilter.year))
+        );
+        break;
     }
-    
-    // HEAVY LIFTING: Prevent duplication - Filter out 'Future' type investments
-    // Future row will be handled entirely through manual push logic with live data
-    const metricsPerInvestment = includedInvestments
-      .filter(inv => inv.type !== 'Future') // Exclude Future type from metrics aggregation
-      .map(inv => 
-        calculatePositionMetrics(inv, transactionsMap[inv.id] ?? [], yearFilter, rateSchedulesMap[inv.id])
-      );
-    
-    const byType: Record<string, any> = {};
-    metricsPerInvestment.forEach(p => {
-      if (!byType[p.type]) {
-        byType[p.type] = {
-          type: p.type,
-          costBasis: dec(0),
-          marketValue: dec(0),
-          realizedPL: dec(0),
-          unrealizedPL: dec(0),
-          totalPL: dec(0),
-          purchaseValue: dec(0),
-          perfBase: dec(0),
-          realizedValue: dec(0),
-        };
-      }
-      const t = byType[p.type];
-
-      const remainingBasis =
-        p.type === 'Interest Account' ? dec(p.purchaseValue)
-                                      : mul(dec(p.availableQty), dec(p.buyPrice));
-
-      const soldBasisAll  = mul(dec(p.soldQtyAll),  dec(p.buyPrice));
-      const soldBasisYear = mul(dec(p.soldQtyYear), dec(p.buyPrice));
-      const soldBasis     = (yearFilter.kind === 'all') ? soldBasisAll : soldBasisYear;
-
-      const realizedValueSlice =
-        (yearFilter.kind === 'all') ? dec(p.realizedProceedsAll) : dec(p.realizedProceedsYear);
-
-      let displayCostBasis = remainingBasis;
-      if (yearFilter.mode === 'realized') {
-        displayCostBasis = (p.type === 'Interest Account') ? dec(0) : soldBasis;
-      } else if (yearFilter.mode === 'combined') {
-        displayCostBasis = (p.type === 'Interest Account') ? remainingBasis
-                          : add(remainingBasis, soldBasis);
-      }
-
-      let perfBaseAdd = remainingBasis;
-      if (yearFilter.mode === 'realized') {
-        perfBaseAdd = (p.type === 'Interest Account') ? dec(0) : soldBasis;
-      } else if (yearFilter.mode === 'combined') {
-        perfBaseAdd = (p.type === 'Interest Account') ? remainingBasis
-                    : add(remainingBasis, soldBasis);
-      }
-
-      t.costBasis     = add(t.costBasis, displayCostBasis);
-      t.marketValue   = add(t.marketValue, dec(p.marketValue));
-      t.realizedPL    = add(t.realizedPL, dec(p.realizedPLDisplay));
-      t.unrealizedPL  = add(t.unrealizedPL, dec(p.unrealizedPL));
-      t.totalPL       = add(t.totalPL, dec(p.totalPLDisplay));
-      t.purchaseValue = add(t.purchaseValue, dec(p.purchaseValue));
-      t.perfBase      = add(t.perfBase, perfBaseAdd);
-      t.realizedValue = add(t.realizedValue, realizedValueSlice);
-    });
-
-    const rows = Object.values(byType).map(t => {
-        let marketValue  = t.marketValue;
-        let unrealizedPL = t.unrealizedPL;
-        let realizedPL   = t.realizedPL;
-
-        if (yearFilter.mode === 'realized') {
-          marketValue  = t.realizedValue;
-          unrealizedPL = dec(0);
-        } else if (yearFilter.mode === 'holdings') {
-          realizedPL = dec(0);
-        }
-
-        const totalPL = add(unrealizedPL, realizedPL);
-
-        const econValue =
-          (yearFilter.mode === 'realized')
-            ? marketValue
-            : add(marketValue, realizedPL);
-
-        return {
-            type: t.type,
-            costBasis: toNum(t.costBasis),
-            marketValue: toNum(marketValue),
-            realizedPL: toNum(realizedPL),
-            unrealizedPL: toNum(unrealizedPL),
-            totalPL: toNum(totalPL),
-            performancePct: toNum(t.perfBase.gt(0) ? div(totalPL, t.perfBase) : dec(0), 4),
-            economicValue: toNum(econValue),
-        };
-    });
-
-
-    if (etfSummaries.length > 0 && yearFilter.mode !== 'realized') {
-      const etfMetrics = getEtfMetrics(etfSummaries, yearFilter);
-      if (etfMetrics.costBasis > 0 || etfMetrics.marketValue > 0) {
-        const totalPL = etfMetrics.realizedPL + etfMetrics.unrealizedPL;
-        rows.push({
-            type: 'ETF',
-            costBasis: etfMetrics.costBasis,
-            marketValue: etfMetrics.marketValue,
-            realizedPL: etfMetrics.realizedPL,
-            unrealizedPL: etfMetrics.unrealizedPL,
-            totalPL: totalPL,
-            performancePct: etfMetrics.costBasis > 0 ? totalPL / etfMetrics.costBasis : 0,
-            economicValue: etfMetrics.marketValue + etfMetrics.realizedPL,
-        });
-      }
+  } else {
+    switch (yearFilter.mode) {
+      case 'realized':
+        includedInvestments = investments.filter(inv => (inv.totalSoldQty ?? 0) > 0);
+        break;
+      case 'holdings':
+        includedInvestments = investments.filter(isActiveToday);
+        break;
+      case 'combined':
+      default:
+        includedInvestments = investments;
+        break;
     }
+  }
 
-    // Decouple Visibility from Value: Determine if the Future row should be shown
-    const realizedPL = krakenSummary?.taxableAmount || 0;
-    const unrealizedPL = krakenUnrealized || 0;
-    const isHoldings = yearFilter.mode === 'holdings';
-    const isRealized = yearFilter.mode === 'realized';
-    const hasRealizedData = (krakenSummary?.taxableAmount !== 0);
+  const metricsPerInvestment = includedInvestments
+    .filter(inv => inv.type !== 'Future')
+    .map(inv =>
+      calculatePositionMetrics(
+        inv,
+        transactionsMap[inv.id] ?? [],
+        yearFilter,
+        rateSchedulesMap[inv.id]
+      )
+    );
 
-    // Absolute Visibility Logic - Single unified condition
-    const shouldShowFuture = isHoldings 
-      ? !!hasOpenPositions 
-      : isRealized 
-      ? hasRealizedData 
-      : (!!hasOpenPositions || hasRealizedData);
+  const byType: Record<string, any> = {};
 
-    // Consolidated Values: All open positions summed into ONE row
-    if (shouldShowFuture) {
-      let displayMarketValue = krakenOpenNotional || 0;  // Notional from all open positions
-      let displayUnrealized = unrealizedPL;              // Floating P&L from all open positions
-      let displayRealized = realizedPL;
-      let displayCostBasis = krakenEntryValueEur || 0;   // Cost basis from all open positions
-
-      // Mode-specific value calculation
-      if (isRealized) {
-        // Realized mode: show only closed positions (realized P&L)
-        displayMarketValue = realizedPL;
-        displayUnrealized = 0;
-        displayCostBasis = 0;
-      } else if (isHoldings) {
-        // Holdings mode: show only open positions (unrealized P&L)
-        displayRealized = 0;
-      }
-      // Combined mode: show both open and closed positions
-
-      const displayTotalPL = displayRealized + displayUnrealized;
-      // Economic Value: marketValue + realizedPL for accurate Donut chart
-      const displayEconomicValue = displayMarketValue + displayRealized;
-
-      // Robust Performance Calculation - Prevent NaN
-      // Uses displayTotalPL for consistency with the selected view mode
-      let displayPerformancePct = 0;
-      if (displayCostBasis > 0) {
-        displayPerformancePct = displayTotalPL / displayCostBasis;
-      } else if (displayTotalPL !== 0) {
-        // Fallback: use direction of P&L when no cost basis
-        displayPerformancePct = displayTotalPL > 0 ? 1 : -1;
-      }
-
-      // Single consolidated row for all Future positions
-      rows.push({
-        type: 'Future',
-        costBasis: displayCostBasis,
-        marketValue: displayMarketValue,
-        realizedPL: displayRealized,
-        unrealizedPL: displayUnrealized,
-        totalPL: displayTotalPL,
-        performancePct: displayPerformancePct,
-        economicValue: displayEconomicValue,
-      });
-    }
-
-    const totals = rows.reduce((acc, row) => {
-        acc.costBasis += row.costBasis;
-        acc.marketValue += row.marketValue;
-        acc.realizedPL += row.realizedPL;
-        acc.unrealizedPL += row.unrealizedPL;
-        acc.totalPL += row.totalPL;
-        const typeSummary = byType[row.type];
-        if(typeSummary) {
-          acc.purchaseValue = add(acc.purchaseValue, typeSummary.purchaseValue);
-        } else if (row.type === 'ETF') {
-          acc.purchaseValue = add(acc.purchaseValue, dec(row.costBasis));
-        }
-        return acc;
-    }, { costBasis: 0, marketValue: 0, realizedPL: 0, unrealizedPL: 0, totalPL: 0, purchaseValue: dec(0) });
-
-    const finalTotals = {
-        costBasis: totals.costBasis,
-        marketValue: totals.marketValue,
-        realizedPL: totals.realizedPL,
-        unrealizedPL: totals.unrealizedPL,
-        totalPL: totals.totalPL,
-        performancePct: totals.purchaseValue.gt(0) ? totals.totalPL / toNum(totals.purchaseValue) : 0,
-        economicValue: (yearFilter.mode === 'realized')
-            ? totals.marketValue
-            : totals.marketValue + totals.realizedPL,
-    };
-    
-    let taxSummary: YearTaxSummary | null = null;
-    if (yearFilter.kind === 'year' && taxSettings) {
-      const metricsForTax = investments.map(inv =>
-        calculatePositionMetrics(
-          inv,
-          transactionsMap[inv.id] ?? [],
-          yearFilter,
-          rateSchedulesMap[inv.id]
-        )
-      );
-
-      const churchRate = (taxSettings as any).churchTaxRate ?? (taxSettings as any).churchRate ?? 0;
-    
-      const capitalIncome = metricsForTax
-        .reduce((sum, p) => sum + p.capitalGainsYear + p.dividendsYear + p.interestYear, 0);
-    
-      const shortTermCryptoGains = metricsForTax
-        .reduce((sum, p) => sum + p.shortTermCryptoGainYear, 0);
-    
-      const capitalTaxResult = calcCapitalTax({
-        year: yearFilter.year,
-        filing: taxSettings.filingStatus,
-        churchRate,
-        capitalIncome,
-      });
-    
-      const cryptoTaxResult = calcCryptoTax({
-        year: yearFilter.year,
-        marginalRate: taxSettings.cryptoMarginalRate,
-        churchRate,
-        shortTermGains: shortTermCryptoGains,
-      });
-    
-      // Calculate Futures tax - sum up the data from all investments
-      const totalFuturesGains = metricsForTax.reduce((sum, p) => sum + p.futuresGainsYear, 0);
-      const totalFuturesLosses = metricsForTax.reduce((sum, p) => sum + p.futuresLossesYear, 0);
-
-      const futuresTaxResult = calcFuturesTax({
-        year: yearFilter.year,
-        filing: taxSettings.filingStatus,
-        churchRate,
-        totalGains: totalFuturesGains,
-        totalLosses: totalFuturesLosses,
-      });
-    
-      taxSummary = {
-        capitalTaxResult,
-        cryptoTaxResult,
-        futuresTaxResult,
-        grandTotal: capitalTaxResult.total + cryptoTaxResult.total + futuresTaxResult.total,
-        totalShortTermGains: shortTermCryptoGains,
+  metricsPerInvestment.forEach(p => {
+    if (!byType[p.type]) {
+      byType[p.type] = {
+        type: p.type,
+        costBasis: dec(0),
+        marketValue: dec(0),
+        realizedPL: dec(0),
+        unrealizedPL: dec(0),
+        totalPL: dec(0),
+        purchaseValue: dec(0),
+        perfBase: dec(0),
+        realizedValue: dec(0),
       };
     }
 
-    // Collect Futures transactions for audit export
-    let futuresTransactionsForAudit: Transaction[] = [];
-    if (yearFilter.kind === 'year') {
-      futuresTransactionsForAudit = investments
-        .filter(inv => inv.type === 'Future')
-        .flatMap(inv =>
-          (transactionsMap[inv.id] ?? []).filter(tx => new Date(tx.date).getFullYear() === yearFilter.year)
-        );
+    const t = byType[p.type];
+
+    const remainingBasis =
+      p.type === 'Interest Account'
+        ? dec(p.purchaseValue)
+        : mul(dec(p.availableQty), dec(p.buyPrice));
+
+    const soldBasisAll = mul(dec(p.soldQtyAll), dec(p.buyPrice));
+    const soldBasisYear = mul(dec(p.soldQtyYear), dec(p.buyPrice));
+    const soldBasis = yearFilter.kind === 'all' ? soldBasisAll : soldBasisYear;
+
+    const realizedValueSlice =
+      yearFilter.kind === 'all'
+        ? dec(p.realizedProceedsAll)
+        : dec(p.realizedProceedsYear);
+
+    let displayCostBasis = remainingBasis;
+    if (yearFilter.mode === 'realized') {
+      displayCostBasis = p.type === 'Interest Account' ? dec(0) : soldBasis;
+    } else if (yearFilter.mode === 'combined') {
+      displayCostBasis =
+        p.type === 'Interest Account'
+          ? remainingBasis
+          : add(remainingBasis, soldBasis);
     }
 
-    return { rows, totals: finalTotals, taxSummary, futuresTransactions: futuresTransactionsForAudit };
+    let perfBaseAdd = remainingBasis;
+    if (yearFilter.mode === 'realized') {
+      perfBaseAdd = p.type === 'Interest Account' ? dec(0) : soldBasis;
+    } else if (yearFilter.mode === 'combined') {
+      perfBaseAdd =
+        p.type === 'Interest Account'
+          ? remainingBasis
+          : add(remainingBasis, soldBasis);
+    }
+
+    t.costBasis = add(t.costBasis, displayCostBasis);
+    t.marketValue = add(t.marketValue, dec(p.marketValue));
+    t.realizedPL = add(t.realizedPL, dec(p.realizedPLDisplay));
+    t.unrealizedPL = add(t.unrealizedPL, dec(p.unrealizedPL));
+    t.totalPL = add(t.totalPL, dec(p.totalPLDisplay));
+    t.purchaseValue = add(t.purchaseValue, dec(p.purchaseValue));
+    t.perfBase = add(t.perfBase, perfBaseAdd);
+    t.realizedValue = add(t.realizedValue, realizedValueSlice);
+  });
+
+  const rows = Object.values(byType).map(t => {
+    let marketValue = t.marketValue;
+    let unrealizedPL = t.unrealizedPL;
+    let realizedPL = t.realizedPL;
+
+    if (yearFilter.mode === 'realized') {
+      marketValue = t.realizedValue;
+      unrealizedPL = dec(0);
+    } else if (yearFilter.mode === 'holdings') {
+      realizedPL = dec(0);
+    }
+
+    const totalPL = add(unrealizedPL, realizedPL);
+    const econValue =
+      yearFilter.mode === 'realized'
+        ? marketValue
+        : add(marketValue, realizedPL);
+
+    return {
+      type: t.type,
+      costBasis: toNum(t.costBasis),
+      marketValue: toNum(marketValue),
+      realizedPL: toNum(realizedPL),
+      unrealizedPL: toNum(unrealizedPL),
+      totalPL: toNum(totalPL),
+      performancePct: toNum(t.perfBase.gt(0) ? div(totalPL, t.perfBase) : dec(0), 4),
+      economicValue: toNum(econValue),
+    };
+  });
+
+  if (etfSummaries.length > 0 && yearFilter.mode !== 'realized') {
+    const etfMetrics = getEtfMetrics(etfSummaries, yearFilter);
+    if (etfMetrics.costBasis > 0 || etfMetrics.marketValue > 0) {
+      const totalPL = etfMetrics.realizedPL + etfMetrics.unrealizedPL;
+      rows.push({
+        type: 'ETF',
+        costBasis: etfMetrics.costBasis,
+        marketValue: etfMetrics.marketValue,
+        realizedPL: etfMetrics.realizedPL,
+        unrealizedPL: etfMetrics.unrealizedPL,
+        totalPL,
+        performancePct: etfMetrics.costBasis > 0 ? totalPL / etfMetrics.costBasis : 0,
+        economicValue: etfMetrics.marketValue + etfMetrics.realizedPL,
+      });
+    }
+  }
+
+  // 1. Identify live data from dashboard arguments
+  const liveUnrealized = Number(krakenUnrealized || 0);
+  const liveNotional = Number(krakenOpenNotional || 0);
+  const liveEntryValue = Number(krakenEntryValueEur || 0);
+  const historicalRealized = Number(krakenSummary?.taxableAmount || 0);
+
+  const isHoldings = yearFilter.mode === 'holdings';
+  const isRealized = yearFilter.mode === 'realized';
+
+  // 2. Visibility Decision
+  const hasRealizedData = Math.abs(historicalRealized) > 0.01;
+  const shouldShowFuture = isHoldings ? !!hasOpenPositions : (!!hasOpenPositions || hasRealizedData);
+
+  if (shouldShowFuture) {
+    // 3. Mode-specific mapping
+    const displayUnrealized = isRealized ? 0 : liveUnrealized;
+    const displayRealized = isHoldings ? 0 : historicalRealized;
+    const displayCostBasis = isRealized ? 0 : liveEntryValue;
+    const displayMarketValue = isRealized ? historicalRealized : liveNotional;
+
+    const displayTotalPL = displayRealized + displayUnrealized;
+
+    rows.push({
+      type: 'Future',
+      costBasis: displayCostBasis,
+      marketValue: displayMarketValue,
+      realizedPL: displayRealized,
+      unrealizedPL: displayUnrealized, // FIXED: Now using liveUnrealized
+      totalPL: displayTotalPL,
+      performancePct: displayCostBasis > 0 ? (displayTotalPL / displayCostBasis) : 0,
+      economicValue: displayMarketValue + displayRealized,
+    });
+  }
+
+  const totals = rows.reduce(
+    (acc, row) => {
+      acc.costBasis += row.costBasis;
+      acc.marketValue += row.marketValue;
+      acc.realizedPL += row.realizedPL;
+      acc.unrealizedPL += row.unrealizedPL;
+      acc.totalPL += row.totalPL;
+      const typeSummary = byType[row.type];
+      if (typeSummary) {
+        acc.purchaseValue = add(acc.purchaseValue, typeSummary.purchaseValue);
+      } else if (row.type === 'ETF') {
+        acc.purchaseValue = add(acc.purchaseValue, dec(row.costBasis));
+      }
+      return acc;
+    },
+    { costBasis: 0, marketValue: 0, realizedPL: 0, unrealizedPL: 0, totalPL: 0, purchaseValue: dec(0) }
+  );
+
+  const finalTotals = {
+    costBasis: totals.costBasis,
+    marketValue: totals.marketValue,
+    realizedPL: totals.realizedPL,
+    unrealizedPL: totals.unrealizedPL,
+    totalPL: totals.totalPL,
+    performancePct: totals.purchaseValue.gt(0)
+      ? totals.totalPL / toNum(totals.purchaseValue)
+      : 0,
+    economicValue:
+      yearFilter.mode === 'realized'
+        ? totals.marketValue
+        : totals.marketValue + totals.realizedPL,
+  };
+
+  let taxSummary: YearTaxSummary | null = null;
+  if (yearFilter.kind === 'year' && taxSettings) {
+    const metricsForTax = investments.map(inv =>
+      calculatePositionMetrics(
+        inv,
+        transactionsMap[inv.id] ?? [],
+        yearFilter,
+        rateSchedulesMap[inv.id]
+      )
+    );
+
+    const churchRate = (taxSettings as any).churchTaxRate ?? (taxSettings as any).churchRate ?? 0;
+
+    const capitalIncome = metricsForTax.reduce(
+      (sum, p) => sum + p.capitalGainsYear + p.dividendsYear + p.interestYear,
+      0
+    );
+
+    const shortTermCryptoGains = metricsForTax.reduce(
+      (sum, p) => sum + p.shortTermCryptoGainYear,
+      0
+    );
+
+    const capitalTaxResult = calcCapitalTax({
+      year: yearFilter.year,
+      filing: taxSettings.filingStatus,
+      churchRate,
+      capitalIncome,
+    });
+
+    const cryptoTaxResult = calcCryptoTax({
+      year: yearFilter.year,
+      marginalRate: taxSettings.cryptoMarginalRate,
+      churchRate,
+      shortTermGains: shortTermCryptoGains,
+    });
+
+    const totalFuturesGains = metricsForTax.reduce(
+      (sum, p) => sum + p.futuresGainsYear,
+      0
+    );
+    const totalFuturesLosses = metricsForTax.reduce(
+      (sum, p) => sum + p.futuresLossesYear,
+      0
+    );
+
+    const futuresTaxResult = calcFuturesTax({
+      year: yearFilter.year,
+      filing: taxSettings.filingStatus,
+      churchRate,
+      totalGains: totalFuturesGains,
+      totalLosses: totalFuturesLosses,
+    });
+
+    taxSummary = {
+      capitalTaxResult,
+      cryptoTaxResult,
+      futuresTaxResult,
+      grandTotal: capitalTaxResult.total + cryptoTaxResult.total + futuresTaxResult.total,
+      totalShortTermGains: shortTermCryptoGains,
+    };
+  }
+
+  let futuresTransactionsForAudit: Transaction[] = [];
+  if (yearFilter.kind === 'year') {
+    futuresTransactionsForAudit = investments
+      .filter(inv => inv.type === 'Future')
+      .flatMap(inv =>
+        (transactionsMap[inv.id] ?? []).filter(
+          tx => new Date(tx.date).getFullYear() === yearFilter.year
+        )
+      );
+  }
+
+  return {
+    rows,
+    totals: finalTotals,
+    taxSummary,
+    futuresTransactions: futuresTransactionsForAudit,
+  };
 }

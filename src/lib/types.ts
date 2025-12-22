@@ -5,13 +5,37 @@ export type InvestmentType = 'Stock' | 'Bond' | 'Crypto' | 'Future' | 'Real Esta
 export type InvestmentStatus = 'Active' | 'Sold';
 export type SortKey = 'purchaseDate' | 'performance' | 'totalAmount';
 
-export type TransactionType = 'Sell' | 'Dividend' | 'Interest' | 'Deposit' | 'Withdrawal';
+export type TransactionType = 'Buy' | 'Sell' | 'Dividend' | 'Interest' | 'Deposit' | 'Withdrawal';
 
 export type ViewMode = 'combined' | 'realized' | 'holdings';
 
 export type YearFilter =
   | { kind: 'all'; mode: ViewMode }
   | { kind: 'year'; year: number; mode: ViewMode };
+
+export interface AggregatedSummary {
+  rows: {
+    type: string;
+    costBasis: number;
+    marketValue: number;
+    realizedPL: number;
+    unrealizedPL: number;
+    totalPL: number;
+    performancePct: number;
+    economicValue: number;
+  }[];
+  totals: {
+    costBasis: number;
+    marketValue: number;
+    realizedPL: number;
+    unrealizedPL: number;
+    totalPL: number;
+    performancePct: number;
+    economicValue: number;
+  };
+  taxSummary: any;
+  futuresTransactions?: any[];
+}
 
 export interface TaxSettings {
   churchTaxRate: 0 | 0.08 | 0.09;
