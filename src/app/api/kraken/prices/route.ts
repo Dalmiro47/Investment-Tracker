@@ -3,7 +3,9 @@ import { NextResponse } from 'next/server';
 const krakenSymbolMap: Record<string, string> = {
   ETH: 'PF_ETHUSD',  // Perpetual Futures contract for exact mark price
   BTC: 'PF_XBTUSD',  // Perpetual Futures contract for exact mark price
-  // Agregar más mapeos según sea necesario
+  ADA: 'PF_ADAUSD', // Added ADA support
+  SOL: 'PF_SOLUSD', // Added SOL for your future trades
+  DOT: 'PF_DOTUSD', // Added DOT for your future trades
 };
 
 export async function GET(request: Request) {

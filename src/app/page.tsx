@@ -2,6 +2,7 @@
 "use client";
 
 import React from 'react';
+import { useFuturesPositions } from '@/hooks/useFuturesPositions';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries, getAllRateSchedules, addTransaction } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
@@ -342,10 +343,83 @@ function DashboardPageContent() {
     });
     return metricsMap;
   }, [filteredAndSortedInvestments, transactionsMap, yearFilter, rateSchedulesMap]);
+
+  // Futures: load positions (mock data to avoid Firestore issues) and derive live metrics
+  const { positions: futuresPositions } = useFuturesPositions({ userId: user?.uid, useMockData: false });
+
+  const futuresAgg = React.useMemo(() => {
+    const positionsArray = Array.isArray(futuresPositions) ? futuresPositions : [];
+
+    let unrealizedPnLSum = 0;
+    let totalNotionalEur = 0;
+    let totalEntryValueEur = 0;
+
+    positionsArray.forEach((pos) => {
+      if (pos.status?.trim().toUpperCase() !== 'OPEN') return;
+
+      const rate = Number(pos.exchangeRate || 1);
+      const qty = Number(pos.size || 0); // Cantidad de monedas
+      const entryPrice = Number(pos.entryPrice || 0);
+      const markPrice = Number(pos.markPrice || 0);
+
+      // 1. Cost Basis (Entry Notional en EUR)
+      const costBasis = qty * entryPrice * rate;
+
+      // 2. P&L Real para SHORT y LONG
+      // SHORT: (Entrada - Actual) * Cantidad
+      // LONG: (Actual - Entrada) * Cantidad
+      const diffUsd = pos.side === 'SHORT' ? (entryPrice - markPrice) * qty : (markPrice - entryPrice) * qty;
+      const pnlFromPrices = (markPrice > 0 && entryPrice > 0 && qty > 0) ? diffUsd * rate : undefined;
+
+      const unrealized = pnlFromPrices !== undefined
+        ? pnlFromPrices
+        : Number(pos.unrealizedPnL || 0) * rate;
+
+      // 3. Market Value (Nocional Actual en EUR)
+      const marketValue = qty * markPrice * rate;
+
+      totalNotionalEur += marketValue;
+      totalEntryValueEur += costBasis;
+      unrealizedPnLSum += unrealized;
+    });
+
+    const hasOpenPositions = positionsArray.some(p => p.status?.trim().toUpperCase() === 'OPEN');
+
+    return {
+      unrealizedPnLSum,
+      totalNotionalEur,
+      totalEntryValueEur,
+      hasOpenPositions,
+    };
+  }, [futuresPositions]);
   
   const summaryData = React.useMemo(() => {
-    return aggregateByType(investments, transactionsMap, etfSummaries, yearFilter, isTaxView ? taxSettings : null, rateSchedulesMap);
-  }, [investments, transactionsMap, etfSummaries, yearFilter, isTaxView, taxSettings, rateSchedulesMap]);
+    return aggregateByType(
+      investments,
+      transactionsMap,
+      etfSummaries,
+      yearFilter,
+      isTaxView ? taxSettings : null,
+      rateSchedulesMap,
+      undefined, // krakenSummary not used here
+      futuresAgg.unrealizedPnLSum,
+      futuresAgg.totalNotionalEur,
+      futuresAgg.totalEntryValueEur,
+      futuresAgg.hasOpenPositions,
+    );
+  }, [
+    investments,
+    transactionsMap,
+    etfSummaries,
+    yearFilter,
+    isTaxView,
+    taxSettings,
+    rateSchedulesMap,
+    futuresAgg.unrealizedPnLSum,
+    futuresAgg.totalNotionalEur,
+    futuresAgg.totalEntryValueEur,
+    futuresAgg.hasOpenPositions,
+  ]);
 
 
   const handleAddClick = (prefill?: InvestmentType) => {

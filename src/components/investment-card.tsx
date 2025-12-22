@@ -49,6 +49,7 @@ const typeIcons: Record<Investment['type'], React.ReactNode> = {
   Stock: <CandlestickChart className="h-6 w-6" />,
   Bond: <Landmark className="h-6 w-6" />,
   Crypto: <Bitcoin className="h-6 w-6" />,
+  Future: <CandlestickChart className="h-6 w-6" />,
   'Real Estate': <Home className="h-6 w-6" />,
   ETF: <Briefcase className="h-6 w-6" />,
   'Interest Account': <PiggyBank className="h-6 w-6" />,
