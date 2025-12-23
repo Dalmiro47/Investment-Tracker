@@ -1,6 +1,6 @@
 
 
-import { collection, addDoc, getDocsFromServer, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query, where, getDocs, collectionGroup, setDoc } from 'firebase/firestore';
+import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query, where, collectionGroup, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues, TaxSettings, EtfSimSummary } from './types';
 import type { SavingsRateChange } from './types-savings';
@@ -50,7 +50,7 @@ const fromTxDoc = (snap: any): Transaction => {
 };
 
 export async function getInvestments(uid: string): Promise<Investment[]> {
-  const q = await getDocsFromServer(query(investmentsCol(uid)));
+  const q = await getDocs(query(investmentsCol(uid)));
   return q.docs.map(fromInvestmentDoc);
 }
 
@@ -99,8 +99,8 @@ export async function updateInvestment(uid: string, invId: string, patch: Partia
 
 export async function deleteInvestment(uid: string, invId: string) {
   const invRef = doc(db, 'users', uid, 'investments', invId);
-  const txSnap = await getDocsFromServer(txCol(uid, invId));
-  const ratesSnap = await getDocsFromServer(collection(db, invRef.path, 'rateSchedule'));
+  const txSnap = await getDocs(txCol(uid, invId));
+  const ratesSnap = await getDocs(collection(db, invRef.path, 'rateSchedule'));
   
   const batch = writeBatch(db);
   txSnap.forEach(d => batch.delete(d.ref));
@@ -111,7 +111,7 @@ export async function deleteInvestment(uid: string, invId: string) {
 }
 
 export async function getTransactions(uid: string, invId: string): Promise<Transaction[]> {
-  const q = await getDocsFromServer(query(txCol(uid, invId)));
+  const q = await getDocs(query(txCol(uid, invId)));
   return q.docs.map(fromTxDoc).sort((a,b) => +new Date(b.date) - +new Date(a.date));
 }
 
@@ -132,7 +132,7 @@ export async function getAllTransactionsForInvestments(
 }
 
 export async function getRateSchedule(uid: string, invId: string): Promise<SavingsRateChange[]> {
-    const q = await getDocsFromServer(query(collection(db, 'users', uid, 'investments', invId, 'rateSchedule')));
+    const q = await getDocs(query(collection(db, 'users', uid, 'investments', invId, 'rateSchedule')));
     return q.docs.map(d => d.data() as SavingsRateChange).sort((a, b) => a.from.localeCompare(b.from));
 }
 
@@ -153,7 +153,7 @@ export async function getAllRateSchedules(
 export async function getAllEtfSummaries(uid: string): Promise<EtfSimSummary[]> {
   // list user's ETF plans
   const plansRef = collection(db, 'users', uid, 'etfPlans');
-  const plansSnap = await getDocsFromServer(plansRef);
+  const plansSnap = await getDocs(plansRef);
 
   // fetch each plan's latest summary doc in parallel
   const reads = plansSnap.docs.map(async (p) => {

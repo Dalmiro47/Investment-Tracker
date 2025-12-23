@@ -47,6 +47,8 @@ type KrakenAccountLog = {
   margin_account: string;
   old_balance?: number;
   new_balance?: number;
+  // NEW: Critical field for Audit Entry Price
+  old_average_entry_price?: number;
 };
 
 // --- Helper: Asset Mapping ---
@@ -60,11 +62,9 @@ function mapKrakenSymbol(symbol: string) {
 }
 
 // --- Helper: Session-Based ID Strategy ---
-// Group trades by asset + hourly bucket to enable position state updates (OPEN → CLOSED)
-function getSessionId(ticker: string, timestamp: string | number): string {
-  const time = new Date(timestamp).getTime();
-  const hourlyBucket = Math.floor(time / 3600000); // Group by hour
-  return `${ticker}-${hourlyBucket}`;
+// Kraken Futures aggregates positions by ticker.
+function getSessionId(ticker: string): string {
+  return ticker;
 }
 
 // 2. LOGIC: The History Walk Helper (CORRECTED)
@@ -172,9 +172,9 @@ export async function syncKrakenFutures(userId: string) {
       const { ticker, asset } = mapKrakenSymbol(pos.symbol);
       const posDate = new Date(pos.fillTime);
       
-      // UNIFIED ID: Session is defined by ticker + hourly bucket
-      // This allows OPEN and CLOSED states to coexist in the same document
-      const sessionId = getSessionId(ticker, pos.fillTime);
+      // UNIFIED ID: Session is defined by ticker
+      // This allows us to track the current live state of a position
+      const sessionId = getSessionId(ticker);
       openSessionIds.add(sessionId);
       const posRef = positionsCol.doc(sessionId);
       
@@ -221,19 +221,15 @@ export async function syncKrakenFutures(userId: string) {
       }, { merge: true });
     }
 
-    // Mark positions as CLOSED if they no longer appear in the open positions API
+    // Remove positions that are no longer OPEN in Kraken
+    // We delete them because the permanent record of closures is created from the account logs
     for (const doc of existingPositionsSnapshot.docs) {
       const sessionId = doc.id;
       const data = doc.data();
       
-      // If position was OPEN but is no longer in the API response, mark it as CLOSED
+      // If position was OPEN but is no longer in the API response, delete it
       if (data.status === 'OPEN' && !openSessionIds.has(sessionId)) {
-        const posRef = positionsCol.doc(sessionId);
-        batch.update(posRef, {
-          status: 'CLOSED',
-          closedAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
-        });
+        batch.delete(positionsCol.doc(sessionId));
       }
     }
 
@@ -383,6 +379,22 @@ export async function syncKrakenFutures(userId: string) {
           // EXECUTE CORRECTED HISTORY WALK
           const openedAtDate = findOpenDateForClosure(assetFills, matchingFill.fillTime);
 
+          // HEAVY LIFTING: Math Fallback for Entry Price
+          // If the API returns 0 for entry price, we reverse-calculate it from PnL
+          let auditEntryPrice = Number(log.old_average_entry_price || 0);
+          
+          if (auditEntryPrice === 0 && matchingFill.size > 0) {
+            const pnlPerUnit = Number(log.realized_pnl || 0) / matchingFill.size;
+            
+            // If we BOUGHT to close (Short), Entry was HIGHER than Exit (Exit + Profit)
+            // If we SOLD to close (Long), Entry was LOWER than Exit (Exit - Profit)
+            if (matchingFill.side === 'buy') {
+               auditEntryPrice = matchingFill.price + pnlPerUnit;
+            } else {
+               auditEntryPrice = matchingFill.price - pnlPerUnit;
+            }
+          }
+
           const uniqueId = `CLOSED-${log.booking_uid}`;
           const posRef = positionsCol.doc(uniqueId);
 
@@ -391,17 +403,25 @@ export async function syncKrakenFutures(userId: string) {
             asset: assetName,
             ticker: ticker,
             status: 'CLOSED',
+            
+            // Execution Data (Market)
             side: matchingFill.side === 'buy' ? 'SHORT' : 'LONG',
             size: matchingFill.size,
-            entryPrice: Number(log.old_average_entry_price || 0),
             exitPrice: matchingFill.price,
+            
+            // Financial Data (Source of Truth)
+            entryPrice: auditEntryPrice, // FIXED: Now populated by math fallback
             realizedPnL: Number(log.realized_pnl || 0),
             realizedPnlEur: Number(log.realized_pnl || 0) * exchangeRate,
             feeEur: Number(log.fee || 0) * exchangeRate,
-            openedAt: Timestamp.fromDate(openedAtDate), // TRACE RESULT: 21/12 for ADA
-            closedAt: Timestamp.fromDate(logDate),       // LOG DATE: 23/12 for ADA
+            
+            // Timestamps
+            openedAt: Timestamp.fromDate(openedAtDate),
+            closedAt: Timestamp.fromDate(logDate),
             updatedAt: FieldValue.serverTimestamp(),
           }, { merge: true });
+          
+          console.log(`✅ Synced CLOSED ${assetName}: Entry $${auditEntryPrice} -> Exit $${matchingFill.price}`);
         }
       }
     }

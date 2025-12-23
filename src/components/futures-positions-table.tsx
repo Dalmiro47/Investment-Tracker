@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, useMemo } from "react";
-import { format, differenceInDays } from "date-fns";
+import { format, differenceInCalendarDays } from "date-fns";
 import type { FuturePosition } from "@/lib/types";
 import { useFuturesPositions } from "@/hooks/useFuturesPositions";
 import { useClosedPositions } from "@/hooks/useClosedPositions";
@@ -16,6 +16,18 @@ import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/money";
 import { useAuth } from "@/hooks/use-auth";
 import { RefreshCw, Info } from "lucide-react";
+
+// Helper for dynamic price formatting (used in the component)
+const formatEuroPrice = (val: number | undefined) => {
+  if (val === undefined || val === null) return '—';
+  // Matches USD logic: 4 digits if < 1, otherwise 2
+  return new Intl.NumberFormat('de-DE', { 
+    style: 'currency', 
+    currency: 'EUR', 
+    minimumFractionDigits: Math.abs(val) < 1 ? 4 : 2,
+    maximumFractionDigits: Math.abs(val) < 1 ? 4 : 2
+  }).format(val);
+};
 
 type Props = {
   positions?: FuturePosition[];
@@ -108,7 +120,8 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
       </div>
 
       <div className="overflow-x-auto">
-        <Table className="min-w-[1150px] text-sm">
+        {/* Increased min-width slightly to accommodate the extra column */}
+        <Table className="min-w-[1250px] text-sm">
           <TableHeader>
             <TableRow>
               <TableHead>Asset</TableHead>
@@ -117,7 +130,11 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
               <TableHead className="text-right">Closed Date</TableHead>
               <TableHead className="text-right">Holding Time</TableHead>
               <TableHead className="text-right">Size</TableHead>
-              <TableHead className="text-right">Entry (Avg)</TableHead>
+              
+              {/* SPLIT COLUMNS */}
+              <TableHead className="text-right">Entry Price</TableHead>
+              <TableHead className="text-right">Exit Price</TableHead>
+              
               <TableHead className="text-right">Notional (EUR)</TableHead>
               <TableHead className="text-right">Realized P&L</TableHead>
               <TableHead className="text-right">Unrealized P&L</TableHead>
@@ -127,7 +144,7 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
-              <TableRow><TableCell colSpan={12} className="h-24 text-center">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={13} className="h-24 text-center">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
             ) : rows.map((pos, index) => (
               <FuturesRowWithTaxData key={`${pos.id}-${index}`} position={pos} userId={currentUserId} />
             ))}
@@ -209,13 +226,21 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
 
   const isOpenPosition = position.status === 'OPEN';
+  const isClosed = position.status === 'CLOSED';
   const exchangeRate = position.exchangeRate || 0.85332;
   
+  // Price Calculations
   const entryPriceEur = (position.entryPrice ?? 0) * exchangeRate;
+  const exitPriceEur = (position.exitPrice ?? 0) * exchangeRate;
+  
   const notionalValueEur = (position.collateral ?? 0) > 0 ? position.collateral! : ((position.size ?? 0) * entryPriceEur);
 
+  // Standard formatter for P&L and Notional (always 2 decimals)
   const formatEuro = (val: number) => 
     new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(val);
+  
+  const formatUsdPrice = (price: number | undefined) => 
+    price ? `$${price.toFixed(Math.abs(price) < 1 ? 4 : 2)}` : '—';
 
   // Helper for Firestore Timestamps or ISO strings
   const parseDate = (dateVal: any) => {
@@ -231,7 +256,10 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
   const holdingDays = useMemo(() => {
     if (!openDate) return null;
     const endDate = closedDate || new Date();
-    return Math.max(0, differenceInDays(endDate, openDate));
+    
+    // FIX: Use 'differenceInCalendarDays' to count date changes instead of 24h periods
+    // This ensures 21st -> 23rd counts as 2 days regardless of the time.
+    return Math.max(0, differenceInCalendarDays(endDate, openDate));
   }, [openDate, closedDate]);
 
   useEffect(() => {
@@ -283,12 +311,11 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
     return position.side === 'SHORT' ? -pnl : pnl;
   }, [currentPrice, position.entryPrice, position.size, position.exchangeRate, position.side, isOpenPosition]);
 
-  const isClosed = position.status === 'CLOSED';
   const displayRealized = isClosed ? (position.realizedPnlEur || 0) : taxData.realizedPnlEur;
   const displayFee = isClosed ? (position.feeEur || 0) : taxData.feeTotalEur;
 
   return (
-    <TableRow className={cn(!isOpenPosition && "opacity-70")}>
+    <TableRow className={cn(!isOpenPosition && "opacity-75")}>
       <TableCell className="font-medium">{position.asset?.toUpperCase() || position.ticker || '—'}</TableCell>
       
       <TableCell className="text-right">
@@ -309,20 +336,35 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
       </TableCell>
 
       <TableCell className="text-right text-muted-foreground font-mono text-[11px]">
-        {holdingDays !== null ? `${holdingDays} day${holdingDays === 1 ? '' : 's'}` : '—'}
+        {holdingDays !== null ? `${holdingDays} d` : '—'}
       </TableCell>
 
       <TableCell className="text-right font-mono">{position.size?.toFixed(4) || '—'}</TableCell>
 
+      {/* ENTRY PRICE (Dynamic Decimals) */}
       <TableCell className="text-right">
-        <span className="font-semibold block">{formatEuro(entryPriceEur)}</span>
-        <span className="text-[10px] text-muted-foreground">({position.entryPrice?.toFixed(2)} USD)</span>
+        <div className="flex flex-col items-end">
+          <span className="font-semibold">{formatEuroPrice(entryPriceEur)}</span>
+          <span className="text-[10px] text-muted-foreground">{formatUsdPrice(position.entryPrice)}</span>
+        </div>
       </TableCell>
 
-      <TableCell className="text-right">{notionalValueEur > 0 ? formatEuro(notionalValueEur) : '—'}</TableCell>
+      {/* EXIT PRICE (Dynamic Decimals) */}
+      <TableCell className="text-right">
+        {isClosed && position.exitPrice ? (
+          <div className="flex flex-col items-end">
+            <span className="font-medium text-muted-foreground">{formatEuroPrice(exitPriceEur)}</span>
+            <span className="text-[10px] text-muted-foreground">{formatUsdPrice(position.exitPrice)}</span>
+          </div>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </TableCell>
+
+      <TableCell className="text-right text-muted-foreground">{notionalValueEur > 0 ? formatEuro(notionalValueEur) : '—'}</TableCell>
 
       <TableCell className={cn("text-right font-mono", displayRealized < 0 ? "text-red-500" : "text-emerald-500")}>
-        {formatEuro(displayRealized)}
+        {isOpenPosition ? "—" : formatEuro(displayRealized)}
       </TableCell>
 
       <TableCell className={cn("text-right font-mono", !isOpenPosition ? "text-muted-foreground" : (unrealizedPnL ?? 0) < 0 ? "text-red-500" : "text-emerald-500")}>
@@ -330,7 +372,7 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
       </TableCell>
 
       <TableCell className="text-right text-muted-foreground font-mono">
-        {displayFee > 0 ? formatEuro(displayFee) : '—'}
+        {isOpenPosition ? "—" : displayFee > 0 ? formatEuro(displayFee) : '—'}
       </TableCell>
 
       <TableCell className="text-right">
