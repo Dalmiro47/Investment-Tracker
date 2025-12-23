@@ -95,7 +95,8 @@ export interface FuturePosition {
   id: string;
 
   // Instrument & direction
-  asset: string;                 // e.g. "ETH/USD Perp"
+  ticker?: string;               // e.g. "ETH-PERP" (for filtering, optional for backwards compat)
+  asset: string;                 // e.g. "ETH" or "ETH/USD Perp"
   side: 'LONG' | 'SHORT';
 
   // Risk parameters
@@ -111,8 +112,13 @@ export interface FuturePosition {
   // PnL & funding
   unrealizedPnL: number;         // current floating PnL (can be negative)
   accumulatedFunding: number;    // net paid/received funding over lifetime (for §20)
-  feePaidEur?: number;           // optional: funding converted to EUR for tax reporting
+  fundingEur?: number;           // optional: funding converted to EUR for tax reporting
+  feePaidEur?: number;           // optional: fee amount converted to EUR for tax reporting
+  feeUsd?: number;               // optional: fee amount in USD from Kraken
+  feeEur?: number;               // optional: fee amount in EUR converted for tax reporting
   realizedPnL?: number;          // optional realized PnL when position is closed
+  realizedPnlEur?: number;       // optional realized PnL in EUR
+  exitPrice?: number;            // optional exit price for closed trades (from account log)
 
   // Lifecycle
   status: 'OPEN' | 'CLOSED' | 'LIQUIDATED';
