@@ -2,9 +2,10 @@
 "use client";
 
 import { useState, useTransition, useEffect, useMemo } from "react";
-import { format } from "date-fns";
+import { format, differenceInDays } from "date-fns";
 import type { FuturePosition } from "@/lib/types";
 import { useFuturesPositions } from "@/hooks/useFuturesPositions";
+import { useClosedPositions } from "@/hooks/useClosedPositions";
 import { useKrakenTaxData } from "@/hooks/useKrakenTaxData";
 import { syncKrakenFutures } from "@/app/actions/kraken-sync";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -34,8 +35,39 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
     userId: userId ?? user?.uid,
     useMockData,
   });
+  
+  // Also fetch closed positions
+  const { positions: closedPositions, loading: closedLoading } = useClosedPositions(userId ?? user?.uid);
 
-  const rows: FuturePosition[] = (positions ?? hookPositions).filter(pos => {
+  // Consolidate positions by session ID to merge OPEN and CLOSED states
+  const consolidatedPositions = useMemo(() => {
+    if (positions) return positions; // Use provided positions if available
+    
+    const groups: Record<string, FuturePosition> = {};
+    
+    // Merge all documents by their session ID
+    // OPEN positions provide full details, CLOSED updates add final P&L
+    [...hookPositions, ...closedPositions].forEach(pos => {
+      if (!groups[pos.id]) {
+        groups[pos.id] = pos;
+      } else {
+        // Merge: CLOSED state overrides OPEN, but keep OPEN's positional details
+        groups[pos.id] = {
+          ...groups[pos.id],
+          ...pos,
+          // If transitioning to CLOSED, preserve entry details from the OPEN state
+          entryPrice: groups[pos.id].entryPrice || pos.entryPrice,
+          size: groups[pos.id].size || pos.size,
+          side: groups[pos.id].side || pos.side,
+          ticker: groups[pos.id].ticker || pos.ticker,
+        };
+      }
+    });
+
+    return Object.values(groups);
+  }, [positions, hookPositions, closedPositions]);
+
+  const rows: FuturePosition[] = consolidatedPositions.filter(pos => {
     if (statusFilter === 'All') return true;
     return pos.status === statusFilter;
   });
@@ -54,7 +86,7 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
     });
   };
 
-  if (enabledHook && loading) return <div className="p-4 text-sm text-muted-foreground">Loading futures...</div>;
+  if (enabledHook && (loading || closedLoading)) return <div className="p-4 text-sm text-muted-foreground">Loading futures...</div>;
 
   return (
     <div className="mt-2 rounded-md border bg-card">
@@ -76,26 +108,28 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
       </div>
 
       <div className="overflow-x-auto">
-        <Table className="min-w-[900px] text-sm">
+        <Table className="min-w-[1150px] text-sm">
           <TableHeader>
             <TableRow>
               <TableHead>Asset</TableHead>
               <TableHead className="text-right">Side</TableHead>
+              <TableHead className="text-right">Open Date</TableHead>
+              <TableHead className="text-right">Closed Date</TableHead>
+              <TableHead className="text-right">Holding Time</TableHead>
               <TableHead className="text-right">Size</TableHead>
               <TableHead className="text-right">Entry (Avg)</TableHead>
               <TableHead className="text-right">Notional (EUR)</TableHead>
-              {/* Grouped P&L Columns */}
               <TableHead className="text-right">Realized P&L</TableHead>
               <TableHead className="text-right">Unrealized P&L</TableHead>
-              <TableHead className="text-right">Funding (Net)</TableHead>
+              <TableHead className="text-right">Fee</TableHead>
               <TableHead className="text-right">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
-              <TableRow><TableCell colSpan={9} className="h-24 text-center">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
-            ) : rows.map((pos) => (
-              <FuturesRowWithTaxData key={pos.id} position={pos} userId={currentUserId} />
+              <TableRow><TableCell colSpan={12} className="h-24 text-center">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
+            ) : rows.map((pos, index) => (
+              <FuturesRowWithTaxData key={`${pos.id}-${index}`} position={pos} userId={currentUserId} />
             ))}
           </TableBody>
         </Table>
@@ -170,26 +204,44 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
 
 // Separate component to handle tax data fetching per row
 function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition; userId?: string | null }) {
-  const taxData = useKrakenTaxData(userId || undefined, position.asset);
+  const assetName = position.asset || position.ticker || 'Unknown';
+  const taxData = useKrakenTaxData(userId || undefined, assetName);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
 
-  // HEAVY LIFTING: Dynamic Currency Conversion
+  const isOpenPosition = position.status === 'OPEN';
   const exchangeRate = position.exchangeRate || 0.85332;
-  const entryPriceEur = position.entryPrice * exchangeRate;
-  const notionalValueEur = position.collateral || (position.size * entryPriceEur);
+  
+  const entryPriceEur = (position.entryPrice ?? 0) * exchangeRate;
+  const notionalValueEur = (position.collateral ?? 0) > 0 ? position.collateral! : ((position.size ?? 0) * entryPriceEur);
 
-  // German number formatting
   const formatEuro = (val: number) => 
     new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(val);
 
+  // Helper for Firestore Timestamps or ISO strings
+  const parseDate = (dateVal: any) => {
+    if (!dateVal) return null;
+    return new Date(dateVal instanceof Date ? dateVal : dateVal.toDate?.() || dateVal);
+  };
+
+  const openDate = parseDate(position.openedAt);
+  const closedDate = parseDate(position.closedAt);
+
+  // HEAVY LIFTING: Holding Time Calculation
+  // Calculates days between open and close (or 'today' if still open)
+  const holdingDays = useMemo(() => {
+    if (!openDate) return null;
+    const endDate = closedDate || new Date();
+    return Math.max(0, differenceInDays(endDate, openDate));
+  }, [openDate, closedDate]);
+
   useEffect(() => {
+    if (!isOpenPosition) return;
+    
     let isMounted = true;
 
     const fetchPrice = async () => {
       try {
-        // Normalize asset: "ETH/USD Perp" → "ETH"
         const cleanAsset = position.asset.split('/')[0].split(' ')[0].split('-')[0].toUpperCase();
-        
         const response = await fetch(`/api/kraken/prices?asset=${cleanAsset}`);
 
         if (!response.ok) {
@@ -207,20 +259,20 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
         }
       } catch (error) {
         console.error('Error fetching price:', error);
-        setCurrentPrice(null); // Reset price on error
+        setCurrentPrice(null);
       }
     };
 
     fetchPrice();
-
-    const interval = setInterval(fetchPrice, 10000); // Refresh every 10 seconds
+    const interval = setInterval(fetchPrice, 10000);
     return () => {
       isMounted = false;
       clearInterval(interval);
     };
-  }, [position.asset]);
+  }, [position.asset, isOpenPosition]);
 
   const unrealizedPnL = useMemo(() => {
+    if (!isOpenPosition) return 0;
     if (currentPrice === null) return null;
 
     const entryPrice = position.entryPrice;
@@ -229,42 +281,69 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
 
     const pnl = (currentPrice - entryPrice) * size * exchangeRate;
     return position.side === 'SHORT' ? -pnl : pnl;
-  }, [currentPrice, position.entryPrice, position.size, position.exchangeRate, position.side]);
+  }, [currentPrice, position.entryPrice, position.size, position.exchangeRate, position.side, isOpenPosition]);
+
+  const isClosed = position.status === 'CLOSED';
+  const displayRealized = isClosed ? (position.realizedPnlEur || 0) : taxData.realizedPnlEur;
+  const displayFee = isClosed ? (position.feeEur || 0) : taxData.feeTotalEur;
 
   return (
-    <TableRow>
-      <TableCell className="font-medium">{position.asset}</TableCell>
+    <TableRow className={cn(!isOpenPosition && "opacity-70")}>
+      <TableCell className="font-medium">{position.asset?.toUpperCase() || position.ticker || '—'}</TableCell>
+      
       <TableCell className="text-right">
-        <Badge variant="outline" className={position.side === 'LONG' ? "text-emerald-500 border-emerald-500/30" : "text-red-500 border-red-500/30"}>
-          {position.side}
+        {position.side ? (
+          <Badge variant="outline" className={position.side === 'LONG' ? "text-emerald-500 border-emerald-500/30" : "text-red-500 border-red-500/30"}>
+            {position.side}
+          </Badge>
+        ) : '—'}
+      </TableCell>
+
+      {/* Chronological Group */}
+      <TableCell className="text-right whitespace-nowrap text-muted-foreground font-mono text-[11px]">
+        {openDate ? format(openDate, 'dd.MM.yy') : '—'}
+      </TableCell>
+
+      <TableCell className="text-right whitespace-nowrap text-muted-foreground font-mono text-[11px]">
+        {closedDate ? format(closedDate, 'dd.MM.yy') : '—'}
+      </TableCell>
+
+      <TableCell className="text-right text-muted-foreground font-mono text-[11px]">
+        {holdingDays !== null ? `${holdingDays} day${holdingDays === 1 ? '' : 's'}` : '—'}
+      </TableCell>
+
+      <TableCell className="text-right font-mono">{position.size?.toFixed(4) || '—'}</TableCell>
+
+      <TableCell className="text-right">
+        <span className="font-semibold block">{formatEuro(entryPriceEur)}</span>
+        <span className="text-[10px] text-muted-foreground">({position.entryPrice?.toFixed(2)} USD)</span>
+      </TableCell>
+
+      <TableCell className="text-right">{notionalValueEur > 0 ? formatEuro(notionalValueEur) : '—'}</TableCell>
+
+      <TableCell className={cn("text-right font-mono", displayRealized < 0 ? "text-red-500" : "text-emerald-500")}>
+        {formatEuro(displayRealized)}
+      </TableCell>
+
+      <TableCell className={cn("text-right font-mono", !isOpenPosition ? "text-muted-foreground" : (unrealizedPnL ?? 0) < 0 ? "text-red-500" : "text-emerald-500")}>
+        {!isOpenPosition ? "—" : unrealizedPnL === null ? "—" : formatEuro(unrealizedPnL)}
+      </TableCell>
+
+      <TableCell className="text-right text-muted-foreground font-mono">
+        {displayFee > 0 ? formatEuro(displayFee) : '—'}
+      </TableCell>
+
+      <TableCell className="text-right">
+        <Badge 
+          variant={position.status === 'OPEN' ? 'default' : 'secondary'}
+          className={cn(
+            "text-[10px] uppercase",
+            position.status === 'OPEN' && "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
+          )}
+        >
+          {position.status}
         </Badge>
       </TableCell>
-      <TableCell className="text-right">
-        <span className="font-mono text-sm">{position.size.toFixed(4)}</span>
-      </TableCell>
-      <TableCell className="text-right">
-        <span className="font-semibold text-primary block">{formatEuro(entryPriceEur)}</span>
-        <span className="text-[10px] text-muted-foreground">({position.entryPrice.toFixed(2)} USD)</span>
-      </TableCell>
-      <TableCell className="text-right">{formatEuro(notionalValueEur)}</TableCell>
-
-      {/* Grouped P&L Data */}
-      <TableCell className={cn("text-right font-mono", taxData.realizedPnlEur < 0 ? "text-red-500" : "text-emerald-500")}>
-        {formatEuro(taxData.realizedPnlEur)}
-      </TableCell>
-
-      <TableCell className={cn("text-right font-mono", 
-        unrealizedPnL === null ? "text-muted-foreground" : 
-        unrealizedPnL < 0 ? "text-red-500" : "text-emerald-500",
-        "animate-pulse" // Keep the live feedback pulse
-      )}>
-        {unrealizedPnL === null ? "-" : formatEuro(unrealizedPnL)}
-      </TableCell>
-
-      <TableCell className={cn("text-right font-mono", taxData.fundingNetEur < 0 ? "text-red-500" : "text-emerald-500")}>
-        {formatEuro(taxData.fundingNetEur)}
-      </TableCell>
-      <TableCell className="text-right text-xs text-muted-foreground uppercase">{position.status}</TableCell>
     </TableRow>
   );
 }

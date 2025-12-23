@@ -35,6 +35,20 @@ type KrakenFill = {
   order_id: string;
 };
 
+type KrakenAccountLog = {
+  booking_uid: string;
+  date: string;
+  asset: string;
+  info: string;
+  contract?: string;
+  realized_funding: number | null;
+  realized_pnl: number | null;
+  fee: number | null;
+  margin_account: string;
+  old_balance?: number;
+  new_balance?: number;
+};
+
 // --- Helper: Asset Mapping ---
 function mapKrakenSymbol(symbol: string) {
   const clean = symbol.toUpperCase().replace('PI_', '').replace('PF_', '').replace('FI_', '').replace('USD', '');
@@ -43,6 +57,51 @@ function mapKrakenSymbol(symbol: string) {
     name: `${clean} Perpetual`,
     asset: clean.includes('XBT') ? 'BTC' : clean
   };
+}
+
+// --- Helper: Session-Based ID Strategy ---
+// Group trades by asset + hourly bucket to enable position state updates (OPEN → CLOSED)
+function getSessionId(ticker: string, timestamp: string | number): string {
+  const time = new Date(timestamp).getTime();
+  const hourlyBucket = Math.floor(time / 3600000); // Group by hour
+  return `${ticker}-${hourlyBucket}`;
+}
+
+// 2. LOGIC: The History Walk Helper (CORRECTED)
+// Traces net inventory backwards until balance was zero to find true 'Open Date'
+function findOpenDateForClosure(assetFills: any[], closingFillTime: string) {
+  // 1. Get all fills for this asset before the closing time, newest to oldest
+  const history = assetFills
+    .filter(f => new Date(f.fillTime) <= new Date(closingFillTime))
+    .sort((a, b) => new Date(b.fillTime).getTime() - new Date(a.fillTime).getTime());
+
+  if (history.length === 0) return new Date(closingFillTime);
+
+  let runningNetBalance = 0;
+  let trueOpeningDate = new Date(history[0].fillTime);
+
+  // 2. Trace backwards. 
+  // Note: We use the inverted logic because we are walking back from the CLOSE.
+  // If a closing trade was a 'buy', the opening trades were 'sell'.
+  for (const fill of history) {
+    const fillSize = Number(fill.size);
+    // In walk-back: 'buy' fills subtract from inventory, 'sell' fills add to it
+    if (fill.side === 'buy') {
+      runningNetBalance -= fillSize;
+    } else {
+      runningNetBalance += fillSize;
+    }
+
+    trueOpeningDate = new Date(fill.fillTime);
+
+    // 3. The moment the running balance hits zero (or crosses it), 
+    // the fill that caused this change is the start of the session.
+    if (Math.abs(runningNetBalance) < 0.000001) {
+      break;
+    }
+  }
+
+  return trueOpeningDate;
 }
 
 // --- Auth Logic (Verified with test script) ---
@@ -82,9 +141,14 @@ async function fetchKrakenFutures<T>(path: string, params: Record<string, string
   });
 
   const data = await res.json();
-  if (data.result !== 'success') {
+  
+  // FIX: Only throw if the API explicitly reports an error.
+  // The Account Log API doesn't send a "result: success" field.
+  if (data.result === 'error') {
+    console.error('❌ Kraken API Error:', data.error);
     throw new Error(data.error || 'Unknown Kraken Error');
   }
+  
   return data as T;
 }
 
@@ -96,16 +160,25 @@ export async function syncKrakenFutures(userId: string) {
     const userRef = adminDb.collection('users').doc(userId);
     const batch = adminDb.batch();
     
-    // 1. Fetch Open Positions
+    // 1. Fetch Open Positions with SESSION-BASED ID: ${ticker}-${hourlyBucket}
     const posData = await fetchKrakenFutures<KrakenResponse<{ openPositions: KrakenOpenPosition[] }>>('/derivatives/api/v3/openpositions');
     const positionsCol = userRef.collection('futures_positions');
     
+    // Get all existing position documents to detect closed positions
+    const existingPositionsSnapshot = await positionsCol.get();
+    const openSessionIds = new Set<string>();
+    
     for (const pos of (posData.openPositions || [])) {
-      const { ticker } = mapKrakenSymbol(pos.symbol);
-      const posRef = positionsCol.doc(ticker);
+      const { ticker, asset } = mapKrakenSymbol(pos.symbol);
+      const posDate = new Date(pos.fillTime);
+      
+      // UNIFIED ID: Session is defined by ticker + hourly bucket
+      // This allows OPEN and CLOSED states to coexist in the same document
+      const sessionId = getSessionId(ticker, pos.fillTime);
+      openSessionIds.add(sessionId);
+      const posRef = positionsCol.doc(sessionId);
       
       // Fetch exchange rate for EUR conversion (German tax compliance)
-      const posDate = new Date(pos.fillTime);
       let exchangeRate = 0.85; // Fallback
       try {
         exchangeRate = await getDailyEurRate(posDate, 'USD');
@@ -119,8 +192,9 @@ export async function syncKrakenFutures(userId: string) {
       const sizeValueEur = pos.size * entryPriceEur;
       
       batch.set(posRef, {
-        id: ticker,
-        asset: ticker.split('-')[0],
+        id: sessionId,
+        ticker: ticker,
+        asset: asset,
         side: pos.side.toUpperCase(),
         leverage: pos.maxFixedLeverage || 1,
         
@@ -147,13 +221,29 @@ export async function syncKrakenFutures(userId: string) {
       }, { merge: true });
     }
 
+    // Mark positions as CLOSED if they no longer appear in the open positions API
+    for (const doc of existingPositionsSnapshot.docs) {
+      const sessionId = doc.id;
+      const data = doc.data();
+      
+      // If position was OPEN but is no longer in the API response, mark it as CLOSED
+      if (data.status === 'OPEN' && !openSessionIds.has(sessionId)) {
+        const posRef = positionsCol.doc(sessionId);
+        batch.update(posRef, {
+          status: 'CLOSED',
+          closedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
+      }
+    }
+
     // 2. Fetch Fills (With Pagination)
     let lastFillTime: string | undefined;
     const allFills: KrakenFill[] = [];
     
     // Fetch up to 300 recent fills (3 pages) to avoid hitting Firestore limits in one go
     for (let i = 0; i < 3; i++) {
-      const params = lastFillTime ? { lastFillTime } : {};
+      const params: Record<string, string> = lastFillTime ? { lastFillTime } : {};
       const fillData = await fetchKrakenFutures<KrakenResponse<{ fills: KrakenFill[] }>>('/derivatives/api/v3/fills', params);
       
       if (!fillData.fills || fillData.fills.length === 0) break;
@@ -198,10 +288,128 @@ export async function syncKrakenFutures(userId: string) {
       }, { merge: true });
     }
 
+    // 3. Fetch Account Logs (Funding, P&L, Fees) → kraken_logs
+    const accountLogData = await fetchKrakenFutures<any>('/api/history/v3/account-log', { count: '100' });
+    
+    // The data is the object itself containing the logs array
+    const logs = accountLogData.logs || [];
+    const logsCol = userRef.collection('kraken_logs');
+
+    console.log(`📥 Processing ${logs.length} account log entries...`);
+
+    // ⚡ PERFORMANCE FIX: Cache exchange rates by date to avoid repeated API calls
+    const rateCache = new Map<string, number>();
+    const getCachedRate = async (date: Date): Promise<number> => {
+      const dateStr = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
+      if (rateCache.has(dateStr)) {
+        return rateCache.get(dateStr)!;
+      }
+      let rate = 0.85; // Fallback
+      try {
+        rate = await getDailyEurRate(date, 'USD');
+      } catch (e) {
+        console.warn(`⚠️  Failed to fetch exchange rate for ${dateStr}, using fallback 0.85`);
+      }
+      rateCache.set(dateStr, rate);
+      return rate;
+    };
+
+    // Track closed positions from logs to avoid duplicate CLOSED records
+    const closedPositionIds = new Set<string>();
+
+    for (const log of logs) {
+      if (!log.booking_uid) continue;
+
+      const logRef = logsCol.doc(log.booking_uid);
+      const logDate = new Date(log.date);
+      
+      // ⚡ Use cached rate instead of calling API every time
+      const exchangeRate = await getCachedRate(logDate);
+
+      // Use Number() to safely parse strings from the API
+      const realizedFunding = Number(log.realized_funding || 0);
+      const realizedPnl = Number(log.realized_pnl || 0);
+      const fee = Number(log.fee || 0);
+
+      // Skip logs with no financial impact to save Firestore quota
+      if (realizedPnl === 0 && realizedFunding === 0 && fee === 0) continue;
+
+      // Convert to EUR for German tax compliance
+      const realizedFundingEur = realizedFunding * exchangeRate;
+      const realizedPnlEur = realizedPnl * exchangeRate;
+      const feeEur = fee * exchangeRate;
+
+      batch.set(logRef, {
+        booking_uid: log.booking_uid,
+        date: log.date,
+        asset: log.asset,
+        contract: log.contract,
+        info: log.info,
+        margin_account: log.margin_account,
+        
+        // Raw USD values
+        realized_funding: realizedFunding,
+        realized_pnl: realizedPnl,
+        fee: fee,
+        
+        // EUR converted values (for §20 tax reporting)
+        realizedFundingEur: realizedFundingEur,
+        realizedPnlEur: realizedPnlEur,
+        feeEur: feeEur,
+        
+        // Currency metadata
+        currency: 'USD',
+        baseCurrency: 'EUR',
+        exchangeRate: exchangeRate,
+        
+        // Timestamps
+        timestamp: Timestamp.fromDate(logDate),
+        syncedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+
+      // HEAVY LIFTING: JOIN Operation between Financial Ledger (logs) and Execution Ledger (fills)
+      // Target only the financial realization events
+      if (log.info === 'realized_pnl' || (log.info === 'futures trade' && realizedPnl !== 0)) {
+        const matchingFill = allFills.find(f => f.fill_id === log.execution);
+
+        if (matchingFill) {
+          const { ticker, asset: assetName } = mapKrakenSymbol(matchingFill.symbol);
+          const logDate = new Date(log.date);
+          const exchangeRate = await getCachedRate(logDate);
+
+          // Filter fills for this specific contract to run the walk-back
+          const assetFills = allFills.filter(f => f.symbol === matchingFill.symbol);
+          
+          // EXECUTE CORRECTED HISTORY WALK
+          const openedAtDate = findOpenDateForClosure(assetFills, matchingFill.fillTime);
+
+          const uniqueId = `CLOSED-${log.booking_uid}`;
+          const posRef = positionsCol.doc(uniqueId);
+
+          batch.set(posRef, {
+            id: uniqueId,
+            asset: assetName,
+            ticker: ticker,
+            status: 'CLOSED',
+            side: matchingFill.side === 'buy' ? 'SHORT' : 'LONG',
+            size: matchingFill.size,
+            entryPrice: Number(log.old_average_entry_price || 0),
+            exitPrice: matchingFill.price,
+            realizedPnL: Number(log.realized_pnl || 0),
+            realizedPnlEur: Number(log.realized_pnl || 0) * exchangeRate,
+            feeEur: Number(log.fee || 0) * exchangeRate,
+            openedAt: Timestamp.fromDate(openedAtDate), // TRACE RESULT: 21/12 for ADA
+            closedAt: Timestamp.fromDate(logDate),       // LOG DATE: 23/12 for ADA
+            updatedAt: FieldValue.serverTimestamp(),
+          }, { merge: true });
+        }
+      }
+    }
+
     await batch.commit();
     return { 
       ok: true, 
-      message: `Synced ${posData.openPositions?.length || 0} positions and ${allFills.length} historical fills.` 
+      message: `Synced ${posData.openPositions?.length || 0} positions, ${allFills.length} fills, and ${logs.length} account logs.` 
     };
 
   } catch (err: any) {
