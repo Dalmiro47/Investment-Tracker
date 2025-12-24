@@ -4,6 +4,7 @@
 import { useState, useTransition, useEffect, useMemo } from "react";
 import { format, differenceInCalendarDays } from "date-fns";
 import type { FuturePosition } from "@/lib/types";
+import { groupPositionsByClosingOrder } from "@/lib/futures-grouping";
 import { useFuturesPositions } from "@/hooks/useFuturesPositions";
 import { useClosedPositions } from "@/hooks/useClosedPositions";
 import { useKrakenTaxData } from "@/hooks/useKrakenTaxData";
@@ -77,7 +78,17 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
       }
     });
 
-    return Object.values(groups);
+    const allPositions = Object.values(groups);
+    
+    // HYBRID ARCHITECTURE: Group CLOSED positions by closingOrderId for display
+    // (Firestore still stores granular trades for audit trail)
+    const groupedClosed = groupPositionsByClosingOrder(
+      allPositions.filter(p => p.status === 'CLOSED')
+    );
+    
+    // Combine grouped closed positions with open positions
+    const openPositions = allPositions.filter(p => p.status === 'OPEN');
+    return [...openPositions, ...groupedClosed];
   }, [positions, hookPositions, closedPositions]);
 
   const rows: FuturePosition[] = consolidatedPositions.filter(pos => {
@@ -350,7 +361,35 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
 
   return (
     <TableRow className={cn(!isOpenPosition && "opacity-75")}>
-      <TableCell className="font-medium">{position.asset?.toUpperCase() || position.ticker || '—'}</TableCell>
+      <TableCell className="font-medium">
+        <div className="flex items-center gap-2">
+          <span>{position.asset?.toUpperCase() || position.ticker || '—'}</span>
+          {/* Show grouping badge when multiple trades are aggregated */}
+          {(position as any).tradeCount && (position as any).tradeCount > 1 && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge 
+                    variant="outline" 
+                    className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-500/30"
+                  >
+                    {(position as any).tradeCount}x
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="max-w-xs">
+                  <div className="space-y-1 text-xs">
+                    <p className="font-semibold">Grouped Position</p>
+                    <p>This position was closed with {(position as any).tradeCount} trades from a single closing order.</p>
+                    <p className="text-muted-foreground mt-2">
+                      Database stores each trade separately for audit trail, but the UI groups them by closing order for clarity.
+                    </p>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          )}
+        </div>
+      </TableCell>
       
       <TableCell className="text-right">
         {position.side ? (

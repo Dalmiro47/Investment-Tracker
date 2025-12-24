@@ -506,6 +506,10 @@ export async function syncKrakenFutures(userId: string) {
             // UPDATED: Net includes funding
             netRealizedPnlEur: finalNetPnlEur,
             
+            // AUDIT TRAIL: Links P&L back to source order/trade for verification
+            closingOrderId: matchingFill.order_id,
+            closingTradeId: matchingFill.fill_id,
+            
             // Timestamps
             openedAt: Timestamp.fromDate(openedAtDate),
             closedAt: Timestamp.fromDate(logDate),
