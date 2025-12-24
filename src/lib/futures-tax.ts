@@ -20,6 +20,7 @@ export interface FuturesTaxInput {
   churchRate?: number;
   totalGains: number;   // Sum of all profitable trades (in EUR)
   totalLosses: number;  // Sum of all losing trades (positive absolute value in EUR)
+  remainingAllowance?: number; // Optional: leftover Sparer-Pauschbetrag from capital bucket
 }
 
 export interface FuturesTaxResult {
@@ -28,6 +29,7 @@ export interface FuturesTaxResult {
   lossCap: number;
   deductibleLosses: number; // The amount of loss actually used to reduce tax
   unusedLosses: number;     // Losses carried forward to next year
+  allowanceUsed: number;    // Portion of general allowance applied to futures gains
   taxableBase: number;
   baseTax: number;          // 25% tax
   soli: number;
@@ -46,23 +48,26 @@ export function calcFuturesTax({
   filing,
   churchRate = 0,
   totalGains,
-  totalLosses
+  totalLosses,
+  remainingAllowance = 0
 }: FuturesTaxInput): FuturesTaxResult {
   const cr = Number.isFinite(churchRate) ? churchRate : 0;
   
   // 1. Determine the loss cap (20k or 40k)
   const lossCap = filing === 'married' ? FUTURES_LIMITS.lossCapMarried : FUTURES_LIMITS.lossCapSingle;
 
-  // 2. Calculate Taxable Base
-  // The law: You can offset losses up to 20k against gains.
-  // If Gains are 100k and Losses are 100k: Base = 100k - 20k = 80k.
-  // If Gains are 10k and Losses are 100k: Base = 0 (can't go below zero).
+  // 2. Loss offset first, per §20 Abs. 6
   const maxOffset = Math.min(Math.abs(totalLosses), lossCap);
-  const taxableBase = Math.max(0, totalGains - maxOffset);
+  const profitAfterLosses = Math.max(0, totalGains - maxOffset);
+
+  // 3. Apply leftover capital allowance (Sparer-Pauschbetrag) if any
+  const allowanceUsed = Math.min(Math.max(0, remainingAllowance), profitAfterLosses);
+  const taxableBase = Math.max(0, profitAfterLosses - allowanceUsed);
 
   // 3. Calculate metrics for the UI
-  // The amount of loss effectively used to reduce the taxable base this year
-  const usedLosses = totalGains - taxableBase;
+  // The amount of LOSS used is the offset applied BEFORE allowance
+  // so it must not include allowance consumption
+  const usedLosses = totalGains - profitAfterLosses;
   
   // The remaining loss that is carried forward to next year (Verlustvortrag)
   const unusedLosses = Math.max(0, Math.abs(totalLosses) - usedLosses);
@@ -78,6 +83,7 @@ export function calcFuturesTax({
     lossCap,
     deductibleLosses: usedLosses,
     unusedLosses,
+    allowanceUsed,
     taxableBase,
     baseTax,
     soli,

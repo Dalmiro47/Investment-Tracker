@@ -139,12 +139,14 @@ export function calculatePositionMetrics(
   }
 
 
-  if (!inv.purchaseQuantity || inv.purchaseQuantity <= 0) {
+  // Allow 'Future' to pass even if it has no purchaseQuantity (PnL container)
+  if ((!inv.purchaseQuantity || inv.purchaseQuantity <= 0) && inv.type !== 'Future') {
     return { ...zeroMetrics, type: inv.type };
   }
 
-  const buyQty = dec(inv.purchaseQuantity);
-  const buyPrice = dec(inv.purchasePricePerUnit);
+  // For Futures (and safety in general), default to 0 when missing
+  const buyQty = inv.purchaseQuantity ? dec(inv.purchaseQuantity) : dec(0);
+  const buyPrice = inv.purchasePricePerUnit ? dec(inv.purchasePricePerUnit) : dec(0);
   const purchaseValue = mul(buyQty, buyPrice); // Full original cost
 
   const sells = txs.filter(t => t.type === 'Sell');
@@ -196,8 +198,12 @@ export function calculatePositionMetrics(
       });
     } else if (inv.type === 'Future') {
       // NEW: Futures (§20 Abs. 6) — separate gains and losses per transaction
-      // Iterate individual PnL events to avoid premature netting.
+      // FIX: Only count explicit Tax Events (P&L), ignore raw trade fills
       sellsInYear.forEach((t) => {
+        // Some engines create notional 'Sell' rows for opens/closes; only use bridged P&L events
+        const isTaxEvent = (t as any).metadata?.isTaxEvent === true;
+        if (!isTaxEvent) return;
+
         const val = getEur(t);
         if (val.gt(0)) {
           futuresGainsYear = add(futuresGainsYear, val);
@@ -702,6 +708,8 @@ export function aggregateByType(
       churchRate,
       capitalIncome,
     });
+    // Compute leftover allowance to apply to futures bucket
+    const allowanceLeft = Math.max(0, (capitalTaxResult.allowance ?? 0) - (capitalTaxResult.allowanceUsed ?? 0));
 
     const cryptoTaxResult = calcCryptoTax({
       year: yearFilter.year,
@@ -725,7 +733,14 @@ export function aggregateByType(
       churchRate,
       totalGains: totalFuturesGains,
       totalLosses: totalFuturesLosses,
+      remainingAllowance: allowanceLeft,
     });
+
+    // Sync shared allowance usage: reduce remaining capital allowance by what futures consumed
+    if (typeof capitalTaxResult.allowance === 'number' && typeof capitalTaxResult.allowanceUsed === 'number') {
+      const combinedUsed = (capitalTaxResult.allowanceUsed ?? 0) + (futuresTaxResult.allowanceUsed ?? 0);
+      capitalTaxResult.allowanceUsed = Math.min(capitalTaxResult.allowance, combinedUsed);
+    }
 
     taxSummary = {
       capitalTaxResult,
