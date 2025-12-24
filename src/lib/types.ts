@@ -53,6 +53,7 @@ export interface Transaction {
   currency?: string;     // 'USD', 'EUR', etc.
   exchangeRate?: number; // e.g. 0.92 (EUR/USD rate on that day)
   valueInEur?: number;   // e.g. 27,600 (The totalAmount converted to EUR)
+  metadata?: Record<string, any>; // optional extra flags (e.g., isTaxEvent)
 }
 
 export interface Investment {

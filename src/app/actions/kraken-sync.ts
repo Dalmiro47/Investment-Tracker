@@ -404,6 +404,11 @@ export async function syncKrakenFutures(userId: string) {
             ticker: ticker,
             status: 'CLOSED',
             
+            // Standard query fields for UI/Tax filters
+            type: 'Future',
+            date: logDate.toISOString(),
+            year: logDate.getFullYear(),
+            
             // Execution Data (Market)
             side: matchingFill.side === 'buy' ? 'SHORT' : 'LONG',
             size: matchingFill.size,
@@ -421,7 +426,38 @@ export async function syncKrakenFutures(userId: string) {
             updatedAt: FieldValue.serverTimestamp(),
           }, { merge: true });
           
+          // 3. NEW: BRIDGE TO TAX ENGINE (For the Report)
+          // We create a "Virtual Sell" transaction that represents ONLY the P&L.
+          // This allows portfolio.ts to calculate tax without changing its logic.
+          const invId = `FUTURE-${ticker}`;
+          const txRef = investmentsCol.doc(invId).collection('transactions').doc(`TAX-${log.booking_uid}`);
+          
+          batch.set(txRef, {
+            id: `TAX-${log.booking_uid}`,
+            type: 'Sell', // Force 'Sell' so tax engine picks it up
+            date: logDate.toISOString(),
+            // Use quantity 1 so generic engines don't drop zero-qty sells
+            quantity: 1,
+            
+            // CRITICAL: Pass the P&L as the value. 
+            // portfolio.ts sums up 'valueInEur' for Futures.
+            valueInEur: realizedPnlEur,
+            totalAmount: realizedPnl,
+            
+            // Make the unit price equal to the full P&L so qty*price = P&L
+            pricePerUnit: realizedPnl,
+            currency: 'USD',
+            exchangeRate: exchangeRate,
+            status: 'COMPLETED',
+            metadata: { 
+              isTaxEvent: true, 
+              category: 'Derivatives',
+              description: `Realized P&L for ${assetName} (${matchingFill.side === 'buy' ? 'Short' : 'Long'})` 
+            }
+          }, { merge: true });
+          
           console.log(`✅ Synced CLOSED ${assetName}: Entry $${auditEntryPrice} -> Exit $${matchingFill.price}`);
+          console.log(`  ✅ Tax Event created: ${realizedPnlEur.toFixed(2)}€ for ${ticker}`);
         }
       }
     }

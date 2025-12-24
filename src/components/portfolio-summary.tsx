@@ -54,6 +54,8 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
   const shortTermGainsTotal = taxSummary.totalShortTermGains;
 
   const capitalAllowanceRemaining = Math.max(0, (capital.allowance ?? 0) - (capital.allowanceUsed ?? 0));
+  // Shared view for Futures section: explicitly subtract allowance used by Futures too
+  const sharedAllowanceRemaining = Math.max(0, (capital.allowance ?? 0) - ((capital.allowanceUsed ?? 0) + (futuresTax.allowanceUsed ?? 0)));
   const cryptoThresholdRemaining = Math.max(0, (crypto.threshold ?? 0) - (shortTermGainsTotal ?? 0));
 
   // Prepare Futures transactions for audit export
@@ -95,9 +97,9 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
 
                     <div className="flex justify-between text-xs">
                     <span className="text-muted-foreground pl-2 border-l-2 border-muted ml-1">
-                        Allowance Remaining ({formatCurrency(capital.allowance ?? 0)})
+                      Shared Allowance Remaining ({formatCurrency(capital.allowance ?? 0)})
                     </span>
-                    <span className="font-mono text-muted-foreground">{formatCurrency(capitalAllowanceRemaining)}</span>
+                    <span className="font-mono text-muted-foreground">{formatCurrency(sharedAllowanceRemaining)}</span>
                     </div>
 
                     <Separator className="my-1" />
@@ -199,6 +201,16 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                       <span className="font-medium text-red-500">-{formatCurrency(futuresTax.deductibleLosses)}</span>
                     </div>
 
+                    {/* Shared Sparer-Pauschbetrag usage */}
+                    <div className="flex justify-between">
+                      <span className="text-muted-foreground">Allowance Used (shared with Capital Income)</span>
+                      <span className="font-medium text-emerald-600">-{formatCurrency(futuresTax.allowanceUsed ?? 0)}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-muted-foreground pl-2 border-l-2 border-muted ml-1">Shared Allowance Remaining ({formatCurrency(capital.allowance ?? 0)})</span>
+                      <span className="font-mono text-muted-foreground">{formatCurrency(sharedAllowanceRemaining)}</span>
+                    </div>
+
                     {futuresTax.unusedLosses > 0 && (
                       <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400">
                         <span>Unused Losses (Carry Forward)</span>
@@ -229,6 +241,7 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                       <span>Total Futures Tax</span>
                       <span className="font-mono text-base">{formatCurrency(futuresTax.total)}</span>
                     </div>
+                    <p className="text-xs text-muted-foreground mt-1">Note: The Sparer-Pauschbetrag is shared between Capital Income and Futures & Derivatives.</p>
                     
                     {/* Export Audit CSV Button */}
                     <div className="mt-4 pt-4 border-t">
@@ -274,10 +287,14 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                           €{defaultCapitalAllowance(year, taxSettings?.filingStatus ?? 'single').toLocaleString('de-DE')}
                         </span>
                       </li>
+                      <li>
+                        <strong>Shared with Futures & Derivatives:</strong> The annual <i>Sparer-Pauschbetrag</i> for Capital Income is <strong>shared</strong> with the Futures & Derivatives bucket. Any unused allowance here may be applied to reduce taxable futures gains.
+                      </li>
                       <li>Applied to the <i>sum</i> of dividends, interest, and §20 capital gains.</li>
                       <li>Only the amount above the allowance is taxed.</li>
-                      <li>Base tax: <strong>{Math.round(TAX.abgeltungsteuer * 100)}% Abgeltungsteuer</strong>.</li>
-                      <li>Plus solidarity surcharge {Math.round(TAX.soliRate * 100)}% on the tax, and (optional) church tax {taxSettings?.churchTaxRate ? `${Math.round(taxSettings.churchTaxRate*100)}%` : '0%'} on the tax.</li>
+                      <li>
+                        Taxed at the flat <strong>{Math.round(TAX.abgeltungsteuer * 100)}% Abgeltungsteuer</strong> rate (+ Soli/Church).
+                      </li>
                     </ul>
                   </div>
 
@@ -306,6 +323,9 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                       </li>
                       <li>
                         <strong>Carry Forward:</strong> Losses exceeding the €20k cap are <strong>not lost</strong>; they are carried forward to offset future gains in subsequent years.
+                      </li>
+                      <li>
+                        <strong>Shared Allowance:</strong> The annual <i>Sparer-Pauschbetrag</i> for Capital Income is <strong>shared</strong> with Futures & Derivatives. Any unused allowance from Capital Income may reduce taxable futures gains.
                       </li>
                       <li>
                         <strong>The "Tax Trap":</strong> Be careful. You can owe taxes on gross gains even if your net PnL is negative (if gross losses exceed €20k).
@@ -800,22 +820,15 @@ function PortfolioSummaryImpl({
             </DialogContent>
         </Dialog>
         {yearFilter.kind === 'year' && (
-            <TaxEstimateDialog 
-                isOpen={isEstimateOpen}
-                onOpenChange={setIsEstimateOpen}
-                taxSummary={taxSummary}
-                year={yearFilter.year}
-                taxSettings={taxSettings}
-            />
+          <TaxEstimateDialog 
+            isOpen={isEstimateOpen}
+            onOpenChange={setIsEstimateOpen}
+            taxSummary={taxSummary}
+            year={yearFilter.year}
+            taxSettings={taxSettings}
+            futuresTransactions={summaryData?.futuresTransactions}
+          />
         )}
-                <TaxEstimateDialog 
-                  isOpen={isEstimateOpen}
-                  onOpenChange={setIsEstimateOpen}
-                  taxSummary={taxSummary}
-                  year={yearFilter.year}
-                  taxSettings={taxSettings}
-                  futuresTransactions={summaryData?.futuresTransactions}
-                />
         </TooltipProvider>
     );
 }
