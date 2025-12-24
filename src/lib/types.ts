@@ -122,6 +122,10 @@ export interface FuturePosition {
   netRealizedPnlEur?: number;    // Gross PnL - Fees + Funding (the true taxable result per trade)
   exitPrice?: number;            // optional exit price for closed trades (from account log)
 
+  // Audit Trail (links P&L back to source order/trade)
+  closingOrderId?: string;       // Kraken Order ID that triggered the closure
+  closingTradeId?: string;       // Kraken Fill/Execution ID for exact trade match
+
   // Lifecycle
   status: 'OPEN' | 'CLOSED' | 'LIQUIDATED';
   openedAt: Timestamp;           // when the position was opened
