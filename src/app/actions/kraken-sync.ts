@@ -104,6 +104,37 @@ function findOpenDateForClosure(assetFills: any[], closingFillTime: string) {
   return trueOpeningDate;
 }
 
+// --- NEW HELPER: Aggregate Funding ---
+// Finds all funding events for a contract within a time window and sums them
+async function aggregateFundingForWindow(userId: string, contract: string, start: Date, end: Date): Promise<number> {
+    // 1. Convert JS Dates to Firestore Timestamps for query
+    const startTs = Timestamp.fromDate(start);
+    const endTs = Timestamp.fromDate(end);
+
+    // 2. Query logs: Matches contract AND 'funding rate change' AND inside time window
+    const logsRef = adminDb.collection('users').doc(userId).collection('kraken_logs');
+    const q = logsRef
+        .where('contract', '==', contract) // e.g. "pf_ethusd"
+        .where('info', '==', 'funding rate change')
+        .where('timestamp', '>=', startTs)
+        .where('timestamp', '<=', endTs);
+
+    const snapshot = await q.get();
+
+    if (snapshot.empty) return 0;
+
+    // 3. Sum up the 'realizedFundingEur'
+    // Kraken Logic: + is Income, - is Cost.
+    // We just SUM them.
+    let totalFundingEur = 0;
+    snapshot.forEach(doc => {
+        const data = doc.data();
+        totalFundingEur += (data.realizedFundingEur || 0);
+    });
+
+    return totalFundingEur;
+}
+
 // --- Auth Logic (Verified with test script) ---
 function getKrakenFuturesSignature(path: string, nonce: string, queryString: string, secret: string) {
   const signaturePath = path.replace('/derivatives', '');
@@ -160,80 +191,7 @@ export async function syncKrakenFutures(userId: string) {
     const userRef = adminDb.collection('users').doc(userId);
     const batch = adminDb.batch();
     
-    // 1. Fetch Open Positions with SESSION-BASED ID: ${ticker}-${hourlyBucket}
-    const posData = await fetchKrakenFutures<KrakenResponse<{ openPositions: KrakenOpenPosition[] }>>('/derivatives/api/v3/openpositions');
-    const positionsCol = userRef.collection('futures_positions');
-    
-    // Get all existing position documents to detect closed positions
-    const existingPositionsSnapshot = await positionsCol.get();
-    const openSessionIds = new Set<string>();
-    
-    for (const pos of (posData.openPositions || [])) {
-      const { ticker, asset } = mapKrakenSymbol(pos.symbol);
-      const posDate = new Date(pos.fillTime);
-      
-      // UNIFIED ID: Session is defined by ticker
-      // This allows us to track the current live state of a position
-      const sessionId = getSessionId(ticker);
-      openSessionIds.add(sessionId);
-      const posRef = positionsCol.doc(sessionId);
-      
-      // Fetch exchange rate for EUR conversion (German tax compliance)
-      let exchangeRate = 0.85; // Fallback
-      try {
-        exchangeRate = await getDailyEurRate(posDate, 'USD');
-      } catch (e) {
-        console.warn(`Failed to fetch exchange rate for ${pos.fillTime}, using fallback`);
-      }
-      
-      // Calculate EUR values
-      const entryPriceEur = pos.price * exchangeRate;
-      const sizeValueUsd = pos.size * pos.price;
-      const sizeValueEur = pos.size * entryPriceEur;
-      
-      batch.set(posRef, {
-        id: sessionId,
-        ticker: ticker,
-        asset: asset,
-        side: pos.side.toUpperCase(),
-        leverage: pos.maxFixedLeverage || 1,
-        
-        // USD values (raw)
-        entryPrice: pos.price,
-        entryPriceUsd: pos.price,
-        
-        // EUR values (for German tax)
-        entryPriceEur: entryPriceEur,
-        valueInEur: sizeValueEur,
-        
-        // Position details
-        size: pos.size,
-        collateral: sizeValueEur, // Display collateral in EUR
-        
-        // Currency metadata
-        currency: 'USD',
-        baseCurrency: 'EUR',
-        exchangeRate: exchangeRate,
-        
-        status: 'OPEN',
-        openedAt: Timestamp.fromDate(posDate),
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-    }
-
-    // Remove positions that are no longer OPEN in Kraken
-    // We delete them because the permanent record of closures is created from the account logs
-    for (const doc of existingPositionsSnapshot.docs) {
-      const sessionId = doc.id;
-      const data = doc.data();
-      
-      // If position was OPEN but is no longer in the API response, delete it
-      if (data.status === 'OPEN' && !openSessionIds.has(sessionId)) {
-        batch.delete(positionsCol.doc(sessionId));
-      }
-    }
-
-    // 2. Fetch Fills (With Pagination)
+    // 0. Fetch Fills FIRST (With Pagination) - needed to find actual opening dates for open positions
     let lastFillTime: string | undefined;
     const allFills: KrakenFill[] = [];
     
@@ -282,6 +240,117 @@ export async function syncKrakenFutures(userId: string) {
         status: 'COMPLETED',
         metadata: { fillType: fill.fillType, orderId: fill.order_id }
       }, { merge: true });
+    }
+
+    // 2.5. Process Open Positions (using fills to find actual opening dates)
+    const posData = await fetchKrakenFutures<KrakenResponse<{ openPositions: KrakenOpenPosition[] }>>('/derivatives/api/v3/openpositions');
+    const positionsCol = userRef.collection('futures_positions');
+    
+    // Get all existing position documents to detect closed positions
+    const existingPositionsSnapshot = await positionsCol.get();
+    const openSessionIds = new Set<string>();
+    
+    // Group fills by symbol for faster lookup
+    const fillsBySymbol = new Map<string, KrakenFill[]>();
+    for (const fill of allFills) {
+      if (!fillsBySymbol.has(fill.symbol)) {
+        fillsBySymbol.set(fill.symbol, []);
+      }
+      fillsBySymbol.get(fill.symbol)!.push(fill);
+    }
+    
+    for (const pos of (posData.openPositions || [])) {
+      const { ticker, asset } = mapKrakenSymbol(pos.symbol);
+      
+      // FIX: Find the actual opening fill, not the most recent fill
+      // Walk backwards through fills for this symbol to find when position was first opened
+      const symbolFills = fillsBySymbol.get(pos.symbol) || [];
+      let actualOpenDate = new Date(pos.fillTime); // Fallback if no fills found
+      
+      if (symbolFills.length > 0) {
+        // Sort fills by time (newest first)
+        const sortedFills = symbolFills.sort((a, b) => 
+          new Date(b.fillTime).getTime() - new Date(a.fillTime).getTime()
+        );
+        
+        // Trace backwards to find when position was first opened (net position became > 0)
+        let runningSize = 0;
+        for (const fill of sortedFills) {
+          const fillSize = Number(fill.size) || 0;
+          // For the current position side, add/subtract appropriately
+          if (fill.side.toUpperCase() === pos.side.toUpperCase()) {
+            runningSize += fillSize;
+          } else {
+            runningSize -= fillSize;
+          }
+          
+          // When running size equals current position size, we found the opening
+          if (Math.abs(runningSize) >= Math.abs(pos.size * 0.99)) { // Allow 1% tolerance for rounding
+            actualOpenDate = new Date(fill.fillTime);
+            break;
+          }
+        }
+      }
+      
+      // UNIFIED ID: Session is defined by ticker
+      // This allows us to track the current live state of a position
+      const sessionId = getSessionId(ticker);
+      openSessionIds.add(sessionId);
+      const posRef = positionsCol.doc(sessionId);
+      
+      // Fetch exchange rate for EUR conversion (German tax compliance)
+      let exchangeRate = 0.85; // Fallback
+      try {
+        exchangeRate = await getDailyEurRate(actualOpenDate, 'USD');
+      } catch (e) {
+        console.warn(`Failed to fetch exchange rate for ${actualOpenDate.toISOString()}, using fallback`);
+      }
+      
+      // Calculate EUR values
+      const entryPriceEur = pos.price * exchangeRate;
+      const sizeValueUsd = pos.size * pos.price;
+      const sizeValueEur = pos.size * entryPriceEur;
+      
+      batch.set(posRef, {
+        id: sessionId,
+        ticker: ticker,
+        asset: asset,
+        side: pos.side.toUpperCase(),
+        leverage: pos.maxFixedLeverage || 1,
+        
+        // USD values (raw)
+        entryPrice: pos.price,
+        entryPriceUsd: pos.price,
+        
+        // EUR values (for German tax)
+        entryPriceEur: entryPriceEur,
+        valueInEur: sizeValueEur,
+        
+        // Position details
+        size: pos.size,
+        collateral: sizeValueEur, // Display collateral in EUR
+        
+        // Currency metadata
+        currency: 'USD',
+        baseCurrency: 'EUR',
+        exchangeRate: exchangeRate,
+        
+        status: 'OPEN',
+        openedAt: Timestamp.fromDate(actualOpenDate),  // FIX: Use actual opening date from fills
+        updatedAt: FieldValue.serverTimestamp(),
+      }, { merge: true });
+    }
+
+    // Remove positions that are no longer OPEN in Kraken
+    // We delete them because the permanent record of closures is created from the account logs
+    for (const doc of existingPositionsSnapshot.docs) {
+      const sessionId = doc.id;
+      const data = doc.data();
+      
+      // If position was OPEN but is no longer in the API response, delete it
+      if (data.status === 'OPEN' && !openSessionIds.has(sessionId)) {
+        batch.delete(positionsCol.doc(sessionId));
+      }
     }
 
     // 3. Fetch Account Logs (Funding, P&L, Fees) → kraken_logs
@@ -334,6 +403,7 @@ export async function syncKrakenFutures(userId: string) {
       const realizedFundingEur = realizedFunding * exchangeRate;
       const realizedPnlEur = realizedPnl * exchangeRate;
       const feeEur = fee * exchangeRate;
+      const netRealizedPnlEur = realizedPnlEur - feeEur;
 
       batch.set(logRef, {
         booking_uid: log.booking_uid,
@@ -352,6 +422,7 @@ export async function syncKrakenFutures(userId: string) {
         realizedFundingEur: realizedFundingEur,
         realizedPnlEur: realizedPnlEur,
         feeEur: feeEur,
+        netRealizedPnlEur: netRealizedPnlEur,
         
         // Currency metadata
         currency: 'USD',
@@ -379,6 +450,11 @@ export async function syncKrakenFutures(userId: string) {
           // EXECUTE CORRECTED HISTORY WALK
           const openedAtDate = findOpenDateForClosure(assetFills, matchingFill.fillTime);
 
+          // NEW: Aggregate Funding for this specific position window
+          // We look for any "funding rate change" log for this contract between Open and Close
+          const contractCode = log.contract; // e.g. "pf_ethusd"
+          const totalFundingEur = await aggregateFundingForWindow(userId, contractCode, openedAtDate, logDate);
+
           // HEAVY LIFTING: Math Fallback for Entry Price
           // If the API returns 0 for entry price, we reverse-calculate it from PnL
           let auditEntryPrice = Number(log.old_average_entry_price || 0);
@@ -394,6 +470,10 @@ export async function syncKrakenFutures(userId: string) {
                auditEntryPrice = matchingFill.price - pnlPerUnit;
             }
           }
+
+          // Calculate Final Audit Net P&L (Gross - Fee + Funding)
+          // Note: totalFundingEur is already signed (+ for income, - for cost)
+          const finalNetPnlEur = realizedPnlEur - feeEur + totalFundingEur;
 
           const uniqueId = `CLOSED-${log.booking_uid}`;
           const posRef = positionsCol.doc(uniqueId);
@@ -415,10 +495,16 @@ export async function syncKrakenFutures(userId: string) {
             exitPrice: matchingFill.price,
             
             // Financial Data (Source of Truth)
-            entryPrice: auditEntryPrice, // FIXED: Now populated by math fallback
-            realizedPnL: Number(log.realized_pnl || 0),
-            realizedPnlEur: Number(log.realized_pnl || 0) * exchangeRate,
-            feeEur: Number(log.fee || 0) * exchangeRate,
+            entryPrice: auditEntryPrice,
+            realizedPnL: realizedPnl,
+            realizedPnlEur: realizedPnlEur,
+            feeEur: feeEur,
+            
+            // NEW: Funding Field
+            fundingEur: totalFundingEur,
+            
+            // UPDATED: Net includes funding
+            netRealizedPnlEur: finalNetPnlEur,
             
             // Timestamps
             openedAt: Timestamp.fromDate(openedAtDate),
@@ -452,21 +538,24 @@ export async function syncKrakenFutures(userId: string) {
             metadata: { 
               isTaxEvent: true, 
               category: 'Derivatives',
-              description: `Realized P&L for ${assetName} (${matchingFill.side === 'buy' ? 'Short' : 'Long'})` 
+              description: `Realized P&L for ${assetName} (${matchingFill.side === 'buy' ? 'Short' : 'Long'})`,
+              feeEur: feeEur,
+              // NEW: Pass the funding amount so we can audit it
+              fundingEur: totalFundingEur,
+              // CRITICAL: This is what portfolio.ts uses for the final tax bucket
+              netRealizedPnlEur: finalNetPnlEur,
             }
           }, { merge: true });
           
-          console.log(`✅ Synced CLOSED ${assetName}: Entry $${auditEntryPrice} -> Exit $${matchingFill.price}`);
-          console.log(`  ✅ Tax Event created: ${realizedPnlEur.toFixed(2)}€ for ${ticker}`);
+          console.log(`✅ Synced CLOSED ${assetName} w/ Funding:`);
+          console.log(`   P&L: ${realizedPnlEur.toFixed(2)}€ | Fees: -${feeEur.toFixed(2)}€ | Funding: ${totalFundingEur > 0 ? '+' : ''}${totalFundingEur.toFixed(2)}€`);
+          console.log(`   Final Net: ${finalNetPnlEur.toFixed(2)}€`);
         }
       }
     }
 
     await batch.commit();
-    return { 
-      ok: true, 
-      message: `Synced ${posData.openPositions?.length || 0} positions, ${allFills.length} fills, and ${logs.length} account logs.` 
-    };
+    return { ok: true, message: `Synced.` };
 
   } catch (err: any) {
     console.error('Kraken Sync Error:', err);

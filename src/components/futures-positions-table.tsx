@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/money";
 import { useAuth } from "@/hooks/use-auth";
@@ -120,8 +121,8 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
       </div>
 
       <div className="overflow-x-auto">
-        {/* Increased min-width slightly to accommodate the extra column */}
-        <Table className="min-w-[1250px] text-sm">
+        {/* Increased min-width to accommodate new Funding column */}
+        <Table className="min-w-[1450px] text-sm">
           <TableHeader>
             <TableRow>
               <TableHead>Asset</TableHead>
@@ -139,12 +140,16 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
               <TableHead className="text-right">Realized P&L</TableHead>
               <TableHead className="text-right">Unrealized P&L</TableHead>
               <TableHead className="text-right">Fee</TableHead>
+              <TableHead className="text-right">Funding</TableHead>
+              <TableHead className="text-right">
+                Net P&L <span className="text-[10px] font-normal text-muted-foreground">(Tax Base)</span>
+              </TableHead>
               <TableHead className="text-right">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
-              <TableRow><TableCell colSpan={13} className="h-24 text-center">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={15} className="h-24 text-center">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
             ) : rows.map((pos, index) => (
               <FuturesRowWithTaxData key={`${pos.id}-${index}`} position={pos} userId={currentUserId} />
             ))}
@@ -197,7 +202,22 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
             </div>
             <div>
               <h4 className="font-semibold">Funding (Net)</h4>
-              <p className="text-muted-foreground">The net funding fees paid or received on perpetual futures contracts. Negative values mean you paid fees; positive means you received fees. Included in tax calculations.<br/><code className="text-xs">Fetched from Kraken API funding history</code></p>
+              <p className="text-muted-foreground">Trading fees paid (Open + Close).</p>
+            </div>
+            <div>
+              <h4 className="font-semibold">Funding (Perpetuals)</h4>
+              <p className="text-muted-foreground">
+                 Funding payments are the cost of holding a position. 
+                 <br/>• <span className="text-green-600 font-semibold">Positive</span> = Income (You received funding).
+                 <br/>• <span className="text-red-600 font-semibold">Negative</span> = Cost (You paid funding).
+                 <br/>These are summed up and included in the Net P&L calculation.
+              </p>
+            </div>
+            <div>
+              <h4 className="font-semibold">Net P&L (Tax Base)</h4>
+              <p className="text-muted-foreground">The final taxable amount.<br/>
+              <code className="text-xs">Formula: Gross P&L - Fees + Funding (Income/Cost)</code>
+              </p>
             </div>
             <div>
               <h4 className="font-semibold">Status</h4>
@@ -313,6 +333,20 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
 
   const displayRealized = isClosed ? (position.realizedPnlEur || 0) : taxData.realizedPnlEur;
   const displayFee = isClosed ? (position.feeEur || 0) : taxData.feeTotalEur;
+  const displayFunding = isClosed ? (position.fundingEur || 0) : 0;
+  
+  // Calculate Net P&L (Prefer database value, fallback to calc)
+  const netRealized = isClosed 
+    ? (position.netRealizedPnlEur ?? (displayRealized - displayFee + displayFunding))
+    : 0; // Don't show Net P&L for open positions
+
+  // Fee tooltip calculation
+  const feePercentage = displayRealized !== 0 ? ((displayFee / Math.abs(displayRealized)) * 100).toFixed(1) : 0;
+  const feeTooltip = displayRealized > 0 
+    ? `${feePercentage}% of profit`
+    : displayRealized < 0
+    ? "Added to loss"
+    : "No impact";
 
   return (
     <TableRow className={cn(!isOpenPosition && "opacity-75")}>
@@ -371,8 +405,46 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
         {!isOpenPosition ? "—" : unrealizedPnL === null ? "—" : formatEuro(unrealizedPnL)}
       </TableCell>
 
+      {/* FEE WITH TOOLTIP */}
       <TableCell className="text-right text-muted-foreground font-mono">
-        {isOpenPosition ? "—" : displayFee > 0 ? formatEuro(displayFee) : '—'}
+        {isOpenPosition ? "—" : displayFee > 0 ? (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="cursor-help underline decoration-dotted">{formatEuro(displayFee)}</span>
+              </TooltipTrigger>
+              <TooltipContent side="top">
+                <p className="text-xs">{feeTooltip}</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        ) : '—'}
+      </TableCell>
+
+      {/* FUNDING COLUMN */}
+      <TableCell className={cn("text-right font-mono font-semibold", displayFunding > 0 ? "text-emerald-500" : displayFunding < 0 ? "text-red-500" : "text-muted-foreground")}>
+        {isOpenPosition ? "—" : (displayFunding !== 0 ? formatEuro(displayFunding) : '—')}
+      </TableCell>
+
+      {/* NET P&L WITH TOOLTIP SHOWING BREAKDOWN */}
+      <TableCell className={cn("text-right font-mono font-bold", netRealized < 0 ? "text-red-500" : "text-emerald-500")}>
+        {isOpenPosition ? "—" : (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="cursor-help underline decoration-dotted">{formatEuro(netRealized)}</span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                <div className="space-y-1 text-xs">
+                  <div>Gross P&L: <span className="font-semibold">{formatEuro(displayRealized)}</span></div>
+                  <div>Fees: <span className="font-semibold">−{formatEuro(displayFee)}</span></div>
+                  <div>Funding: <span className={cn("font-semibold", displayFunding >= 0 ? "text-emerald-400" : "text-red-400")}>{displayFunding >= 0 ? '+' : ''}{formatEuro(displayFunding)}</span></div>
+                  <div className="border-t border-slate-400 pt-1 mt-1">Net Total: <span className="font-semibold">{formatEuro(netRealized)}</span></div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </TableCell>
 
       <TableCell className="text-right">

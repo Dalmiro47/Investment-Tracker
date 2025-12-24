@@ -119,6 +119,7 @@ export interface FuturePosition {
   feeEur?: number;               // optional: fee amount in EUR converted for tax reporting
   realizedPnL?: number;          // optional realized PnL when position is closed
   realizedPnlEur?: number;       // optional realized PnL in EUR
+  netRealizedPnlEur?: number;    // Gross PnL - Fees + Funding (the true taxable result per trade)
   exitPrice?: number;            // optional exit price for closed trades (from account log)
 
   // Lifecycle
@@ -189,6 +190,7 @@ export const transactionSchema = z.object({
   quantity: z.coerce.number().nonnegative().default(0),
   pricePerUnit: z.coerce.number().nonnegative().default(0),
   amount: z.coerce.number().nonnegative().default(0), // For Dividends/Interest
+  metadata: z.record(z.any()).optional(), // Allow metadata (fees, netPnL, etc.) to pass through
 }).superRefine((data, ctx) => {
   if (data.type === 'Sell' && data.quantity <= 0) {
     ctx.addIssue({

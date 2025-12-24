@@ -197,21 +197,30 @@ export function calculatePositionMetrics(
         }
       });
     } else if (inv.type === 'Future') {
-      // NEW: Futures (§20 Abs. 6) — separate gains and losses per transaction
-      // FIX: Only count explicit Tax Events (P&L), ignore raw trade fills
+      // Futures (§20 Abs. 6) — prefer stored Net P&L when available
+      // Only count explicit Tax Events (P&L), ignore raw trade fills
       sellsInYear.forEach((t) => {
-        // Some engines create notional 'Sell' rows for opens/closes; only use bridged P&L events
         const isTaxEvent = (t as any).metadata?.isTaxEvent === true;
         if (!isTaxEvent) return;
 
-        const val = getEur(t);
-        if (val.gt(0)) {
-          futuresGainsYear = add(futuresGainsYear, val);
-        } else if (val.lt(0)) {
-          futuresLossesYear = add(futuresLossesYear, val.abs());
+        let netPnL = dec(0);
+        // 1) Preferred: stored net P&L from DB
+        if ((t as any).metadata?.netRealizedPnlEur !== undefined) {
+          netPnL = dec((t as any).metadata.netRealizedPnlEur);
+        } else {
+          // 2) Fallback: gross minus fee
+          const grossPnL = getEur(t);
+          const fee = dec((t as any).metadata?.feeEur ?? 0);
+          netPnL = sub(grossPnL, fee);
+        }
+
+        if (netPnL.gt(0)) {
+          futuresGainsYear = add(futuresGainsYear, netPnL);
+        } else if (netPnL.lt(0)) {
+          futuresLossesYear = add(futuresLossesYear, netPnL.abs());
         }
       });
-      // Note: We ignore realizedPLYear for tax buckets but keep it for Total PL UI.
+      // Note: Ignore realizedPLYear for tax buckets; keep it for UI totals only.
     } else {
         // Stocks, ETFs, Bonds are capital gains
         capitalGainsYear = realizedPLYear;
