@@ -46,6 +46,8 @@ const fromTxDoc = (snap: any): Transaction => {
     id: snap.id,
     ...d,
     date: dt.toISOString(),
+    // Explicitly preserve metadata (fees, netPnL, etc.)
+    metadata: d.metadata || undefined,
   } as Transaction;
 };
 
