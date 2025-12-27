@@ -3,6 +3,8 @@
 
 import React from 'react';
 import { useFuturesPositions } from '@/hooks/useFuturesPositions';
+import { useClosedPositions } from '@/hooks/useClosedPositions';
+import { useKrakenYearlySummary } from '@/hooks/useKrakenYearlySummary';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
 import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries, getAllRateSchedules, addTransaction } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
@@ -98,6 +100,11 @@ function DashboardPageContent() {
   const summaryRef = React.useRef<PortfolioSummaryHandle>(null);
   const [pendingOpenEstimate, setPendingOpenEstimate] = React.useState(false);
   const isMobile = useIsMobile();
+
+  const krakenSummary = useKrakenYearlySummary(
+    user?.uid ?? undefined,
+    yearFilter.kind === 'year' ? yearFilter.year : yearFilter.kind === 'all' ? null : new Date().getFullYear()
+  );
 
   const [fifoWarnSymbol, setFifoWarnSymbol] = React.useState<string | null>(null);
   const [isFifoDialogOpen, setIsFifoDialogOpen] = React.useState(false);
@@ -346,51 +353,112 @@ function DashboardPageContent() {
 
   // Futures: load positions (mock data to avoid Firestore issues) and derive live metrics
   const { positions: futuresPositions } = useFuturesPositions({ userId: user?.uid, useMockData: false });
+  const { positions: closedPositions } = useClosedPositions(user?.uid);
 
-  const futuresAgg = React.useMemo(() => {
-    const positionsArray = Array.isArray(futuresPositions) ? futuresPositions : [];
+  // Calculate realized P&L from closed positions (sum of all netRealizedPnlEur)
+  const closedPositionsRealizedPL = React.useMemo(() => {
+    if (!closedPositions || closedPositions.length === 0) return 0;
+    
+    return closedPositions.reduce((total, pos) => {
+      // Filter by year if needed
+      if (yearFilter.kind === 'year' && pos.closedAt) {
+        let closedDate: Date;
+        if (typeof pos.closedAt === 'object' && 'toDate' in pos.closedAt) {
+          closedDate = pos.closedAt.toDate();
+        } else {
+          closedDate = new Date(pos.closedAt as any);
+        }
+        const closedYear = closedDate.getFullYear();
+        if (closedYear !== yearFilter.year) return total;
+      }
+      
+      const netPnl = Number(pos.netRealizedPnlEur || 0);
+      return total + netPnl;
+    }, 0);
+  }, [closedPositions, yearFilter]);
 
-    let unrealizedPnLSum = 0;
-    let totalNotionalEur = 0;
-    let totalEntryValueEur = 0;
+  // Store live market prices for open futures positions
+  const [futuresLiveData, setFuturesLiveData] = React.useState<{
+    unrealizedPnLSum: number;
+    totalNotionalEur: number;
+    totalEntryValueEur: number;
+    hasOpenPositions: boolean;
+  }>({
+    unrealizedPnLSum: 0,
+    totalNotionalEur: 0,
+    totalEntryValueEur: 0,
+    hasOpenPositions: false,
+  });
 
-    positionsArray.forEach((pos) => {
-      if (pos.status?.trim().toUpperCase() !== 'OPEN') return;
+  // Fetch live prices for open futures positions
+  React.useEffect(() => {
+    let intervalId: NodeJS.Timeout;
 
-      const rate = Number(pos.exchangeRate || 1);
-      const qty = Number(pos.size || 0); // Cantidad de monedas
-      const entryPrice = Number(pos.entryPrice || 0);
-      const markPrice = Number(pos.markPrice || 0);
+    const updatePrices = async () => {
+      if (!futuresPositions || futuresPositions.length === 0) {
+        setFuturesLiveData({
+          unrealizedPnLSum: 0,
+          totalNotionalEur: 0,
+          totalEntryValueEur: 0,
+          hasOpenPositions: false,
+        });
+        return;
+      }
 
-      // 1. Cost Basis (Entry Notional en EUR)
-      const costBasis = qty * entryPrice * rate;
+      let uPnL = 0;
+      let totalNotional = 0;
+      let totalEntryValue = 0;
+      let hasOpen = false;
 
-      // 2. P&L Real para SHORT y LONG
-      // SHORT: (Entrada - Actual) * Cantidad
-      // LONG: (Actual - Entrada) * Cantidad
-      const diffUsd = pos.side === 'SHORT' ? (entryPrice - markPrice) * qty : (markPrice - entryPrice) * qty;
-      const pnlFromPrices = (markPrice > 0 && entryPrice > 0 && qty > 0) ? diffUsd * rate : undefined;
+      for (const pos of futuresPositions) {
+        if (pos.status?.trim().toUpperCase() !== 'OPEN') continue;
+        
+        hasOpen = true;
+        const cleanAsset = pos.asset.split('/')[0].split(' ')[0].split('-')[0].toUpperCase();
 
-      const unrealized = pnlFromPrices !== undefined
-        ? pnlFromPrices
-        : Number(pos.unrealizedPnL || 0) * rate;
+        try {
+          const res = await fetch(`/api/kraken/prices?asset=${cleanAsset}`);
+          const data = await res.json();
+          const markPrice = Number(data.price);
 
-      // 3. Market Value (Nocional Actual en EUR)
-      const marketValue = qty * markPrice * rate;
+          if (markPrice > 0) {
+            const entryPrice = Number(pos.entryPrice || 0);
+            const qty = Number(pos.size || 0);
+            const rate = Number(pos.exchangeRate || 1);
 
-      totalNotionalEur += marketValue;
-      totalEntryValueEur += costBasis;
-      unrealizedPnLSum += unrealized;
-    });
+            // 1. Cost Basis (Entry Notional en EUR)
+            const costBasis = qty * entryPrice * rate;
 
-    const hasOpenPositions = positionsArray.some(p => p.status?.trim().toUpperCase() === 'OPEN');
+            // 2. P&L Real para SHORT y LONG
+            const diffUsd = pos.side === 'SHORT' 
+              ? (entryPrice - markPrice) * qty 
+              : (markPrice - entryPrice) * qty;
+            const unrealized = diffUsd * rate;
 
-    return {
-      unrealizedPnLSum,
-      totalNotionalEur,
-      totalEntryValueEur,
-      hasOpenPositions,
+            // 3. Market Value (Nocional Actual en EUR)
+            const marketValue = qty * markPrice * rate;
+
+            totalNotional += marketValue;
+            totalEntryValue += costBasis;
+            uPnL += unrealized;
+          }
+        } catch (error) {
+          console.error(`Error fetching price for ${cleanAsset}:`, error);
+        }
+      }
+
+      setFuturesLiveData({
+        unrealizedPnLSum: uPnL,
+        totalNotionalEur: totalNotional,
+        totalEntryValueEur: totalEntryValue,
+        hasOpenPositions: hasOpen,
+      });
     };
+
+    updatePrices();
+    intervalId = setInterval(updatePrices, 10000);
+
+    return () => clearInterval(intervalId);
   }, [futuresPositions]);
   
   const summaryData = React.useMemo(() => {
@@ -401,11 +469,12 @@ function DashboardPageContent() {
       yearFilter,
       isTaxView ? taxSettings : null,
       rateSchedulesMap,
-      undefined, // krakenSummary not used here
-      futuresAgg.unrealizedPnLSum,
-      futuresAgg.totalNotionalEur,
-      futuresAgg.totalEntryValueEur,
-      futuresAgg.hasOpenPositions,
+      krakenSummary,
+      futuresLiveData.unrealizedPnLSum,
+      futuresLiveData.totalNotionalEur,
+      futuresLiveData.totalEntryValueEur,
+      futuresLiveData.hasOpenPositions,
+      closedPositionsRealizedPL,
     );
   }, [
     investments,
@@ -415,10 +484,12 @@ function DashboardPageContent() {
     isTaxView,
     taxSettings,
     rateSchedulesMap,
-    futuresAgg.unrealizedPnLSum,
-    futuresAgg.totalNotionalEur,
-    futuresAgg.totalEntryValueEur,
-    futuresAgg.hasOpenPositions,
+    krakenSummary,
+    futuresLiveData.unrealizedPnLSum,
+    futuresLiveData.totalNotionalEur,
+    futuresLiveData.totalEntryValueEur,
+    futuresLiveData.hasOpenPositions,
+    closedPositionsRealizedPL,
   ]);
 
 

@@ -448,7 +448,8 @@ export function aggregateByType(
   krakenUnrealized?: number,
   krakenOpenNotional?: number,
   krakenEntryValueEur?: number,
-  hasOpenPositions?: boolean
+  hasOpenPositions?: boolean,
+  krakenClosedRealizedPL?: number
 ): AggregatedSummary {
   const isActiveToday = (inv: Investment) =>
     (inv.purchaseQuantity ?? 0) > (inv.totalSoldQty ?? 0) || inv.type === 'Interest Account';
@@ -625,21 +626,21 @@ export function aggregateByType(
   const liveUnrealized = Number(krakenUnrealized || 0);
   const liveNotional = Number(krakenOpenNotional || 0);
   const liveEntryValue = Number(krakenEntryValueEur || 0);
-  const historicalRealized = Number(krakenSummary?.taxableAmount || 0);
+  const closedRealizedPL = Number(krakenClosedRealizedPL || 0);
 
   const isHoldings = yearFilter.mode === 'holdings';
   const isRealized = yearFilter.mode === 'realized';
 
   // 2. Visibility Decision
-  const hasRealizedData = Math.abs(historicalRealized) > 0.01;
+  const hasRealizedData = Math.abs(closedRealizedPL) > 0.01;
   const shouldShowFuture = isHoldings ? !!hasOpenPositions : (!!hasOpenPositions || hasRealizedData);
 
   if (shouldShowFuture) {
     // 3. Mode-specific mapping
     const displayUnrealized = isRealized ? 0 : liveUnrealized;
-    const displayRealized = isHoldings ? 0 : historicalRealized;
+    const displayRealized = isHoldings ? 0 : closedRealizedPL;
     const displayCostBasis = isRealized ? 0 : liveEntryValue;
-    const displayMarketValue = isRealized ? historicalRealized : liveNotional;
+    const displayMarketValue = isRealized ? closedRealizedPL : liveNotional;
 
     const displayTotalPL = displayRealized + displayUnrealized;
 
@@ -648,9 +649,9 @@ export function aggregateByType(
       costBasis: displayCostBasis,
       marketValue: displayMarketValue,
       realizedPL: displayRealized,
-      unrealizedPL: displayUnrealized, // FIXED: Now using liveUnrealized
+      unrealizedPL: displayUnrealized,
       totalPL: displayTotalPL,
-      performancePct: displayCostBasis > 0 ? (displayTotalPL / displayCostBasis) : 0,
+      performancePct: 0, // Not applicable for futures
       economicValue: displayMarketValue + displayRealized,
     });
   }

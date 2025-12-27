@@ -171,7 +171,8 @@ export default function DashboardPage() {
       futuresLive.unrealizedPnLSum,   // 8 (krakenUnrealized)
       futuresLive.totalNotionalEur,   // 9 (krakenOpenNotional)
       futuresLive.totalEntryValueEur, // 10 (krakenEntryValueEur)
-      hasOpenPositions       // 11 (hasOpenPositions)
+      hasOpenPositions,      // 11 (hasOpenPositions)
+      0                      // 12 (krakenClosedRealizedPL) - calculated from closed positions in main page
     );
   }, [
     investments, transactionsMap, etfSummaries, yearFilter, 
