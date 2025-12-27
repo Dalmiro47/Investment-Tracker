@@ -487,6 +487,19 @@ function PortfolioSummaryImpl({
     }
 
     const { rows, totals, taxSummary } = summaryData;
+    
+    // Adjust totals to exclude Future from Cost Basis and Market Value (since they're N/A)
+    const adjustedTotals = useMemo(() => {
+        const futureRow = rows.find(r => r.type === 'Future');
+        if (!futureRow) return totals;
+        
+        return {
+            ...totals,
+            costBasis: totals.costBasis - futureRow.costBasis,
+            marketValue: totals.marketValue - futureRow.marketValue,
+        };
+    }, [rows, totals]);
+    
     const totalPortfolioValue = donutMode === 'market' ? totals.marketValue : totals.economicValue;
     const showTaxEstimatorButton = isTaxView && taxSummary && yearFilter.kind === 'year';
 
@@ -632,11 +645,39 @@ function PortfolioSummaryImpl({
                                       ? ((donutMode === 'market' ? item.marketValue : item.economicValue) / totalPortfolioValue)
                                       : 0;
 
+                                    const isFuture = item.type === 'Future';
+
                                     return (
                                     <TableRow key={item.type}>
                                         <TableCell className="font-medium">{item.type}</TableCell>
-                                        <TableCell className="text-right font-mono">{formatCurrency(item.costBasis)}</TableCell>
-                                        <TableCell className="text-right font-mono font-bold">{formatCurrency(item.marketValue)}</TableCell>
+                                        <TableCell className="text-right font-mono">
+                                          {isFuture ? (
+                                            <Tooltip>
+                                              <TooltipTrigger className="cursor-help text-muted-foreground">
+                                                —
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                Not applicable for derivatives. P&L is the primary metric.
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          ) : (
+                                            formatCurrency(item.costBasis)
+                                          )}
+                                        </TableCell>
+                                        <TableCell className="text-right font-mono font-bold">
+                                          {isFuture ? (
+                                            <Tooltip>
+                                              <TooltipTrigger className="cursor-help text-muted-foreground">
+                                                —
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                Not applicable for derivatives. P&L is the primary metric.
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          ) : (
+                                            formatCurrency(item.marketValue)
+                                          )}
+                                        </TableCell>
                                         
                                         {showRealizedCol && (
                                             <TableCell className={cn("text-right font-mono", item.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>
@@ -654,7 +695,20 @@ function PortfolioSummaryImpl({
                                           {item.totalPL >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                                           {formatCurrency(item.totalPL)}
                                         </TableCell>
-                                        <TableCell className={cn("text-right font-mono", item.performancePct >= 0 ? "text-green-500" : "text-destructive")}>{formatPercent(item.performancePct)}</TableCell>
+                                        <TableCell className={cn("text-right font-mono", item.performancePct >= 0 ? "text-green-500" : "text-destructive")}>
+                                          {isFuture ? (
+                                            <Tooltip>
+                                              <TooltipTrigger className="cursor-help text-muted-foreground">
+                                                —
+                                              </TooltipTrigger>
+                                              <TooltipContent>
+                                                Performance % not applicable for derivatives trading.
+                                              </TooltipContent>
+                                            </Tooltip>
+                                          ) : (
+                                            formatPercent(item.performancePct)
+                                          )}
+                                        </TableCell>
                                         <TableCell className="text-right font-mono">{formatPercent(portfolioPercentage)}</TableCell>
                                     </TableRow>
                                 )})
@@ -663,8 +717,26 @@ function PortfolioSummaryImpl({
                             <TableFooter>
                                 <TableRow className="bg-muted/50 font-bold">
                                     <TableCell>Total</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(totals.costBasis)}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatCurrency(totals.marketValue)}</TableCell>
+                                    <TableCell className="text-right font-mono">
+                                      <Tooltip>
+                                        <TooltipTrigger className="cursor-help">
+                                          {formatCurrency(adjustedTotals.costBasis)}
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          Excludes derivatives (Futures) as they don't have traditional cost basis
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TableCell>
+                                    <TableCell className="text-right font-mono">
+                                      <Tooltip>
+                                        <TooltipTrigger className="cursor-help">
+                                          {formatCurrency(adjustedTotals.marketValue)}
+                                        </TooltipTrigger>
+                                        <TooltipContent>
+                                          Excludes derivatives (Futures) as they don't have traditional market value
+                                        </TooltipContent>
+                                      </Tooltip>
+                                    </TableCell>
                                     
                                     {showRealizedCol && (
                                         <TableCell className={cn("text-right font-mono", totals.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>
