@@ -297,13 +297,26 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
     if (!isOpenPosition) return;
     
     let isMounted = true;
+    let retryCount = 0;
+    const MAX_RETRIES = 3;
 
     const fetchPrice = async () => {
       try {
+        if (!position.asset) {
+          setCurrentPrice(null);
+          return;
+        }
+        
         const cleanAsset = position.asset.split('/')[0].split(' ')[0].split('-')[0].toUpperCase();
-        const response = await fetch(`/api/kraken/prices?asset=${cleanAsset}`);
+        const response = await fetch(`/api/kraken/prices?asset=${cleanAsset}`, {
+          signal: AbortSignal.timeout(5000) // 5 second timeout
+        });
 
         if (!response.ok) {
+          if (retryCount < MAX_RETRIES) {
+            retryCount++;
+            return; // Skip error logging on retries
+          }
           throw new Error(`Failed to fetch price: ${response.statusText}`);
         }
 
@@ -315,10 +328,16 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
         const data = await response.json();
         if (isMounted) {
           setCurrentPrice(parseFloat(data.price));
+          retryCount = 0; // Reset on success
         }
       } catch (error) {
-        console.error('Error fetching price:', error);
-        setCurrentPrice(null);
+        // Only log errors after retries exhausted
+        if (retryCount >= MAX_RETRIES && isMounted) {
+          console.warn(`Unable to fetch price for ${position.asset}`);
+        }
+        if (isMounted) {
+          setCurrentPrice(null);
+        }
       }
     };
 

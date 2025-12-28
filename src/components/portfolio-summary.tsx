@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useMemo, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
-import type { Investment, Transaction, YearFilter, TaxSettings, AggregatedSummary, ViewMode } from '@/lib/types';
+import type { Investment, Transaction, YearFilter, TaxSettings, AggregatedSummary, ViewMode, FuturePosition } from '@/lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { useClosedPositionsForYear } from '@/hooks/useClosedPositionsForYear';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
@@ -36,10 +37,14 @@ interface TaxEstimateDialogProps {
     year: number;
     taxSettings: TaxSettings | null;
     futuresTransactions?: Transaction[];
+    userId: string | null | undefined;
 }
 
-function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings, futuresTransactions = [] }: TaxEstimateDialogProps) {
+function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings, futuresTransactions = [], userId }: TaxEstimateDialogProps) {
   const [view, setView] = useState<'estimate' | 'law'>('estimate');
+  
+  // Fetch closed positions for the year
+  const { positions: closedPositions } = useClosedPositionsForYear(userId, year);
 
   // Reset to main view on open
   useEffect(() => {
@@ -247,7 +252,8 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                     <div className="mt-4 pt-4 border-t">
                       <AuditExportButton 
                         transactions={investmentsForAudit} 
-                          year={year}
+                        positions={closedPositions}
+                        year={year}
                       />
                     </div>
                   </div>
@@ -408,6 +414,7 @@ interface PortfolioSummaryProps {
     taxSettings: TaxSettings | null;
     yearFilter: YearFilter;
     onYearFilterChange: (filter: YearFilter) => void;
+    userId: string | null | undefined;
 }
 
 function PortfolioSummaryImpl({ 
@@ -417,6 +424,7 @@ function PortfolioSummaryImpl({
     taxSettings,
     yearFilter,
     onYearFilterChange,
+    userId,
 }: PortfolioSummaryProps, ref: React.Ref<PortfolioSummaryHandle>) {
     
     const [donutMode, setDonutMode] = useState<DonutMode>('market');
@@ -899,6 +907,7 @@ function PortfolioSummaryImpl({
             year={yearFilter.year}
             taxSettings={taxSettings}
             futuresTransactions={summaryData?.futuresTransactions}
+            userId={userId}
           />
         )}
         </TooltipProvider>
