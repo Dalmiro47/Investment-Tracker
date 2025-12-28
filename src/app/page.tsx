@@ -409,15 +409,26 @@ function DashboardPageContent() {
       let totalNotional = 0;
       let totalEntryValue = 0;
       let hasOpen = false;
+      let failedFetches = 0;
 
       for (const pos of futuresPositions) {
         if (pos.status?.trim().toUpperCase() !== 'OPEN') continue;
         
         hasOpen = true;
+        if (!pos.asset) continue;
+        
         const cleanAsset = pos.asset.split('/')[0].split(' ')[0].split('-')[0].toUpperCase();
 
         try {
-          const res = await fetch(`/api/kraken/prices?asset=${cleanAsset}`);
+          const res = await fetch(`/api/kraken/prices?asset=${cleanAsset}`, {
+            signal: AbortSignal.timeout(5000) // 5 second timeout
+          });
+          
+          if (!res.ok) {
+            failedFetches++;
+            continue;
+          }
+          
           const data = await res.json();
           const markPrice = Number(data.price);
 
@@ -443,7 +454,11 @@ function DashboardPageContent() {
             uPnL += unrealized;
           }
         } catch (error) {
-          console.error(`Error fetching price for ${cleanAsset}:`, error);
+          failedFetches++;
+          // Only log if multiple failures occur
+          if (failedFetches === 1) {
+            console.warn('Unable to fetch some futures prices');
+          }
         }
       }
 
@@ -987,6 +1002,7 @@ function DashboardPageContent() {
               taxSettings={taxSettings}
               yearFilter={yearFilter}
               onYearFilterChange={setYearFilterHoldingsSafe}
+              userId={user?.uid}
             />
           ) : (
             investmentsView
@@ -1017,6 +1033,7 @@ function DashboardPageContent() {
             taxSettings={taxSettings}
             yearFilter={yearFilter}
             onYearFilterChange={setYearFilterHoldingsSafe}
+            userId={user?.uid}
           />
           <div className="mt-8 mb-8 p-4 bg-card/50 rounded-lg shadow-sm">
             <div className="flex flex-col sm:flex-row items-center gap-4">
