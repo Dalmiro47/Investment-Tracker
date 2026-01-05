@@ -1,568 +1,341 @@
 'use server';
 
-import crypto from 'crypto';
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getDailyEurRate } from '@/lib/providers/frankfurter';
-import type { InvestmentType, FuturePosition, Transaction } from '@/lib/types';
+import { fetchKrakenAccountLog, fetchKrakenFills } from '@/lib/kraken-api';
 
-const KRAKEN_FUTURES_BASE_URL = 'https://futures.kraken.com';
-
-// --- Types strictly aligned with Kraken Futures V3 Schema ---
-type KrakenResponse<T> = { 
-  result: 'success' | 'error'; 
-  serverTime: string;
-  error?: string; 
-} & T;
-
-type KrakenOpenPosition = {
-  side: 'long' | 'short';
-  symbol: string;
-  price: number;
-  size: number;
-  fillTime: string;
-  maxFixedLeverage?: number;
+// --- TYPES ---
+type KrakenLog = {
+  id: number;
+  booking_uid: string;
+  date: string;
+  asset: string;
+  info: string;
+  contract: string;
+  realized_pnl: number;
+  realized_funding?: number; // Added: The field you noticed
+  fee: number;
+  old_average_entry_price?: number;
+  new_average_entry_price?: number; 
+  execution: string; 
 };
 
 type KrakenFill = {
   fill_id: string;
+  order_id: string;
   symbol: string;
   side: 'buy' | 'sell';
   price: number;
   size: number;
   fillTime: string;
-  fillType: string;
-  order_id: string;
 };
 
-type KrakenAccountLog = {
-  booking_uid: string;
-  date: string;
-  asset: string;
-  info: string;
-  contract?: string;
-  realized_funding: number | null;
-  realized_pnl: number | null;
-  fee: number | null;
-  margin_account: string;
-  old_balance?: number;
-  new_balance?: number;
-  // NEW: Critical field for Audit Entry Price
-  old_average_entry_price?: number;
-};
+// --- HELPERS ---
 
-// --- Helper: Asset Mapping ---
-function mapKrakenSymbol(symbol: string) {
-  const clean = symbol.toUpperCase().replace('PI_', '').replace('PF_', '').replace('FI_', '').replace('USD', '');
-  return {
-    ticker: `${clean}-PERP`,
-    name: `${clean} Perpetual`,
-    asset: clean.includes('XBT') ? 'BTC' : clean
-  };
+// 1. Clean Ticker (PF_ADAUSD -> ADA)
+function formatTicker(rawSymbol: string): string {
+  // Remove prefixes like PF_, PI_, FI_ and suffix USD
+  return rawSymbol.replace(/^(PF_|PI_|FI_)/, '').replace(/USD$/, '');
 }
 
-// --- Helper: Session-Based ID Strategy ---
-// Kraken Futures aggregates positions by ticker.
-function getSessionId(ticker: string): string {
-  return ticker;
-}
-
-// 2. LOGIC: The History Walk Helper (CORRECTED)
-// Traces net inventory backwards until balance was zero to find true 'Open Date'
-function findOpenDateForClosure(assetFills: any[], closingFillTime: string) {
-  // 1. Get all fills for this asset before the closing time, newest to oldest
-  const history = assetFills
-    .filter(f => new Date(f.fillTime) <= new Date(closingFillTime))
+// 2. History Walker (Find Open Date)
+function findOpenDateForClosure(allFills: KrakenFill[], currentFill: KrakenFill): Date {
+  const history = allFills
+    .filter(f => f.symbol === currentFill.symbol && new Date(f.fillTime) <= new Date(currentFill.fillTime))
     .sort((a, b) => new Date(b.fillTime).getTime() - new Date(a.fillTime).getTime());
 
-  if (history.length === 0) return new Date(closingFillTime);
-
-  let runningNetBalance = 0;
-  let trueOpeningDate = new Date(history[0].fillTime);
-
-  // 2. Trace backwards. 
-  // Note: We use the inverted logic because we are walking back from the CLOSE.
-  // If a closing trade was a 'buy', the opening trades were 'sell'.
+  let netPosition = 0;
   for (const fill of history) {
-    const fillSize = Number(fill.size);
-    // In walk-back: 'buy' fills subtract from inventory, 'sell' fills add to it
-    if (fill.side === 'buy') {
-      runningNetBalance -= fillSize;
-    } else {
-      runningNetBalance += fillSize;
-    }
+    const size = Number(fill.size);
+    if (fill.side === 'buy') netPosition += size; 
+    else netPosition -= size;
 
-    trueOpeningDate = new Date(fill.fillTime);
-
-    // 3. The moment the running balance hits zero (or crosses it), 
-    // the fill that caused this change is the start of the session.
-    if (Math.abs(runningNetBalance) < 0.000001) {
-      break;
+    if (Math.abs(netPosition) < 0.0001) {
+      return new Date(fill.fillTime);
     }
   }
-
-  return trueOpeningDate;
+  return history.length > 0 ? new Date(history[history.length - 1].fillTime) : new Date(currentFill.fillTime);
 }
 
-// --- NEW HELPER: Aggregate Funding ---
-// Finds all funding events for a contract within a time window and sums them
-async function aggregateFundingForWindow(userId: string, contract: string, start: Date, end: Date): Promise<number> {
-    // 1. Convert JS Dates to Firestore Timestamps for query
-    const startTs = Timestamp.fromDate(start);
-    const endTs = Timestamp.fromDate(end);
+// 3. Back-calculate Entry Price if API misses it
+function calculateFallbackEntry(
+  exitPrice: number, 
+  size: number, 
+  pnl: number, 
+  positionSide: 'LONG' | 'SHORT' // This is the POSITION side (not trade side)
+): number {
+  if (size === 0) return 0;
+  
+  // Formulas derived from: PnL = (Exit - Entry) * Size [Long]
+  // Long: Entry = Exit - (PnL / Size)
+  // Short: Entry = Exit + (PnL / Size)
+  
+  const priceDelta = pnl / size;
+  return positionSide === 'LONG' 
+    ? exitPrice - priceDelta 
+    : exitPrice + priceDelta;
+}
 
-    // 2. Query logs: Matches contract AND 'funding rate change' AND inside time window
-    const logsRef = adminDb.collection('users').doc(userId).collection('kraken_logs');
-    const q = logsRef
-        .where('contract', '==', contract) // e.g. "pf_ethusd"
-        .where('info', '==', 'funding rate change')
-        .where('timestamp', '>=', startTs)
-        .where('timestamp', '<=', endTs);
+// 4. Sum Funding from Firestore
+async function calculateFundingForPosition(
+  userId: string, 
+  contract: string, 
+  start: Date, 
+  end: Date
+): Promise<number> {
+  try {
+    const db = adminDb;
+    const logsRef = db.collection('users').doc(userId).collection('kraken_logs');
+    const cleanContract = contract.toLowerCase();
 
-    const snapshot = await q.get();
+    // TIME BUFFER: Expand window by 1 hour to catch funding that happened close to open/close
+    const bufferedStart = new Date(start);
+    bufferedStart.setHours(bufferedStart.getHours() - 1);
+    
+    const bufferedEnd = new Date(end);
+    bufferedEnd.setHours(bufferedEnd.getHours() + 1);
+
+    const snapshot = await logsRef
+      .where('contract', '==', cleanContract) 
+      .where('type', '==', 'funding rate change')
+      .where('date', '>=', Timestamp.fromDate(bufferedStart))
+      .where('date', '<=', Timestamp.fromDate(bufferedEnd))
+      .get();
 
     if (snapshot.empty) return 0;
 
-    // 3. Sum up the 'realizedFundingEur'
-    // Kraken Logic: + is Income, - is Cost.
-    // We just SUM them.
     let totalFundingEur = 0;
     snapshot.forEach(doc => {
-        const data = doc.data();
-        totalFundingEur += (data.realizedFundingEur || 0);
+      const data = doc.data();
+      // Ensure we treat it as a number
+      const val = Number(data.realizedFundingEur) || 0;
+      totalFundingEur += val;
     });
 
     return totalFundingEur;
-}
-
-// --- Auth Logic (Verified with test script) ---
-function getKrakenFuturesSignature(path: string, nonce: string, queryString: string, secret: string) {
-  const signaturePath = path.replace('/derivatives', '');
-  const message = queryString + nonce + signaturePath;
-  const hash = crypto.createHash('sha256').update(message).digest('binary');
-  const secretBuffer = Buffer.from(secret.trim(), 'base64');
-  
-  return crypto
-    .createHmac('sha512', secretBuffer)
-    .update(hash, 'binary')
-    .digest('base64');
-}
-
-async function fetchKrakenFutures<T>(path: string, params: Record<string, string> = {}): Promise<T> {
-  const apiKey = process.env.KRAKEN_FUTURES_KEY?.trim();
-  const apiSecret = process.env.KRAKEN_FUTURES_SECRET?.trim();
-
-  if (!apiKey || !apiSecret) throw new Error('API Keys missing in environment');
-
-  const nonce = Date.now().toString();
-  const queryString = new URLSearchParams(params).toString();
-  const authent = getKrakenFuturesSignature(path, nonce, queryString, apiSecret);
-
-  const url = `${KRAKEN_FUTURES_BASE_URL}${path}${queryString ? `?${queryString}` : ''}`;
-  
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      'APIKey': apiKey,
-      'Authent': authent,
-      'Nonce': nonce,
-      'User-Agent': 'InvestmentTracker/1.1',
-    },
-    cache: 'no-store'
-  });
-
-  const data = await res.json();
-  
-  // FIX: Only throw if the API explicitly reports an error.
-  // The Account Log API doesn't send a "result: success" field.
-  if (data.result === 'error') {
-    console.error('❌ Kraken API Error:', data.error);
-    throw new Error(data.error || 'Unknown Kraken Error');
+  } catch (err) {
+    console.error('Error calculating funding:', err);
+    return 0;
   }
-  
-  return data as T;
 }
 
-// --- Main Sync Action ---
+// --- MAIN SYNC FUNCTION ---
 export async function syncKrakenFutures(userId: string) {
-  if (!userId) return { ok: false, message: 'No user ID provided' };
+  if (!userId) return { ok: false, message: 'No User ID' };
 
   try {
-    const userRef = adminDb.collection('users').doc(userId);
-    const batch = adminDb.batch();
+    const db = adminDb;
+    const metaRef = db.doc(`users/${userId}/metadata/kraken_sync`);
     
-    // 0. Fetch Fills FIRST (With Pagination) - needed to find actual opening dates for open positions
-    let lastFillTime: string | undefined;
-    const allFills: KrakenFill[] = [];
+    const metaSnap = await metaRef.get();
+    let lastLogId = metaSnap.data()?.lastLogId || 0;
     
-    // Fetch up to 300 recent fills (3 pages) to avoid hitting Firestore limits in one go
-    for (let i = 0; i < 3; i++) {
-      const params: Record<string, string> = lastFillTime ? { lastFillTime } : {};
-      const fillData = await fetchKrakenFutures<KrakenResponse<{ fills: KrakenFill[] }>>('/derivatives/api/v3/fills', params);
-      
-      if (!fillData.fills || fillData.fills.length === 0) break;
-      
-      allFills.push(...fillData.fills);
-      lastFillTime = fillData.fills[fillData.fills.length - 1].fillTime;
-      
-      if (fillData.fills.length < 100) break; 
-    }
+    console.log(`🔄 Syncing Kraken Futures starting from Log ID: ${lastLogId}...`);
 
-    const investmentsCol = userRef.collection('investments');
-
-    for (const fill of allFills) {
-      const { ticker, name } = mapKrakenSymbol(fill.symbol);
-      const invId = `FUTURE-${ticker}`;
-      const invRef = investmentsCol.doc(invId);
-      const txRef = invRef.collection('transactions').doc(fill.fill_id);
-
-      const date = new Date(fill.fillTime);
-      const eurRate = await getDailyEurRate(date, 'USD');
-      
-      batch.set(invRef, {
-        id: invId,
-        type: 'Future',
-        ticker: ticker,
-        name: name,
-        updatedAt: FieldValue.serverTimestamp()
-      }, { merge: true });
-
-      batch.set(txRef, {
-        id: fill.fill_id,
-        type: fill.side === 'buy' ? 'Buy' : 'Sell',
-        date: date.toISOString(),
-        quantity: fill.size,
-        pricePerUnit: fill.price,
-        totalAmount: fill.size * fill.price,
-        currency: 'USD',
-        exchangeRate: eurRate,
-        valueInEur: (fill.size * fill.price) * eurRate,
-        status: 'COMPLETED',
-        metadata: { fillType: fill.fillType, orderId: fill.order_id }
-      }, { merge: true });
-    }
-
-    // 2.5. Process Open Positions (using fills to find actual opening dates)
-    const posData = await fetchKrakenFutures<KrakenResponse<{ openPositions: KrakenOpenPosition[] }>>('/derivatives/api/v3/openpositions');
-    const positionsCol = userRef.collection('futures_positions');
-    
-    // Get all existing position documents to detect closed positions
-    const existingPositionsSnapshot = await positionsCol.get();
-    const openSessionIds = new Set<string>();
-    
-    // Group fills by symbol for faster lookup
-    const fillsBySymbol = new Map<string, KrakenFill[]>();
-    for (const fill of allFills) {
-      if (!fillsBySymbol.has(fill.symbol)) {
-        fillsBySymbol.set(fill.symbol, []);
-      }
-      fillsBySymbol.get(fill.symbol)!.push(fill);
-    }
-    
-    for (const pos of (posData.openPositions || [])) {
-      const { ticker, asset } = mapKrakenSymbol(pos.symbol);
-      
-      // FIX: Find the actual opening fill, not the most recent fill
-      // Walk backwards through fills for this symbol to find when position was first opened
-      const symbolFills = fillsBySymbol.get(pos.symbol) || [];
-      let actualOpenDate = new Date(pos.fillTime); // Fallback if no fills found
-      
-      if (symbolFills.length > 0) {
-        // Sort fills by time (newest first)
-        const sortedFills = symbolFills.sort((a, b) => 
-          new Date(b.fillTime).getTime() - new Date(a.fillTime).getTime()
-        );
-        
-        // Trace backwards to find when position was first opened (net position became > 0)
-        let runningSize = 0;
-        for (const fill of sortedFills) {
-          const fillSize = Number(fill.size) || 0;
-          // For the current position side, add/subtract appropriately
-          if (fill.side.toUpperCase() === pos.side.toUpperCase()) {
-            runningSize += fillSize;
-          } else {
-            runningSize -= fillSize;
-          }
-          
-          // When running size equals current position size, we found the opening
-          if (Math.abs(runningSize) >= Math.abs(pos.size * 0.99)) { // Allow 1% tolerance for rounding
-            actualOpenDate = new Date(fill.fillTime);
-            break;
-          }
-        }
-      }
-      
-      // UNIFIED ID: Session is defined by ticker
-      // This allows us to track the current live state of a position
-      const sessionId = getSessionId(ticker);
-      openSessionIds.add(sessionId);
-      const posRef = positionsCol.doc(sessionId);
-      
-      // Fetch exchange rate for EUR conversion (German tax compliance)
-      let exchangeRate = 0.85; // Fallback
-      try {
-        exchangeRate = await getDailyEurRate(actualOpenDate, 'USD');
-      } catch (e) {
-        console.warn(`Failed to fetch exchange rate for ${actualOpenDate.toISOString()}, using fallback`);
-      }
-      
-      // Calculate EUR values
-      const entryPriceEur = pos.price * exchangeRate;
-      const sizeValueUsd = pos.size * pos.price;
-      const sizeValueEur = pos.size * entryPriceEur;
-      
-      batch.set(posRef, {
-        id: sessionId,
-        ticker: ticker,
-        asset: asset,
-        side: pos.side.toUpperCase(),
-        leverage: pos.maxFixedLeverage || 1,
-        
-        // USD values (raw)
-        entryPrice: pos.price,
-        entryPriceUsd: pos.price,
-        
-        // EUR values (for German tax)
-        entryPriceEur: entryPriceEur,
-        valueInEur: sizeValueEur,
-        
-        // Position details
-        size: pos.size,
-        collateral: sizeValueEur, // Display collateral in EUR
-        
-        // Currency metadata
-        currency: 'USD',
-        baseCurrency: 'EUR',
-        exchangeRate: exchangeRate,
-        
-        status: 'OPEN',
-        openedAt: Timestamp.fromDate(actualOpenDate),  // FIX: Use actual opening date from fills
-        updatedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
-    }
-
-    // Remove positions that are no longer OPEN in Kraken
-    // We delete them because the permanent record of closures is created from the account logs
-    for (const doc of existingPositionsSnapshot.docs) {
-      const sessionId = doc.id;
-      const data = doc.data();
-      
-      // If position was OPEN but is no longer in the API response, delete it
-      if (data.status === 'OPEN' && !openSessionIds.has(sessionId)) {
-        batch.delete(positionsCol.doc(sessionId));
-      }
-    }
-
-    // 3. Fetch Account Logs (Funding, P&L, Fees) → kraken_logs
-    const accountLogData = await fetchKrakenFutures<any>('/api/history/v3/account-log', { count: '100' });
-    
-    // The data is the object itself containing the logs array
-    const logs = accountLogData.logs || [];
-    const logsCol = userRef.collection('kraken_logs');
-
-    console.log(`📥 Processing ${logs.length} account log entries...`);
-
-    // ⚡ PERFORMANCE FIX: Cache exchange rates by date to avoid repeated API calls
+    let hasMore = true;
+    let totalProcessed = 0;
+    let totalClosed = 0;
+    const BATCH_SIZE = 500; 
     const rateCache = new Map<string, number>();
-    const getCachedRate = async (date: Date): Promise<number> => {
-      const dateStr = date.toISOString().split('T')[0]; // Format: YYYY-MM-DD
-      if (rateCache.has(dateStr)) {
-        return rateCache.get(dateStr)!;
-      }
-      let rate = 0.85; // Fallback
-      try {
-        rate = await getDailyEurRate(date, 'USD');
-      } catch (e) {
-        console.warn(`⚠️  Failed to fetch exchange rate for ${dateStr}, using fallback 0.85`);
-      }
-      rateCache.set(dateStr, rate);
-      return rate;
-    };
 
-    // Track closed positions from logs to avoid duplicate CLOSED records
-    const closedPositionIds = new Set<string>();
-
-    for (const log of logs) {
-      if (!log.booking_uid) continue;
-
-      const logRef = logsCol.doc(log.booking_uid);
-      const logDate = new Date(log.date);
+    while (hasMore) {
+      const logResponse = await fetchKrakenAccountLog({
+        from: lastLogId + 1,
+        count: BATCH_SIZE,
+        sort: 'asc' 
+      });
       
-      // ⚡ Use cached rate instead of calling API every time
-      const exchangeRate = await getCachedRate(logDate);
+      const logs: KrakenLog[] = logResponse.logs || logResponse.accountLog || [];
 
-      // Use Number() to safely parse strings from the API
-      const realizedFunding = Number(log.realized_funding || 0);
-      const realizedPnl = Number(log.realized_pnl || 0);
-      const fee = Number(log.fee || 0);
+      if (logs.length === 0) {
+        hasMore = false;
+        break; 
+      }
 
-      // Skip logs with no financial impact to save Firestore quota
-      if (realizedPnl === 0 && realizedFunding === 0 && fee === 0) continue;
+      console.log(`   Fetched batch of ${logs.length} logs (ID ${logs[0].id} to ${logs[logs.length-1].id})`);
 
-      // Convert to EUR for German tax compliance
-      const realizedFundingEur = realizedFunding * exchangeRate;
-      const realizedPnlEur = realizedPnl * exchangeRate;
-      const feeEur = fee * exchangeRate;
-      const netRealizedPnlEur = realizedPnlEur - feeEur;
+      // 1. SAVE GRANULAR LOGS
+      const logBatch = db.batch();
+      let logBatchCount = 0;
 
-      batch.set(logRef, {
-        booking_uid: log.booking_uid,
-        date: log.date,
-        asset: log.asset,
-        contract: log.contract,
-        info: log.info,
-        margin_account: log.margin_account,
+      for (const log of logs) {
+        if (['conversion', 'transfer', 'margin'].includes(log.info)) continue;
+
+        const logDate = new Date(log.date);
+        const dateKey = logDate.toISOString().split('T')[0];
         
-        // Raw USD values
-        realized_funding: realizedFunding,
-        realized_pnl: realizedPnl,
-        fee: fee,
-        
-        // EUR converted values (for §20 tax reporting)
-        realizedFundingEur: realizedFundingEur,
-        realizedPnlEur: realizedPnlEur,
-        feeEur: feeEur,
-        netRealizedPnlEur: netRealizedPnlEur,
-        
-        // Currency metadata
-        currency: 'USD',
-        baseCurrency: 'EUR',
-        exchangeRate: exchangeRate,
-        
-        // Timestamps
-        timestamp: Timestamp.fromDate(logDate),
-        syncedAt: FieldValue.serverTimestamp(),
-      }, { merge: true });
+        let eurRate = rateCache.get(dateKey);
+        if (!eurRate) {
+          eurRate = await getDailyEurRate(logDate, 'USD').catch(() => 0.85); 
+          rateCache.set(dateKey, eurRate);
+        }
 
-      // HEAVY LIFTING: JOIN Operation between Financial Ledger (logs) and Execution Ledger (fills)
-      // Target only the financial realization events
-      if (log.info === 'realized_pnl' || (log.info === 'futures trade' && realizedPnl !== 0)) {
-        const matchingFill = allFills.find(f => f.fill_id === log.execution);
+        const realizedVal = Number(log.realized_pnl) || 0;
+        const feeVal = Number(log.fee) || 0;
+        const hasPnL = Math.abs(realizedVal) > 0.000001; 
+        
+        // FIX: Check BOTH fields for the funding value
+        const realizedFunding = Number(log.realized_funding) || 0;
+        
+        // Robust Extraction: If it's a funding log, find the non-zero value
+        let rawFundingAmount = 0;
+        if (log.info === 'funding rate change') {
+            if (Math.abs(realizedVal) > 0) rawFundingAmount = realizedVal;
+            else if (Math.abs(realizedFunding) > 0) rawFundingAmount = realizedFunding;
+        } else {
+            // For trades, funding is strictly in the specialized field
+            rawFundingAmount = realizedFunding;
+        }
 
-        if (matchingFill) {
-          const { ticker, asset: assetName } = mapKrakenSymbol(matchingFill.symbol);
+        const fundingEur = rawFundingAmount * eurRate;
+
+        const logRef = db.collection('users').doc(userId).collection('kraken_logs').doc(log.booking_uid);
+        const normalizedContract = log.contract ? log.contract.toLowerCase() : '';
+
+        logBatch.set(logRef, {
+            id: log.booking_uid,
+            logId: log.id,
+            date: Timestamp.fromDate(logDate),
+            type: log.info, 
+            asset: log.asset,
+            contract: normalizedContract, // Saved as 'pf_ethusd' consistently
+            amount: realizedVal, 
+            fee: feeVal,
+            amountEur: realizedVal * eurRate,
+            feeEur: feeVal * eurRate,
+            eurRate: eurRate,
+            realizedFundingEur: fundingEur, // Store explicitly
+            realizedPnlEur: hasPnL && log.info !== 'funding rate change' ? (realizedVal * eurRate) : 0,
+            updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+        
+        logBatchCount++;
+      }
+
+      if (logBatchCount > 0) {
+        await logBatch.commit();
+      }
+
+      // 2. IDENTIFY CLOSURES
+      const closureLogs = logs.filter((l: KrakenLog) => {
+          const val = Number(l.realized_pnl) || 0;
+          const isExplicit = l.info === 'realized_pnl' || l.info === 'liquidation';
+          const isHiddenPnL = l.info === 'futures trade' && Math.abs(val) > 0.000001;
+          return isExplicit || isHiddenPnL;
+      });
+
+      if (closureLogs.length > 0) {
+        console.log(`   🎯 FOUND ${closureLogs.length} CLOSURE EVENTS! Processing...`);
+        
+        const allFillsMap = new Map<string, KrakenFill>();
+        const sortedClosures = [...closureLogs].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        for (const closure of sortedClosures) {
+            if (allFillsMap.has(closure.execution)) continue;
+            const targetTime = new Date(closure.date);
+            targetTime.setSeconds(targetTime.getSeconds() + 1); 
+
+            const fillRes = await fetchKrakenFills({
+                lastFillTime: targetTime.toISOString(),
+                count: 100 
+            });
+
+            const fills = fillRes.fills || [];
+            fills.forEach((f: KrakenFill) => allFillsMap.set(f.fill_id, f));
+        }
+
+        const allFills = Array.from(allFillsMap.values());
+        const posBatch = db.batch();
+        let posBatchCount = 0;
+
+        for (const log of closureLogs) {
+          const matchingFill = allFillsMap.get(log.execution);
+          if (!matchingFill) continue;
+
           const logDate = new Date(log.date);
-          const exchangeRate = await getCachedRate(logDate);
+          const dateKey = logDate.toISOString().split('T')[0];
+          const eurRate = rateCache.get(dateKey) || 0.85;
 
-          // Filter fills for this specific contract to run the walk-back
-          const assetFills = allFills.filter(f => f.symbol === matchingFill.symbol);
-          
-          // EXECUTE CORRECTED HISTORY WALK
-          const openedAtDate = findOpenDateForClosure(assetFills, matchingFill.fillTime);
+          // Determine Side
+          const positionSide = matchingFill.side === 'buy' ? 'SHORT' : 'LONG';
+          const size = Number(matchingFill.size);
+          const exitPrice = Number(matchingFill.price);
+          const realizedPnl = Number(log.realized_pnl);
 
-          // NEW: Aggregate Funding for this specific position window
-          // We look for any "funding rate change" log for this contract between Open and Close
-          const contractCode = log.contract; // e.g. "pf_ethusd"
-          const totalFundingEur = await aggregateFundingForWindow(userId, contractCode, openedAtDate, logDate);
-
-          // HEAVY LIFTING: Math Fallback for Entry Price
-          // If the API returns 0 for entry price, we reverse-calculate it from PnL
-          let auditEntryPrice = Number(log.old_average_entry_price || 0);
-          
-          if (auditEntryPrice === 0 && matchingFill.size > 0) {
-            const pnlPerUnit = Number(log.realized_pnl || 0) / matchingFill.size;
-            
-            // If we BOUGHT to close (Short), Entry was HIGHER than Exit (Exit + Profit)
-            // If we SOLD to close (Long), Entry was LOWER than Exit (Exit - Profit)
-            if (matchingFill.side === 'buy') {
-               auditEntryPrice = matchingFill.price + pnlPerUnit;
+          // --- ENTRY PRICE LOGIC ---
+          // 1. Try old_average (Best)
+          // 2. Try new_average (Okay for partials, bad for full close as it might be 0)
+          // 3. Fallback calculation (Mathematical certainty)
+          let entryPrice = Number(log.old_average_entry_price || 0);
+          if (entryPrice === 0) {
+            const newEntry = Number(log.new_average_entry_price || 0);
+            if (newEntry > 0) {
+               entryPrice = newEntry;
             } else {
-               auditEntryPrice = matchingFill.price - pnlPerUnit;
+               entryPrice = calculateFallbackEntry(exitPrice, size, realizedPnl, positionSide as any);
             }
           }
 
-          // Calculate Final Audit Net P&L (Gross - Fee + Funding)
-          // Note: totalFundingEur is already signed (+ for income, - for cost)
-          const finalNetPnlEur = realizedPnlEur - feeEur + totalFundingEur;
+          const openedAt = findOpenDateForClosure(allFills, matchingFill);
+          
+          // --- FUNDING AGGREGATION ---
+          // FIX: Pass the contract (lowercase normalization happens inside the function)
+          let totalFundingEur = await calculateFundingForPosition(userId, log.contract, openedAt, logDate);
+          if (log.realized_funding) {
+             totalFundingEur += (log.realized_funding * eurRate);
+          }
 
-          const uniqueId = `CLOSED-${log.booking_uid}`;
-          const posRef = positionsCol.doc(uniqueId);
+          const realizedPnlEur = realizedPnl * eurRate;
+          const feeEur = (log.fee || 0) * eurRate;
+          const netRealizedPnlEur = realizedPnlEur - feeEur + totalFundingEur;
 
-          batch.set(posRef, {
-            id: uniqueId,
-            asset: assetName,
-            ticker: ticker,
+          const docRef = db.collection('users').doc(userId).collection('futures_positions').doc(`CLOSED-${log.booking_uid}`);
+          
+          posBatch.set(docRef, {
+            id: `CLOSED-${log.booking_uid}`,
             status: 'CLOSED',
-            
-            // Standard query fields for UI/Tax filters
-            type: 'Future',
-            date: logDate.toISOString(),
-            year: logDate.getFullYear(),
-            
-            // Execution Data (Market)
-            side: matchingFill.side === 'buy' ? 'SHORT' : 'LONG',
-            size: matchingFill.size,
-            exitPrice: matchingFill.price,
-            
-            // Financial Data (Source of Truth)
-            entryPrice: auditEntryPrice,
+            asset: formatTicker(matchingFill.symbol), 
+            ticker: formatTicker(matchingFill.symbol) + '-PERP',
+            side: positionSide,
+            size: size,
+            exitPrice: exitPrice,
+            entryPrice: entryPrice,
             realizedPnL: realizedPnl,
-            realizedPnlEur: realizedPnlEur,
-            feeEur: feeEur,
-            
-            // NEW: Funding Field
-            fundingEur: totalFundingEur,
-            
-            // UPDATED: Net includes funding
-            netRealizedPnlEur: finalNetPnlEur,
-            
-            // AUDIT TRAIL: Links P&L back to source order/trade for verification
+            realizedPnlEur,
+            feeEur,
+            fundingEur: totalFundingEur, // Stored directly in the position!
+            netRealizedPnlEur,
             closingOrderId: matchingFill.order_id,
             closingTradeId: matchingFill.fill_id,
-            
-            // Timestamps
-            openedAt: Timestamp.fromDate(openedAtDate),
+            openedAt: Timestamp.fromDate(openedAt),
             closedAt: Timestamp.fromDate(logDate),
-            updatedAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp()
           }, { merge: true });
-          
-          // 3. NEW: BRIDGE TO TAX ENGINE (For the Report)
-          // We create a "Virtual Sell" transaction that represents ONLY the P&L.
-          // This allows portfolio.ts to calculate tax without changing its logic.
-          const invId = `FUTURE-${ticker}`;
-          const txRef = investmentsCol.doc(invId).collection('transactions').doc(`TAX-${log.booking_uid}`);
-          
-          batch.set(txRef, {
-            id: `TAX-${log.booking_uid}`,
-            type: 'Sell', // Force 'Sell' so tax engine picks it up
-            date: logDate.toISOString(),
-            // Use quantity 1 so generic engines don't drop zero-qty sells
-            quantity: 1,
-            
-            // CRITICAL: Pass the P&L as the value. 
-            // portfolio.ts sums up 'valueInEur' for Futures.
-            valueInEur: realizedPnlEur,
-            totalAmount: realizedPnl,
-            
-            // Make the unit price equal to the full P&L so qty*price = P&L
-            pricePerUnit: realizedPnl,
-            currency: 'USD',
-            exchangeRate: exchangeRate,
-            status: 'COMPLETED',
-            metadata: { 
-              isTaxEvent: true, 
-              category: 'Derivatives',
-              description: `Realized P&L for ${assetName} (${matchingFill.side === 'buy' ? 'Short' : 'Long'})`,
-              feeEur: feeEur,
-              // NEW: Pass the funding amount so we can audit it
-              fundingEur: totalFundingEur,
-              // CRITICAL: This is what portfolio.ts uses for the final tax bucket
-              netRealizedPnlEur: finalNetPnlEur,
-            }
-          }, { merge: true });
-          
-          console.log(`✅ Synced CLOSED ${assetName} w/ Funding:`);
-          console.log(`   P&L: ${realizedPnlEur.toFixed(2)}€ | Fees: -${feeEur.toFixed(2)}€ | Funding: ${totalFundingEur > 0 ? '+' : ''}${totalFundingEur.toFixed(2)}€`);
-          console.log(`   Final Net: ${finalNetPnlEur.toFixed(2)}€`);
+
+          posBatchCount++;
+          totalClosed++;
+        }
+
+        if (posBatchCount > 0) {
+          await posBatch.commit();
+          console.log(`      ✅ Saved ${posBatchCount} closed positions.`);
         }
       }
+
+      const maxIdInBatch = logs.reduce((max: number, l: KrakenLog) => l.id > max ? l.id : max, lastLogId);
+      lastLogId = maxIdInBatch;
+      
+      await metaRef.set({ lastLogId: maxIdInBatch }, { merge: true });
+      totalProcessed += logs.length;
+      
+      if (totalProcessed > 5000) break;
     }
 
-    await batch.commit();
-    return { ok: true, message: `Synced.` };
+    return { ok: true, message: `Synced. Processed ${totalProcessed} logs, found ${totalClosed} closures.` };
 
-  } catch (err: any) {
-    console.error('Kraken Sync Error:', err);
-    return { ok: false, message: err.message };
+  } catch (error: any) {
+    console.error('Sync Error:', error);
+    return { ok: false, message: error.message };
   }
 }
