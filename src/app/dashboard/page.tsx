@@ -28,9 +28,7 @@ export default function DashboardPage() {
   );
 
   const { positions: futuresPositions } = useFuturesPositions({ 
-    userId: user?.uid,
-    useMockData: false // Now using real Kraken data
-  });
+    userId: user?.uid
 
   console.log('📊 Futures Positions from hook:', {
     positions: futuresPositions,

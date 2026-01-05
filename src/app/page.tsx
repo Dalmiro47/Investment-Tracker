@@ -352,7 +352,7 @@ function DashboardPageContent() {
   }, [filteredAndSortedInvestments, transactionsMap, yearFilter, rateSchedulesMap]);
 
   // Futures: load positions (mock data to avoid Firestore issues) and derive live metrics
-  const { positions: futuresPositions } = useFuturesPositions({ userId: user?.uid, useMockData: false });
+  const { positions: futuresPositions } = useFuturesPositions({ userId: user?.uid });
   const { positions: closedPositions } = useClosedPositions(user?.uid);
 
   // Calculate realized P&L from closed positions (sum of all netRealizedPnlEur)
@@ -893,7 +893,7 @@ function DashboardPageContent() {
                         Loading futures data...
                       </div>
                     }>
-                      <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? null} statusFilter={futuresStatusFilter} />
+                      <FuturesPositionsTable userId={user?.uid ?? null} statusFilter={futuresStatusFilter} />
                     </React.Suspense>
                   </CardContent>
                 </Card>
@@ -1129,7 +1129,7 @@ function DashboardPageContent() {
                         Loading futures data...
                       </div>
                     }>
-                      <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? ""} statusFilter={futuresStatusFilter} />
+                      <FuturesPositionsTable userId={user?.uid ?? ""} statusFilter={futuresStatusFilter} />
                     </React.Suspense>
                   </CardContent>
                 </Card>
