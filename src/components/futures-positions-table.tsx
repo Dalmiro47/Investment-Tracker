@@ -357,18 +357,39 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
     const size = position.size;
     const exchangeRate = position.exchangeRate;
 
-    const pnl = (currentPrice - entryPrice) * size * exchangeRate;
-    return position.side === 'SHORT' ? -pnl : pnl;
+    // Standard PnL calc
+    const diff = position.side === 'SHORT' 
+      ? (entryPrice! - currentPrice) 
+      : (currentPrice - entryPrice!);
+      
+    return diff * size! * exchangeRate;
   }, [currentPrice, position.entryPrice, position.size, position.exchangeRate, position.side, isOpenPosition]);
 
+  // 1. Define what to display
   const displayRealized = isClosed ? (position.realizedPnlEur || 0) : taxData.realizedPnlEur;
   const displayFee = isClosed ? (position.feeEur || 0) : taxData.feeTotalEur;
-  const displayFunding = isClosed ? (position.fundingEur || 0) : 0;
   
-  // Calculate Net P&L (Prefer database value, fallback to calc)
+  // Funding logic: For OPEN positions, use position.fundingEur; for CLOSED, use the same
+  const displayFunding = isOpenPosition 
+    ? (position.fundingEur ?? 0)  // For OPEN: directly from DB
+    : (position.fundingEur || 0); // For CLOSED: existing logic
+
+  // Debug: Log funding values for OPEN positions
+  useEffect(() => {
+    if (isOpenPosition && position.fundingEur !== undefined) {
+      console.log(`[${position.asset}] OPEN position funding:`, {
+        raw: position.fundingEur,
+        display: displayFunding,
+        position: position
+      });
+    }
+  }, [isOpenPosition, position.fundingEur, displayFunding, position.asset, position]);
+
+  // 2. Define Net P&L (Tax Base) logic
+  // User Requirement: Keep empty for OPEN positions
   const netRealized = isClosed 
     ? (position.netRealizedPnlEur ?? (displayRealized - displayFee + displayFunding))
-    : 0; // Don't show Net P&L for open positions
+    : 0;
 
   // Fee tooltip calculation
   const feePercentage = displayRealized !== 0 ? ((displayFee / Math.abs(displayRealized)) * 100).toFixed(1) : 0;
@@ -455,15 +476,17 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
 
       <TableCell className="text-right text-muted-foreground">{notionalValueEur > 0 ? formatEuro(notionalValueEur) : '—'}</TableCell>
 
+      {/* REALIZED P&L: Hide if Open */}
       <TableCell className={cn("text-right font-mono", displayRealized < 0 ? "text-red-500" : "text-emerald-500")}>
         {isOpenPosition ? "—" : formatEuro(displayRealized)}
       </TableCell>
 
+      {/* UNREALIZED P&L: Show if Open (Existing logic is good) */}
       <TableCell className={cn("text-right font-mono", !isOpenPosition ? "text-muted-foreground" : (unrealizedPnL ?? 0) < 0 ? "text-red-500" : "text-emerald-500")}>
         {!isOpenPosition ? "—" : unrealizedPnL === null ? "—" : formatEuro(unrealizedPnL)}
       </TableCell>
 
-      {/* FEE WITH TOOLTIP */}
+      {/* FEE: Hide if Open */}
       <TableCell className="text-right text-muted-foreground font-mono">
         {isOpenPosition ? "—" : displayFee > 0 ? (
           <TooltipProvider>
@@ -479,12 +502,17 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
         ) : '—'}
       </TableCell>
 
-      {/* FUNDING COLUMN */}
+      {/* FUNDING: Show for BOTH (Open & Closed) */}
       <TableCell className={cn("text-right font-mono font-semibold", displayFunding > 0 ? "text-emerald-500" : displayFunding < 0 ? "text-red-500" : "text-muted-foreground")}>
-        {isOpenPosition ? "—" : (displayFunding !== 0 ? formatEuro(displayFunding) : '—')}
+        {/* For OPEN positions: always show if fundingEur exists in DB, even if small */}
+        {/* For CLOSED positions: show if non-zero */}
+        {isOpenPosition 
+          ? (position.fundingEur !== undefined && position.fundingEur !== null ? formatEuro(displayFunding) : '—')
+          : (displayFunding !== 0 ? formatEuro(displayFunding) : '—')
+        }
       </TableCell>
 
-      {/* NET P&L WITH TOOLTIP SHOWING BREAKDOWN */}
+      {/* NET P&L: Hide if Open */}
       <TableCell className={cn("text-right font-mono font-bold", netRealized < 0 ? "text-red-500" : "text-emerald-500")}>
         {isOpenPosition ? "—" : (
           <TooltipProvider>
