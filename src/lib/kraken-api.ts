@@ -94,3 +94,11 @@ export async function fetchKrakenFills(params: {
 }) {
   return krakenRequest('/derivatives/api/v3/fills', params as any);
 }
+
+/**
+ * NEW: Fetch current open positions
+ */
+export async function fetchKrakenOpenPositions() {
+  // The endpoint returns { result: "success", openPositions: [...] }
+  return krakenRequest<{ openPositions: any[] }>('/derivatives/api/v3/openpositions');
+}

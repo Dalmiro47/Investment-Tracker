@@ -3,7 +3,7 @@
 import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getDailyEurRate } from '@/lib/providers/frankfurter';
-import { fetchKrakenAccountLog, fetchKrakenFills } from '@/lib/kraken-api';
+import { fetchKrakenAccountLog, fetchKrakenFills, fetchKrakenOpenPositions } from '@/lib/kraken-api';
 
 // --- TYPES ---
 type KrakenLog = {
@@ -57,7 +57,53 @@ function findOpenDateForClosure(allFills: KrakenFill[], currentFill: KrakenFill)
   }
   return history.length > 0 ? new Date(history[history.length - 1].fillTime) : new Date(currentFill.fillTime);
 }
+// NEW: History Walker for OPEN positions (Finds start of current active position)
+function findOpenDateForActivePosition(
+  allFills: KrakenFill[], 
+  symbol: string, 
+  currentSize: number, 
+  side: 'LONG' | 'SHORT'
+): Date {
+  // Sort descending: Newest fill first
+  const history = allFills
+    .filter(f => formatTicker(f.symbol) === formatTicker(symbol)) // Normalize ticker matching
+    .sort((a, b) => new Date(b.fillTime).getTime() - new Date(a.fillTime).getTime());
 
+  if (history.length === 0) return new Date(); // Fallback to now
+
+  // We start with the CURRENT size (e.g. +2.1 ETH)
+  // We walk backwards, reversing each trade.
+  // If we have +2.1, and the last trade was BUY 0.1, previous state was +2.0.
+  // We stop when we hit 0 (or cross it, meaning the position flipped).
+  
+  let netPosition = side === 'LONG' ? currentSize : -currentSize;
+
+  for (const fill of history) {
+    const fillSize = Number(fill.size);
+    
+    // Reverse the fill effect
+    if (fill.side === 'buy') {
+        netPosition -= fillSize; // A buy added to position, so remove it
+    } else {
+        netPosition += fillSize; // A sell reduced position, so add it back
+    }
+
+    // Check if we hit zero (floating point safe check)
+    if (Math.abs(netPosition) < 0.0001) {
+      return new Date(fill.fillTime);
+    }
+    
+    // If we crossed zero (e.g. went from +0.5 to -0.5), this fill flipped the position.
+    // This fill IS the start of the current trend.
+    const isLong = side === 'LONG';
+    if ((isLong && netPosition < 0) || (!isLong && netPosition > 0)) {
+       return new Date(fill.fillTime);
+    }
+  }
+  
+  // If we run out of history, return the oldest fill we found
+  return new Date(history[history.length - 1].fillTime);
+}
 // 3. Back-calculate Entry Price if API misses it
 function calculateFallbackEntry(
   exitPrice: number, 
@@ -128,6 +174,10 @@ export async function syncKrakenFutures(userId: string) {
     const db = adminDb;
     const metaRef = db.doc(`users/${userId}/metadata/kraken_sync`);
     
+    // =========================================================================
+    // PHASE 1: PROCESS HISTORY & CLOSED POSITIONS (Existing Logic)
+    // =========================================================================
+    
     const metaSnap = await metaRef.get();
     let lastLogId = metaSnap.data()?.lastLogId || 0;
     
@@ -138,6 +188,15 @@ export async function syncKrakenFutures(userId: string) {
     let totalClosed = 0;
     const BATCH_SIZE = 500; 
     const rateCache = new Map<string, number>();
+
+    // Helper for current rate (used in Phase 2)
+    const getRate = async (date: Date) => {
+      const key = date.toISOString().split('T')[0];
+      if (rateCache.has(key)) return rateCache.get(key)!;
+      const rate = await getDailyEurRate(date, 'USD').catch(() => 0.85); 
+      rateCache.set(key, rate);
+      return rate;
+    };
 
     while (hasMore) {
       const logResponse = await fetchKrakenAccountLog({
@@ -163,49 +222,38 @@ export async function syncKrakenFutures(userId: string) {
         if (['conversion', 'transfer', 'margin'].includes(log.info)) continue;
 
         const logDate = new Date(log.date);
-        const dateKey = logDate.toISOString().split('T')[0];
-        
-        let eurRate = rateCache.get(dateKey);
-        if (!eurRate) {
-          eurRate = await getDailyEurRate(logDate, 'USD').catch(() => 0.85); 
-          rateCache.set(dateKey, eurRate);
-        }
+        const eurRate = await getRate(logDate);
 
         const realizedVal = Number(log.realized_pnl) || 0;
         const feeVal = Number(log.fee) || 0;
         const hasPnL = Math.abs(realizedVal) > 0.000001; 
         
-        // FIX: Check BOTH fields for the funding value
         const realizedFunding = Number(log.realized_funding) || 0;
-        
-        // Robust Extraction: If it's a funding log, find the non-zero value
         let rawFundingAmount = 0;
         if (log.info === 'funding rate change') {
             if (Math.abs(realizedVal) > 0) rawFundingAmount = realizedVal;
             else if (Math.abs(realizedFunding) > 0) rawFundingAmount = realizedFunding;
         } else {
-            // For trades, funding is strictly in the specialized field
             rawFundingAmount = realizedFunding;
         }
 
         const fundingEur = rawFundingAmount * eurRate;
-
-        const logRef = db.collection('users').doc(userId).collection('kraken_logs').doc(log.booking_uid);
         const normalizedContract = log.contract ? log.contract.toLowerCase() : '';
 
+        const logRef = db.collection('users').doc(userId).collection('kraken_logs').doc(log.booking_uid);
         logBatch.set(logRef, {
             id: log.booking_uid,
             logId: log.id,
             date: Timestamp.fromDate(logDate),
             type: log.info, 
             asset: log.asset,
-            contract: normalizedContract, // Saved as 'pf_ethusd' consistently
+            contract: normalizedContract, 
             amount: realizedVal, 
             fee: feeVal,
             amountEur: realizedVal * eurRate,
             feeEur: feeVal * eurRate,
             eurRate: eurRate,
-            realizedFundingEur: fundingEur, // Store explicitly
+            realizedFundingEur: fundingEur, 
             realizedPnlEur: hasPnL && log.info !== 'funding rate change' ? (realizedVal * eurRate) : 0,
             updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
@@ -213,9 +261,7 @@ export async function syncKrakenFutures(userId: string) {
         logBatchCount++;
       }
 
-      if (logBatchCount > 0) {
-        await logBatch.commit();
-      }
+      if (logBatchCount > 0) await logBatch.commit();
 
       // 2. IDENTIFY CLOSURES
       const closureLogs = logs.filter((l: KrakenLog) => {
@@ -254,19 +300,13 @@ export async function syncKrakenFutures(userId: string) {
           if (!matchingFill) continue;
 
           const logDate = new Date(log.date);
-          const dateKey = logDate.toISOString().split('T')[0];
-          const eurRate = rateCache.get(dateKey) || 0.85;
+          const eurRate = await getRate(logDate);
 
-          // Determine Side
           const positionSide = matchingFill.side === 'buy' ? 'SHORT' : 'LONG';
           const size = Number(matchingFill.size);
           const exitPrice = Number(matchingFill.price);
           const realizedPnl = Number(log.realized_pnl);
 
-          // --- ENTRY PRICE LOGIC ---
-          // 1. Try old_average (Best)
-          // 2. Try new_average (Okay for partials, bad for full close as it might be 0)
-          // 3. Fallback calculation (Mathematical certainty)
           let entryPrice = Number(log.old_average_entry_price || 0);
           if (entryPrice === 0) {
             const newEntry = Number(log.new_average_entry_price || 0);
@@ -279,8 +319,6 @@ export async function syncKrakenFutures(userId: string) {
 
           const openedAt = findOpenDateForClosure(allFills, matchingFill);
           
-          // --- FUNDING AGGREGATION ---
-          // FIX: Pass the contract (lowercase normalization happens inside the function)
           let totalFundingEur = await calculateFundingForPosition(userId, log.contract, openedAt, logDate);
           if (log.realized_funding) {
              totalFundingEur += (log.realized_funding * eurRate);
@@ -288,7 +326,7 @@ export async function syncKrakenFutures(userId: string) {
 
           const realizedPnlEur = realizedPnl * eurRate;
           const feeEur = (log.fee || 0) * eurRate;
-          const netRealizedPnlEur = realizedPnlEur - feeEur + totalFundingEur;
+          const netRealizedPnlEur = realizedPnlEur - feeEur + totalFundingEur; 
 
           const docRef = db.collection('users').doc(userId).collection('futures_positions').doc(`CLOSED-${log.booking_uid}`);
           
@@ -304,7 +342,7 @@ export async function syncKrakenFutures(userId: string) {
             realizedPnL: realizedPnl,
             realizedPnlEur,
             feeEur,
-            fundingEur: totalFundingEur, // Stored directly in the position!
+            fundingEur: totalFundingEur, 
             netRealizedPnlEur,
             closingOrderId: matchingFill.order_id,
             closingTradeId: matchingFill.fill_id,
@@ -332,7 +370,97 @@ export async function syncKrakenFutures(userId: string) {
       if (totalProcessed > 5000) break;
     }
 
-    return { ok: true, message: `Synced. Processed ${totalProcessed} logs, found ${totalClosed} closures.` };
+    // =========================================================================
+    // PHASE 2: SYNC LIVE OPEN POSITIONS
+    // =========================================================================
+    
+    console.log('🔄 Syncing Live Open Positions...');
+    
+    // 1. Fetch live positions from Kraken API
+    const openRes = await fetchKrakenOpenPositions();
+    const livePositions = openRes.openPositions || [];
+    
+    // 2. Fetch recent fills to determine true "Opened At" date for continuous positions
+    let recentFills: KrakenFill[] = [];
+    if (livePositions.length > 0) {
+        // FIX: Increase count to 500 to ensure we find the true start date
+        // even if there were many recent scalping trades.
+        // This prevents "wrong date" issues and ensures accurate funding calculations.
+        const fillsRes = await fetchKrakenFills({ count: 500 });
+        recentFills = fillsRes.fills || [];
+    }
+
+    const livePositionIds = new Set<string>();
+    const today = new Date();
+    const currentRate = await getRate(today);
+
+    const openBatch = db.batch();
+    
+    for (const pos of livePositions) {
+        const symbol = pos.symbol.toUpperCase();
+        const docId = `OPEN-${symbol}`;
+        livePositionIds.add(docId);
+        
+        const side = pos.side === 'long' ? 'LONG' : 'SHORT';
+        const size = Number(pos.size);
+        const entryPrice = Number(pos.price);
+        const unrealizedFunding = Number(pos.unrealizedFunding || 0); 
+        
+        // A. Calculate correct Open Date by walking history
+        const trueOpenedAt = findOpenDateForActivePosition(recentFills, symbol, size, side);
+        
+        // B. Calculate Historical Funding (from logs) + Unrealized Funding (from API)
+        const historicalFundingEur = await calculateFundingForPosition(
+            userId, 
+            pos.symbol, // Pass raw symbol (e.g. pf_ethusd) which logic lowercases
+            trueOpenedAt, 
+            today
+        );
+        const currentUnrealizedEur = unrealizedFunding * currentRate;
+        const totalFundingEur = historicalFundingEur + currentUnrealizedEur;
+
+        const docRef = db.collection('users').doc(userId).collection('futures_positions').doc(docId);
+        
+        openBatch.set(docRef, {
+            id: docId,
+            status: 'OPEN',
+            asset: formatTicker(symbol),
+            ticker: formatTicker(symbol) + '-PERP',
+            side: side,
+            size: size,
+            entryPrice: entryPrice,
+            exchangeRate: currentRate,
+            
+            // This now includes BOTH realized history + current session
+            fundingEur: totalFundingEur, 
+            
+            // Corrected Open Date
+            openedAt: Timestamp.fromDate(trueOpenedAt),
+            updatedAt: FieldValue.serverTimestamp()
+        }, { merge: true });
+    }
+    
+    // 3. CLEANUP: Delete positions in DB that are 'OPEN' but not in Kraken's live list
+    // This prevents "Ghost" positions if you just closed one.
+    const existingOpenSnap = await db.collection('users').doc(userId).collection('futures_positions')
+        .where('status', '==', 'OPEN')
+        .get();
+        
+    let deletedCount = 0;
+    existingOpenSnap.forEach((doc) => {
+        if (!livePositionIds.has(doc.id)) {
+            openBatch.delete(doc.ref);
+            deletedCount++;
+        }
+    });
+
+    await openBatch.commit();
+    console.log(`   ✅ Open Positions Synced: ${livePositions.length} active, ${deletedCount} removed.`);
+
+    return { 
+        ok: true, 
+        message: `Synced. Processed ${totalProcessed} logs, found ${totalClosed} closures. Open Positions: ${livePositions.length}.` 
+    };
 
   } catch (error: any) {
     console.error('Sync Error:', error);
