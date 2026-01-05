@@ -16,14 +16,8 @@ import type { FuturePosition } from '@/lib/types';
 export type UseFuturesPositionsOptions = {
   /**
    * Owner of the futures positions. In most cases this will be the authenticated user's UID.
-   * When omitted and `useMockData` is true, the hook will only return mock data.
    */
   userId?: string | null;
-  /**
-   * When true, the hook returns a deterministic set of mock positions instead of
-   * reading from Firestore. This is useful while wiring up UI without a live data source.
-   */
-  useMockData?: boolean;
 };
 
 type UseFuturesPositionsState = {
@@ -35,59 +29,12 @@ type UseFuturesPositionsState = {
 
 const FUTURES_COLLECTION = 'futures_positions';
 
-// --- Temporary mock data ----------------------------------------------------
-
-function buildMockFuturesPositions(userId?: string | null): FuturePosition[] {
-  const baseOpened = Timestamp.fromDate(new Date('2025-01-02T09:30:00Z'));
-
-  return [
-    {
-      id: 'mock-long-eth-perp',
-      asset: 'ETH/USD Perp',
-      side: 'LONG' as const,
-      leverage: 5,
-      entryPrice: 2400,
-      markPrice: 2550,
-      liquidationPrice: 1800,
-      collateral: 500, // margin posted in account currency
-      size: 6000, // notional
-      unrealizedPnL: 150, // simplified for demo
-      accumulatedFunding: -12.5,
-      status: 'OPEN' as const,
-      openedAt: baseOpened,
-      closedAt: null,
-      exchangeRate: 0.92, // USD to EUR conversion rate
-    },
-    {
-      id: 'mock-short-btc-perp',
-      asset: 'BTC/USD Perp',
-      side: 'SHORT' as const,
-      leverage: 3,
-      entryPrice: 65000,
-      markPrice: 63000,
-      liquidationPrice: 72000,
-      collateral: 1000,
-      size: 15000,
-      unrealizedPnL: 450,
-      accumulatedFunding: 22.1,
-      status: 'OPEN' as const,
-      openedAt: Timestamp.fromDate(new Date('2025-01-10T14:00:00Z')),
-      closedAt: null,
-      exchangeRate: 0.92, // USD to EUR conversion rate
-    },
-  ].map((p) => ({
-    ...p,
-    // In a real schema you might also persist the owner / account id.
-    // We keep the mock minimal and owner-agnostic for now.
-  }));
-}
-
 // --- Hook -------------------------------------------------------------------
 
 export function useFuturesPositions(
   opts: UseFuturesPositionsOptions = {}
 ): UseFuturesPositionsState {
-  const { userId, useMockData = false } = opts;
+  const { userId } = opts;
   
   const [state, setState] = useState<UseFuturesPositionsState>({
     positions: [],
@@ -97,18 +44,6 @@ export function useFuturesPositions(
   });
 
   useEffect(() => {
-    // Pure mock mode – never touch Firestore.
-    if (useMockData) {
-      const mock = buildMockFuturesPositions(userId);
-      setState({
-        positions: mock,
-        loading: false,
-        error: null,
-        isMock: true,
-      });
-      return;
-    }
-
     // No user bound yet – expose empty list but don't treat as error.
     if (!userId) {
       setState((prev) => ({
@@ -162,7 +97,7 @@ export function useFuturesPositions(
     );
 
     return () => unsubscribe();
-  }, [userId, useMockData]);
+  }, [userId]);
 
   return state;
 }

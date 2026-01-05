@@ -166,6 +166,150 @@ async function calculateFundingForPosition(
   }
 }
 
+// NEW: Create Investment wrapper with ALL fills/trades for complete tax audit
+async function createInvestmentWrapperForClosedPosition(
+  userId: string,
+  closedPosition: {
+    id: string;
+    asset: string;
+    ticker: string;
+    side: string;
+    size: number;
+    entryPrice: number;
+    exitPrice: number;
+    realizedPnL: number;
+    realizedPnlEur: number;
+    feeEur: number;
+    fundingEur: number;
+    netRealizedPnlEur: number;
+    closingOrderId: string;
+    closingTradeId: string;
+    openedAt: Date;
+    closedAt: Date;
+    exchangeRate: number;
+  },
+  allFills: KrakenFill[]
+) {
+  try {
+    const db = adminDb;
+    const invRef = db.collection('users').doc(userId).collection('investments').doc(closedPosition.id);
+    
+    // Create Investment wrapper
+    await invRef.set({
+      id: closedPosition.id,
+      name: `${closedPosition.asset} Futures`,
+      type: 'Future',
+      ticker: closedPosition.ticker,
+      purchaseDate: closedPosition.openedAt.toISOString(),
+      purchaseQuantity: closedPosition.size,
+      purchasePricePerUnit: closedPosition.entryPrice,
+      currentValue: closedPosition.exitPrice,
+      status: 'Sold',
+      totalSoldQty: closedPosition.size,
+      realizedProceeds: closedPosition.size * closedPosition.exitPrice * closedPosition.exchangeRate,
+      realizedPnL: closedPosition.netRealizedPnlEur,
+      dividends: 0,
+      interest: 0,
+      createdAt: closedPosition.openedAt.toISOString(),
+      updatedAt: closedPosition.closedAt.toISOString(),
+      // Link to real futures_positions data
+      _futuresPositionRef: `futures_positions/${closedPosition.id}`,
+    }, { merge: true });
+
+    // Get all fills for this position
+    const relevantFills = allFills
+      .filter(f => formatTicker(f.symbol) === closedPosition.asset)
+      .filter(f => {
+        const fillTime = new Date(f.fillTime);
+        return fillTime >= closedPosition.openedAt && fillTime <= closedPosition.closedAt;
+      })
+      .sort((a, b) => new Date(a.fillTime).getTime() - new Date(b.fillTime).getTime());
+
+    console.log(`   📋 Creating ${relevantFills.length} transaction records for ${closedPosition.id}`);
+
+    // Track position state to determine which fills close/reduce the position
+    let netPosition = 0;
+    const positionSide = closedPosition.side; // 'LONG' or 'SHORT'
+    
+    // Create transaction for each fill
+    const batch = db.batch();
+    let batchCount = 0;
+
+    for (const fill of relevantFills) {
+      const fillDate = new Date(fill.fillTime);
+      const fillEurRate = await getDailyEurRate(fillDate, 'USD').catch(() => 0.85);
+      const fillSize = Number(fill.size);
+      
+      // Update position state
+      const previousNetPosition = netPosition;
+      if (fill.side === 'buy') {
+        netPosition += fillSize;
+      } else {
+        netPosition -= fillSize;
+      }
+
+      // Determine if this fill REDUCES the position (tax event candidate)
+      let isReducing = false;
+      if (positionSide === 'LONG') {
+        // LONG position: SELL reduces it
+        isReducing = fill.side === 'sell' && previousNetPosition > 0;
+      } else {
+        // SHORT position: BUY reduces it
+        isReducing = fill.side === 'buy' && previousNetPosition < 0;
+      }
+
+      // Check if this is the final closing fill
+      const isClosingFill = fill.fill_id === closedPosition.closingTradeId;
+
+      const txRef = invRef.collection('transactions').doc(fill.fill_id);
+      batch.set(txRef, {
+        id: fill.fill_id,
+        type: fill.side === 'buy' ? 'Buy' : 'Sell',
+        date: fillDate.toISOString(),
+        quantity: fillSize,
+        pricePerUnit: Number(fill.price),
+        totalAmount: fillSize * Number(fill.price) * fillEurRate,
+        currency: 'EUR',
+        exchangeRate: fillEurRate,
+        valueInEur: fillSize * Number(fill.price) * fillEurRate,
+        metadata: {
+          // Mark as tax event if it reduces/closes the position
+          isTaxEvent: isReducing || isClosingFill,
+          orderId: fill.order_id,
+          fillId: fill.fill_id,
+          symbol: fill.symbol,
+          side: fill.side,
+          positionSide: positionSide,
+          // Include aggregate data ONLY on the final closing fill
+          ...(isClosingFill && {
+            netRealizedPnlEur: closedPosition.netRealizedPnlEur,
+            grossPnlEur: closedPosition.realizedPnlEur,
+            feeEur: closedPosition.feeEur,
+            fundingEur: closedPosition.fundingEur,
+            isClosingFill: true,
+          }),
+        }
+      });
+
+      batchCount++;
+      
+      // Commit batch if it reaches 500 operations
+      if (batchCount >= 500) {
+        await batch.commit();
+        batchCount = 0;
+      }
+    }
+
+    if (batchCount > 0) {
+      await batch.commit();
+    }
+
+    console.log(`   ✅ Created investment wrapper with ${relevantFills.length} transactions for ${closedPosition.id}`);
+  } catch (err) {
+    console.error(`   ❌ Failed to create wrapper for ${closedPosition.id}:`, err);
+  }
+}
+
 // --- MAIN SYNC FUNCTION ---
 export async function syncKrakenFutures(userId: string) {
   if (!userId) return { ok: false, message: 'No User ID' };
@@ -330,9 +474,9 @@ export async function syncKrakenFutures(userId: string) {
 
           const docRef = db.collection('users').doc(userId).collection('futures_positions').doc(`CLOSED-${log.booking_uid}`);
           
-          posBatch.set(docRef, {
+          const closedPositionData = {
             id: `CLOSED-${log.booking_uid}`,
-            status: 'CLOSED',
+            status: 'CLOSED' as const,
             asset: formatTicker(matchingFill.symbol), 
             ticker: formatTicker(matchingFill.symbol) + '-PERP',
             side: positionSide,
@@ -348,8 +492,11 @@ export async function syncKrakenFutures(userId: string) {
             closingTradeId: matchingFill.fill_id,
             openedAt: Timestamp.fromDate(openedAt),
             closedAt: Timestamp.fromDate(logDate),
-            updatedAt: FieldValue.serverTimestamp()
-          }, { merge: true });
+            updatedAt: FieldValue.serverTimestamp(),
+            exchangeRate: eurRate,
+          };
+
+          posBatch.set(docRef, closedPositionData, { merge: true });
 
           posBatchCount++;
           totalClosed++;
@@ -358,6 +505,60 @@ export async function syncKrakenFutures(userId: string) {
         if (posBatchCount > 0) {
           await posBatch.commit();
           console.log(`      ✅ Saved ${posBatchCount} closed positions.`);
+          
+          // Create Investment wrappers for tax integration
+          console.log(`      📋 Creating investment wrappers for tax integration...`);
+          for (const log of closureLogs) {
+            const matchingFill = allFillsMap.get(log.execution);
+            if (!matchingFill) continue;
+
+            const logDate = new Date(log.date);
+            const eurRate = await getRate(logDate);
+            const positionSide = matchingFill.side === 'buy' ? 'SHORT' : 'LONG';
+            const size = Number(matchingFill.size);
+            const exitPrice = Number(matchingFill.price);
+            const realizedPnl = Number(log.realized_pnl);
+
+            let entryPrice = Number(log.old_average_entry_price || 0);
+            if (entryPrice === 0) {
+              const newEntry = Number(log.new_average_entry_price || 0);
+              if (newEntry > 0) {
+                entryPrice = newEntry;
+              } else {
+                entryPrice = calculateFallbackEntry(exitPrice, size, realizedPnl, positionSide as any);
+              }
+            }
+
+            const openedAt = findOpenDateForClosure(allFills, matchingFill);
+            let totalFundingEur = await calculateFundingForPosition(userId, log.contract, openedAt, logDate);
+            if (log.realized_funding) {
+              totalFundingEur += (log.realized_funding * eurRate);
+            }
+
+            const realizedPnlEur = realizedPnl * eurRate;
+            const feeEur = (log.fee || 0) * eurRate;
+            const netRealizedPnlEur = realizedPnlEur - feeEur + totalFundingEur;
+
+            await createInvestmentWrapperForClosedPosition(userId, {
+              id: `CLOSED-${log.booking_uid}`,
+              asset: formatTicker(matchingFill.symbol),
+              ticker: formatTicker(matchingFill.symbol) + '-PERP',
+              side: positionSide,
+              size: size,
+              entryPrice: entryPrice,
+              exitPrice: exitPrice,
+              realizedPnL: realizedPnl,
+              realizedPnlEur,
+              feeEur,
+              fundingEur: totalFundingEur,
+              netRealizedPnlEur,
+              closingOrderId: matchingFill.order_id,
+              closingTradeId: matchingFill.fill_id,
+              openedAt,
+              closedAt: logDate,
+              exchangeRate: eurRate,
+            }, allFills);
+          }
         }
       }
 

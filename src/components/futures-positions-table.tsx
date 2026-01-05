@@ -33,12 +33,11 @@ const formatEuroPrice = (val: number | undefined) => {
 
 type Props = {
   positions?: FuturePosition[];
-  useMockData?: boolean;
   userId?: string | null;
   statusFilter?: 'All' | 'OPEN' | 'CLOSED' | 'LIQUIDATED';
 };
 
-export default function FuturesPositionsTable({ positions, useMockData = true, userId, statusFilter = 'All' }: Props) {
+export default function FuturesPositionsTable({ positions, userId, statusFilter = 'All' }: Props) {
   const { user } = useAuth();
   const [isPending, startTransition] = useTransition();
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -47,7 +46,6 @@ export default function FuturesPositionsTable({ positions, useMockData = true, u
   const enabledHook = !positions;
   const { positions: hookPositions, loading, error } = useFuturesPositions({
     userId: userId ?? user?.uid,
-    useMockData,
   });
   
   // Also fetch closed positions
@@ -373,17 +371,6 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
   const displayFunding = isOpenPosition 
     ? (position.fundingEur ?? 0)  // For OPEN: directly from DB
     : (position.fundingEur || 0); // For CLOSED: existing logic
-
-  // Debug: Log funding values for OPEN positions
-  useEffect(() => {
-    if (isOpenPosition && position.fundingEur !== undefined) {
-      console.log(`[${position.asset}] OPEN position funding:`, {
-        raw: position.fundingEur,
-        display: displayFunding,
-        position: position
-      });
-    }
-  }, [isOpenPosition, position.fundingEur, displayFunding, position.asset, position]);
 
   // 2. Define Net P&L (Tax Base) logic
   // User Requirement: Keep empty for OPEN positions
