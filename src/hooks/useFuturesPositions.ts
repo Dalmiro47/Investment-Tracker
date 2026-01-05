@@ -123,9 +123,14 @@ export function useFuturesPositions(
 
     setState((prev) => ({ ...prev, loading: true, error: null, isMock: false }));
 
+    // FIX: Only fetch OPEN positions here.
     // Read the per-user futures positions subcollection so Firestore rules match
     const colRef = collection(db, 'users', userId!, FUTURES_COLLECTION);
-    const q = query(colRef, orderBy('openedAt', 'desc'));
+    const q = query(
+      colRef,
+      where('status', '==', 'OPEN'),
+      orderBy('openedAt', 'desc')
+    );
 
     const unsubscribe = onSnapshot(
       q,

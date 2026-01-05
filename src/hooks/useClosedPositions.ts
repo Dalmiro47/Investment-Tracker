@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, limit } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import type { FuturePosition } from '@/lib/types';
 
@@ -23,9 +23,14 @@ export function useClosedPositions(userId: string | undefined | null) {
 
     setLoading(true);
 
-    // Query futures_positions where status = 'CLOSED'
+    // FIX: Limit to 50 most recent. Add pagination button in UI if needed later.
     const positionsRef = collection(db, 'users', userId, 'futures_positions');
-    const q = query(positionsRef, where('status', '==', 'CLOSED'));
+    const q = query(
+      positionsRef,
+      where('status', '==', 'CLOSED'),
+      orderBy('closedAt', 'desc'),
+      limit(50)
+    );
 
     const unsubscribe = onSnapshot(
       q,

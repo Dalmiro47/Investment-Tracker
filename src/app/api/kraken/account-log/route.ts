@@ -1,51 +1,21 @@
-import crypto from 'crypto';
 import { NextResponse } from 'next/server';
-
-const KRAKEN_KEY = process.env.KRAKEN_FUTURES_KEY?.trim();
-const KRAKEN_SECRET = process.env.KRAKEN_FUTURES_SECRET?.trim();
-const BASE_URL = 'https://futures.kraken.com';
-
-function buildSignature(apiPath: string, nonce: string, queryString: string, secret: string) {
-  const signaturePath = apiPath.replace('/derivatives', '');
-  const message = queryString + nonce + signaturePath;
-  const hash = crypto.createHash('sha256').update(message).digest('binary');
-  const secretBuffer = Buffer.from(secret, 'base64');
-
-  return crypto.createHmac('sha512', secretBuffer).update(hash, 'binary').digest('base64');
-}
-
-async function krakenRequest(apiPath: string, query: Record<string, string> = {}) {
-  if (!KRAKEN_KEY || !KRAKEN_SECRET) {
-    throw new Error('Kraken API keys are missing');
-  }
-
-  const nonce = Date.now().toString();
-  const queryString = new URLSearchParams(query).toString();
-  const authent = buildSignature(apiPath, nonce, queryString, KRAKEN_SECRET);
-  const url = `${BASE_URL}${apiPath}${queryString ? `?${queryString}` : ''}`;
-
-  const res = await fetch(url, {
-    method: 'GET',
-    headers: {
-      APIKey: KRAKEN_KEY,
-      Authent: authent,
-      Nonce: nonce,
-      Accept: 'application/json',
-    },
-    cache: 'no-store',
-  });
-
-  return res.json();
-}
+import { fetchKrakenAccountLog } from '@/lib/kraken-api';
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const countParam = searchParams.get('count');
-    const query: Record<string, string> = {};
-    if (countParam) query.count = countParam;
+    const count = searchParams.get('count');
+    const continuationToken = searchParams.get('continuationToken');
+    const info = searchParams.get('info');
+    const from = searchParams.get('from');
+    
+    const params: Record<string, string | number> = {};
+    if (count) params.count = count;
+    if (continuationToken) params.continuationToken = continuationToken;
+    if (info) params.info = info;
+    if (from) params.from = parseInt(from, 10);
 
-    const data = await krakenRequest('/api/history/v3/account-log', query);
+    const data = await fetchKrakenAccountLog(params as any);
     return NextResponse.json(data, { status: 200 });
   } catch (error: any) {
     console.error('Kraken account-log API error:', error);

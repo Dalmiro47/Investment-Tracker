@@ -887,7 +887,14 @@ function DashboardPageContent() {
                 <KrakenTaxSummaryCards userId={user?.uid ?? null} year={new Date().getFullYear()} />
                 <Card>
                   <CardContent>
-                    <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? null} statusFilter={futuresStatusFilter} />
+                    <React.Suspense fallback={
+                      <div className="p-8 text-center text-muted-foreground">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                        Loading futures data...
+                      </div>
+                    }>
+                      <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? null} statusFilter={futuresStatusFilter} />
+                    </React.Suspense>
                   </CardContent>
                 </Card>
               </div>
@@ -1116,7 +1123,14 @@ function DashboardPageContent() {
               typeFilter === 'Futures' ? (
                 <Card>
                   <CardContent>
-                    <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? ""} statusFilter={futuresStatusFilter} />
+                    <React.Suspense fallback={
+                      <div className="p-8 text-center text-muted-foreground">
+                        <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
+                        Loading futures data...
+                      </div>
+                    }>
+                      <FuturesPositionsTable useMockData={!user} userId={user?.uid ?? ""} statusFilter={futuresStatusFilter} />
+                    </React.Suspense>
                   </CardContent>
                 </Card>
               ) : (
