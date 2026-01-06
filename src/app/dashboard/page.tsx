@@ -29,12 +29,6 @@ export default function DashboardPage() {
 
   const { positions: futuresPositions } = useFuturesPositions({ 
     userId: user?.uid
-
-  console.log('📊 Futures Positions from hook:', {
-    positions: futuresPositions,
-    length: futuresPositions?.length,
-    type: typeof futuresPositions,
-    isArray: Array.isArray(futuresPositions)
   });
 
   if (futuresPositions && futuresPositions.length > 0) {
