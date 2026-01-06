@@ -728,21 +728,17 @@ export function aggregateByType(
       shortTermGains: shortTermCryptoGains,
     });
 
-    const totalFuturesGains = metricsForTax.reduce(
-      (sum, p) => sum + p.futuresGainsYear,
-      0
-    );
-    const totalFuturesLosses = metricsForTax.reduce(
-      (sum, p) => sum + p.futuresLossesYear,
-      0
-    );
-
+    // FIX: Use the aggregated values from futures_positions (via krakenSummary hook)
+    // Each closed position already has netRealizedPnlEur = Realized PnL - Fees + Funding
+    // This ensures profitable positions count as gains and unprofitable ones as losses
     const futuresTaxResult = calcFuturesTax({
       year: yearFilter.year,
       filing: taxSettings.filingStatus,
       churchRate,
-      totalGains: totalFuturesGains,
-      totalLosses: totalFuturesLosses,
+      // Use gross gains from the hook (or 0 if null)
+      totalGains: krakenSummary?.grossGainsEur || 0,
+      // Use gross losses from the hook (already stored as positive absolute value)
+      totalLosses: krakenSummary?.grossLossesEur || 0, 
       remainingAllowance: allowanceLeft,
     });
 
