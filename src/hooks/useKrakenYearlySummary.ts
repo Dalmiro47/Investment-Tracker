@@ -27,10 +27,12 @@ export function useKrakenYearlySummary(userId: string | undefined, year?: number
     if (year != null) {
       const startOfYear = Timestamp.fromDate(new Date(`${year}-01-01T00:00:00Z`));
       const endOfYear = Timestamp.fromDate(new Date(`${year}-12-31T23:59:59Z`));
+      
+      // FIX: Changed 'timestamp' to 'date' to match kraken-sync.ts
       q = query(
         logsRef,
-        where('timestamp', '>=', startOfYear),
-        where('timestamp', '<=', endOfYear)
+        where('date', '>=', startOfYear),
+        where('date', '<=', endOfYear)
       );
     } else {
       // No year filter - fetch all records for lifetime summary
@@ -44,6 +46,8 @@ export function useKrakenYearlySummary(userId: string | undefined, year?: number
         const funding = data.realizedFundingEur || 0;
         const fee = data.feeEur || 0;
 
+        // Separate gains and losses for tax buckets
+        // Note: Funding is handled separately in the net calculation below
         return {
           grossGainsEur: acc.grossGainsEur + (pnl > 0 ? pnl : 0),
           grossLossesEur: acc.grossLossesEur + (pnl < 0 ? pnl : 0),
@@ -53,12 +57,15 @@ export function useKrakenYearlySummary(userId: string | undefined, year?: number
       }, { grossGainsEur: 0, grossLossesEur: 0, totalFundingEur: 0, totalFeesEur: 0 });
 
       // German Tax Math: P&L + Funding - Fees
+      // Funding is added (positive is income, negative is cost)
+      // Fees are subtracted
       const netPnl = totals.grossGainsEur + totals.grossLossesEur;
+      const taxableAmount = netPnl + totals.totalFundingEur - totals.totalFeesEur;
       
       setSummary({
         ...totals,
         netPnlEur: netPnl,
-        taxableAmount: netPnl + totals.totalFundingEur - totals.totalFeesEur
+        taxableAmount
       });
     });
 
