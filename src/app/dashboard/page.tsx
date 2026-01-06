@@ -27,8 +27,17 @@ export default function DashboardPage() {
     yearFilter.kind === 'year' ? yearFilter.year : yearFilter.kind === 'all' ? null : new Date().getFullYear()
   );
 
+  // --- FIX START: Closing parenthesis added below ---
   const { positions: futuresPositions } = useFuturesPositions({ 
-    userId: user?.uid
+    userId: user?.uid 
+  }); 
+  // --- FIX END ---
+
+  console.log('📊 Futures Positions from hook:', {
+    positions: futuresPositions,
+    length: futuresPositions?.length,
+    type: typeof futuresPositions,
+    isArray: Array.isArray(futuresPositions)
   });
 
   if (futuresPositions && futuresPositions.length > 0) {
@@ -181,6 +190,7 @@ export default function DashboardPage() {
         taxSettings={taxSettings}
         yearFilter={yearFilter}
         onYearFilterChange={setYearFilter}
+        userId={user?.uid}
       />
     </div>
   );
