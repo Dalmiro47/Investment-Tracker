@@ -14,11 +14,12 @@ type KrakenLog = {
   info: string;
   contract: string;
   realized_pnl: number;
-  realized_funding?: number; // Added: The field you noticed
+  realized_funding?: number;
   fee: number;
   old_average_entry_price?: number;
   new_average_entry_price?: number; 
   execution: string; 
+  amount?: number; // Raw amount from API
 };
 
 type KrakenFill = {
@@ -33,29 +34,46 @@ type KrakenFill = {
 
 // --- HELPERS ---
 
-// 1. Clean Ticker (PF_ADAUSD -> ADA)
 function formatTicker(rawSymbol: string): string {
-  // Remove prefixes like PF_, PI_, FI_ and suffix USD
   return rawSymbol.replace(/^(PF_|PI_|FI_)/, '').replace(/USD$/, '');
 }
 
-// 2. History Walker (Find Open Date)
+/**
+ * FIXED HISTORY WALKER (Sign Flip Logic)
+ * Detects when the position actually flipped side (e.g. Long -> Short)
+ * to find the TRUE open date, ignoring dust/noise.
+ */
 function findOpenDateForClosure(allFills: KrakenFill[], currentFill: KrakenFill): Date {
   const history = allFills
     .filter(f => f.symbol === currentFill.symbol && new Date(f.fillTime) <= new Date(currentFill.fillTime))
     .sort((a, b) => new Date(b.fillTime).getTime() - new Date(a.fillTime).getTime());
 
-  let netPosition = 0;
-  for (const fill of history) {
-    const size = Number(fill.size);
-    if (fill.side === 'buy') netPosition += size; 
-    else netPosition -= size;
+  if (history.length === 0) return new Date(currentFill.fillTime);
 
-    if (Math.abs(netPosition) < 0.0001) {
-      return new Date(fill.fillTime);
-    }
+  // If we SOLD to close, we were LONG.
+  const wasLong = currentFill.side === 'sell'; 
+  let virtualPosition = 0; 
+
+  for (const fill of history) {
+    const fillSize = Number(fill.size);
+    
+    // Reverse the timeline:
+    // If fill was BUY, we subtract (we had less before).
+    // If fill was SELL, we add (we had more before).
+    if (fill.side === 'buy') virtualPosition -= fillSize;
+    else virtualPosition += fillSize;
+
+    // 1. Exact Zero Check
+    if (Math.abs(virtualPosition) < 0.000001) return new Date(fill.fillTime);
+
+    // 2. SIGN FLIP CHECK (Critical Fix for 19/12 vs 22/12)
+    // If we were LONG (Pos), and virtual pos becomes Negative, we crossed into previous Short cycle.
+    if (wasLong && virtualPosition < -0.000001) return new Date(fill.fillTime);
+    // If we were SHORT (Neg), and virtual pos becomes Positive, we crossed into previous Long cycle.
+    if (!wasLong && virtualPosition > 0.000001) return new Date(fill.fillTime);
   }
-  return history.length > 0 ? new Date(history[history.length - 1].fillTime) : new Date(currentFill.fillTime);
+
+  return new Date(history[history.length - 1].fillTime);
 }
 // NEW: History Walker for OPEN positions (Finds start of current active position)
 function findOpenDateForActivePosition(
@@ -64,137 +82,115 @@ function findOpenDateForActivePosition(
   currentSize: number, 
   side: 'LONG' | 'SHORT'
 ): Date {
-  // Sort descending: Newest fill first
   const history = allFills
-    .filter(f => formatTicker(f.symbol) === formatTicker(symbol)) // Normalize ticker matching
+    .filter(f => formatTicker(f.symbol) === formatTicker(symbol)) 
     .sort((a, b) => new Date(b.fillTime).getTime() - new Date(a.fillTime).getTime());
 
-  if (history.length === 0) return new Date(); // Fallback to now
+  if (history.length === 0) return new Date();
 
-  // We start with the CURRENT size (e.g. +2.1 ETH)
-  // We walk backwards, reversing each trade.
-  // If we have +2.1, and the last trade was BUY 0.1, previous state was +2.0.
-  // We stop when we hit 0 (or cross it, meaning the position flipped).
-  
   let netPosition = side === 'LONG' ? currentSize : -currentSize;
 
   for (const fill of history) {
     const fillSize = Number(fill.size);
-    
-    // Reverse the fill effect
-    if (fill.side === 'buy') {
-        netPosition -= fillSize; // A buy added to position, so remove it
-    } else {
-        netPosition += fillSize; // A sell reduced position, so add it back
-    }
+    if (fill.side === 'buy') netPosition -= fillSize; 
+    else netPosition += fillSize; 
 
-    // Check if we hit zero (floating point safe check)
-    if (Math.abs(netPosition) < 0.0001) {
-      return new Date(fill.fillTime);
-    }
+    if (Math.abs(netPosition) < 0.0001) return new Date(fill.fillTime);
     
-    // If we crossed zero (e.g. went from +0.5 to -0.5), this fill flipped the position.
-    // This fill IS the start of the current trend.
     const isLong = side === 'LONG';
     if ((isLong && netPosition < 0) || (!isLong && netPosition > 0)) {
        return new Date(fill.fillTime);
     }
   }
-  
-  // If we run out of history, return the oldest fill we found
   return new Date(history[history.length - 1].fillTime);
 }
-// 3. Back-calculate Entry Price if API misses it
 function calculateFallbackEntry(
   exitPrice: number, 
   size: number, 
   pnl: number, 
-  positionSide: 'LONG' | 'SHORT' // This is the POSITION side (not trade side)
+  positionSide: 'LONG' | 'SHORT'
 ): number {
   if (size === 0) return 0;
-  
-  // Formulas derived from: PnL = (Exit - Entry) * Size [Long]
-  // Long: Entry = Exit - (PnL / Size)
-  // Short: Entry = Exit + (PnL / Size)
-  
   const priceDelta = pnl / size;
-  return positionSide === 'LONG' 
-    ? exitPrice - priceDelta 
-    : exitPrice + priceDelta;
+  return positionSide === 'LONG' ? exitPrice - priceDelta : exitPrice + priceDelta;
 }
 
-// 4. Sum Funding from Firestore
+/**
+ * FIXED FUNDING CALCULATION
+ * 1. Returns RAW USD Amount + EUR Amount.
+ * 2. Removes strict contract filter (uses loose match).
+ * 3. Logs the total USD found for debugging.
+ */
 async function calculateFundingForPosition(
   userId: string, 
   contract: string, 
   start: Date, 
   end: Date
-): Promise<number> {
+): Promise<{ fundingUsd: number, fundingEur: number }> {
   try {
     const db = adminDb;
     const logsRef = db.collection('users').doc(userId).collection('kraken_logs');
-    const cleanContract = contract.toLowerCase();
-
-    // TIME BUFFER: Expand window by 1 hour to catch funding that happened close to open/close
-    const bufferedStart = new Date(start);
-    bufferedStart.setHours(bufferedStart.getHours() - 1);
     
+    const targetAsset = contract.replace(/^(PF_|PI_|FI_)/i, '').replace(/USD$/i, '').toUpperCase();
+    const searchContract = contract.toUpperCase();
+
+    const bufferedStart = new Date(start);
+    bufferedStart.setHours(bufferedStart.getHours() - 4);
     const bufferedEnd = new Date(end);
-    bufferedEnd.setHours(bufferedEnd.getHours() + 1);
+    bufferedEnd.setHours(bufferedEnd.getHours() + 4);
 
     const snapshot = await logsRef
-      .where('contract', '==', cleanContract) 
       .where('type', '==', 'funding rate change')
       .where('date', '>=', Timestamp.fromDate(bufferedStart))
       .where('date', '<=', Timestamp.fromDate(bufferedEnd))
       .get();
 
-    if (snapshot.empty) return 0;
+    if (snapshot.empty) return { fundingUsd: 0, fundingEur: 0 };
 
+    let totalFundingUsd = 0;
     let totalFundingEur = 0;
-    snapshot.forEach(doc => {
-      const data = doc.data();
-      // Ensure we treat it as a number
-      const val = Number(data.realizedFundingEur) || 0;
-      totalFundingEur += val;
-    });
 
-    return totalFundingEur;
+    // We process sequentially to ensure rate fetching doesn't race condition the cache excessively
+    for (const doc of snapshot.docs) {
+      const data = doc.data();
+      const logContract = (data.contract || '').toUpperCase();
+      const logAsset = (data.asset || '').toUpperCase();
+      
+      const isMatch = 
+        logContract === searchContract || 
+        logContract.includes(targetAsset) ||
+        logAsset.includes(targetAsset);
+
+      if (isMatch) {
+         // PREFER 'amountUsd' if available (new logic), else 'amount', else 'realizedFunding'
+         const valUsd = Number(data.amountUsd) || Number(data.amount) || Number(data.realizedFunding) || 0;
+         const valEur = Number(data.realizedFundingEur) || 0;
+         
+         totalFundingUsd += valUsd;
+         // If EUR is missing or 0 in DB, calculate it on fly? 
+         // Ideally rely on what was saved, but for reconciliation we might want to recalc.
+         totalFundingEur += valEur;
+      }
+    }
+
+    return { fundingUsd: totalFundingUsd, fundingEur: totalFundingEur };
   } catch (err) {
     console.error('Error calculating funding:', err);
-    return 0;
+    return { fundingUsd: 0, fundingEur: 0 };
   }
 }
 
-// NEW: Create Investment wrapper with ALL fills/trades for complete tax audit
+
+// Wrapper for CSV Audit
 async function createInvestmentWrapperForClosedPosition(
   userId: string,
-  closedPosition: {
-    id: string;
-    asset: string;
-    ticker: string;
-    side: string;
-    size: number;
-    entryPrice: number;
-    exitPrice: number;
-    realizedPnL: number;
-    realizedPnlEur: number;
-    feeEur: number;
-    fundingEur: number;
-    netRealizedPnlEur: number;
-    closingOrderId: string;
-    closingTradeId: string;
-    openedAt: Date;
-    closedAt: Date;
-    exchangeRate: number;
-  },
+  closedPosition: any,
   allFills: KrakenFill[]
 ) {
   try {
     const db = adminDb;
     const invRef = db.collection('users').doc(userId).collection('investments').doc(closedPosition.id);
     
-    // Create Investment wrapper
     await invRef.set({
       id: closedPosition.id,
       name: `${closedPosition.asset} Futures`,
@@ -212,11 +208,9 @@ async function createInvestmentWrapperForClosedPosition(
       interest: 0,
       createdAt: closedPosition.openedAt.toISOString(),
       updatedAt: closedPosition.closedAt.toISOString(),
-      // Link to real futures_positions data
       _futuresPositionRef: `futures_positions/${closedPosition.id}`,
     }, { merge: true });
 
-    // Get all fills for this position
     const relevantFills = allFills
       .filter(f => formatTicker(f.symbol) === closedPosition.asset)
       .filter(f => {
@@ -225,13 +219,9 @@ async function createInvestmentWrapperForClosedPosition(
       })
       .sort((a, b) => new Date(a.fillTime).getTime() - new Date(b.fillTime).getTime());
 
-    console.log(`   📋 Creating ${relevantFills.length} transaction records for ${closedPosition.id}`);
-
-    // Track position state to determine which fills close/reduce the position
     let netPosition = 0;
-    const positionSide = closedPosition.side; // 'LONG' or 'SHORT'
+    const positionSide = closedPosition.side; 
     
-    // Create transaction for each fill
     const batch = db.batch();
     let batchCount = 0;
 
@@ -240,25 +230,14 @@ async function createInvestmentWrapperForClosedPosition(
       const fillEurRate = await getDailyEurRate(fillDate, 'USD').catch(() => 0.85);
       const fillSize = Number(fill.size);
       
-      // Update position state
       const previousNetPosition = netPosition;
-      if (fill.side === 'buy') {
-        netPosition += fillSize;
-      } else {
-        netPosition -= fillSize;
-      }
+      if (fill.side === 'buy') netPosition += fillSize;
+      else netPosition -= fillSize;
 
-      // Determine if this fill REDUCES the position (tax event candidate)
       let isReducing = false;
-      if (positionSide === 'LONG') {
-        // LONG position: SELL reduces it
-        isReducing = fill.side === 'sell' && previousNetPosition > 0;
-      } else {
-        // SHORT position: BUY reduces it
-        isReducing = fill.side === 'buy' && previousNetPosition < 0;
-      }
+      if (positionSide === 'LONG') isReducing = fill.side === 'sell' && previousNetPosition > 0;
+      else isReducing = fill.side === 'buy' && previousNetPosition < 0;
 
-      // Check if this is the final closing fill
       const isClosingFill = fill.fill_id === closedPosition.closingTradeId;
 
       const txRef = invRef.collection('transactions').doc(fill.fill_id);
@@ -273,14 +252,12 @@ async function createInvestmentWrapperForClosedPosition(
         exchangeRate: fillEurRate,
         valueInEur: fillSize * Number(fill.price) * fillEurRate,
         metadata: {
-          // Mark as tax event if it reduces/closes the position
           isTaxEvent: isReducing || isClosingFill,
           orderId: fill.order_id,
           fillId: fill.fill_id,
           symbol: fill.symbol,
           side: fill.side,
           positionSide: positionSide,
-          // Include aggregate data ONLY on the final closing fill
           ...(isClosingFill && {
             netRealizedPnlEur: closedPosition.netRealizedPnlEur,
             grossPnlEur: closedPosition.realizedPnlEur,
@@ -292,21 +269,16 @@ async function createInvestmentWrapperForClosedPosition(
       });
 
       batchCount++;
-      
-      // Commit batch if it reaches 500 operations
       if (batchCount >= 500) {
         await batch.commit();
         batchCount = 0;
       }
     }
 
-    if (batchCount > 0) {
-      await batch.commit();
-    }
+    if (batchCount > 0) await batch.commit();
 
-    console.log(`   ✅ Created investment wrapper with ${relevantFills.length} transactions for ${closedPosition.id}`);
   } catch (err) {
-    console.error(`   ❌ Failed to create wrapper for ${closedPosition.id}:`, err);
+    console.error(`Failed to create wrapper for ${closedPosition.id}:`, err);
   }
 }
 
@@ -392,12 +364,14 @@ export async function syncKrakenFutures(userId: string) {
             type: log.info, 
             asset: log.asset,
             contract: normalizedContract, 
-            amount: realizedVal, 
+            amount: realizedVal, // PnL Amount
+            amountUsd: rawFundingAmount, // NEW: Explicitly store USD Funding Amount
             fee: feeVal,
             amountEur: realizedVal * eurRate,
             feeEur: feeVal * eurRate,
             eurRate: eurRate,
-            realizedFundingEur: fundingEur, 
+            realizedFunding: rawFundingAmount, // USD
+            realizedFundingEur: fundingEur, // EUR
             realizedPnlEur: hasPnL && log.info !== 'funding rate change' ? (realizedVal * eurRate) : 0,
             updatedAt: FieldValue.serverTimestamp()
         }, { merge: true });
@@ -463,18 +437,15 @@ export async function syncKrakenFutures(userId: string) {
 
           const openedAt = findOpenDateForClosure(allFills, matchingFill);
           
-          let totalFundingEur = await calculateFundingForPosition(userId, log.contract, openedAt, logDate);
-          if (log.realized_funding) {
-             totalFundingEur += (log.realized_funding * eurRate);
-          }
-
+          // Preliminary calc (will be fixed in Phase 1.5)
           const realizedPnlEur = realizedPnl * eurRate;
           const feeEur = (log.fee || 0) * eurRate;
-          const netRealizedPnlEur = realizedPnlEur - feeEur + totalFundingEur; 
+          // Temporarily set funding to 0 or simple calc, Phase 1.5 will overwrite
+          const netRealizedPnlEur = realizedPnlEur - feeEur; 
 
           const docRef = db.collection('users').doc(userId).collection('futures_positions').doc(`CLOSED-${log.booking_uid}`);
           
-          const closedPositionData = {
+          posBatch.set(docRef, {
             id: `CLOSED-${log.booking_uid}`,
             status: 'CLOSED' as const,
             asset: formatTicker(matchingFill.symbol), 
@@ -486,7 +457,7 @@ export async function syncKrakenFutures(userId: string) {
             realizedPnL: realizedPnl,
             realizedPnlEur,
             feeEur,
-            fundingEur: totalFundingEur, 
+            fundingEur: 0, // Placeholder
             netRealizedPnlEur,
             closingOrderId: matchingFill.order_id,
             closingTradeId: matchingFill.fill_id,
@@ -494,9 +465,7 @@ export async function syncKrakenFutures(userId: string) {
             closedAt: Timestamp.fromDate(logDate),
             updatedAt: FieldValue.serverTimestamp(),
             exchangeRate: eurRate,
-          };
-
-          posBatch.set(docRef, closedPositionData, { merge: true });
+          }, { merge: true });
 
           posBatchCount++;
           totalClosed++;
@@ -505,60 +474,6 @@ export async function syncKrakenFutures(userId: string) {
         if (posBatchCount > 0) {
           await posBatch.commit();
           console.log(`      ✅ Saved ${posBatchCount} closed positions.`);
-          
-          // Create Investment wrappers for tax integration
-          console.log(`      📋 Creating investment wrappers for tax integration...`);
-          for (const log of closureLogs) {
-            const matchingFill = allFillsMap.get(log.execution);
-            if (!matchingFill) continue;
-
-            const logDate = new Date(log.date);
-            const eurRate = await getRate(logDate);
-            const positionSide = matchingFill.side === 'buy' ? 'SHORT' : 'LONG';
-            const size = Number(matchingFill.size);
-            const exitPrice = Number(matchingFill.price);
-            const realizedPnl = Number(log.realized_pnl);
-
-            let entryPrice = Number(log.old_average_entry_price || 0);
-            if (entryPrice === 0) {
-              const newEntry = Number(log.new_average_entry_price || 0);
-              if (newEntry > 0) {
-                entryPrice = newEntry;
-              } else {
-                entryPrice = calculateFallbackEntry(exitPrice, size, realizedPnl, positionSide as any);
-              }
-            }
-
-            const openedAt = findOpenDateForClosure(allFills, matchingFill);
-            let totalFundingEur = await calculateFundingForPosition(userId, log.contract, openedAt, logDate);
-            if (log.realized_funding) {
-              totalFundingEur += (log.realized_funding * eurRate);
-            }
-
-            const realizedPnlEur = realizedPnl * eurRate;
-            const feeEur = (log.fee || 0) * eurRate;
-            const netRealizedPnlEur = realizedPnlEur - feeEur + totalFundingEur;
-
-            await createInvestmentWrapperForClosedPosition(userId, {
-              id: `CLOSED-${log.booking_uid}`,
-              asset: formatTicker(matchingFill.symbol),
-              ticker: formatTicker(matchingFill.symbol) + '-PERP',
-              side: positionSide,
-              size: size,
-              entryPrice: entryPrice,
-              exitPrice: exitPrice,
-              realizedPnL: realizedPnl,
-              realizedPnlEur,
-              feeEur,
-              fundingEur: totalFundingEur,
-              netRealizedPnlEur,
-              closingOrderId: matchingFill.order_id,
-              closingTradeId: matchingFill.fill_id,
-              openedAt,
-              closedAt: logDate,
-              exchangeRate: eurRate,
-            }, allFills);
-          }
         }
       }
 
@@ -570,6 +485,130 @@ export async function syncKrakenFutures(userId: string) {
       
       if (totalProcessed > 5000) break;
     }
+
+    // =========================================================================
+    // PHASE 1.5: RECONCILE SESSIONS (The Fix for Double Funding & Date Sync)
+    // =========================================================================
+    
+    console.log('🔄 Phase 1.5: Reconciling Sessions...');
+    const closedSnap = await db.collection('users').doc(userId).collection('futures_positions')
+        .where('status', '==', 'CLOSED').get();
+    
+    const closedDocs = closedSnap.docs.map(d => d.data());
+    // Group by Ticker
+    const groupedByTicker: Record<string, any[]> = {};
+    for (const doc of closedDocs) {
+        if (!groupedByTicker[doc.ticker]) groupedByTicker[doc.ticker] = [];
+        groupedByTicker[doc.ticker].push(doc);
+    }
+
+    const reconcileBatch = db.batch();
+    let reconcileCount = 0;
+
+    for (const ticker in groupedByTicker) {
+        // Sort by ClosedAt
+        const docs = groupedByTicker[ticker].sort((a,b) => a.closedAt.toMillis() - b.closedAt.toMillis());
+        
+        // Identify Sessions (Gap > 48h = New Session)
+        const sessions: any[][] = [];
+        let currentSession: any[] = [];
+        
+        for (const doc of docs) {
+            if (currentSession.length === 0) {
+                currentSession.push(doc);
+            } else {
+                const lastDoc = currentSession[currentSession.length - 1];
+                const timeGap = doc.closedAt.toMillis() - lastDoc.closedAt.toMillis();
+                const isSameSession = timeGap < (48 * 60 * 60 * 1000); // 48h threshold
+                
+                if (isSameSession) {
+                    currentSession.push(doc);
+                } else {
+                    sessions.push(currentSession);
+                    currentSession = [doc];
+                }
+            }
+        }
+        if (currentSession.length > 0) sessions.push(currentSession);
+
+        // Process Each Session
+        for (const session of sessions) {
+            if (session.length === 0) continue;
+            
+            // 1. Find Earliest Open Date (The Truth)
+            const timestamps = session.map(d => d.openedAt.toMillis());
+            const minOpenTime = Math.min(...timestamps);
+            const sessionOpenedAt = new Date(minOpenTime);
+            
+            // 2. Find Latest Close Date
+            const maxCloseTime = Math.max(...session.map(d => d.closedAt.toMillis()));
+            const sessionClosedAt = new Date(maxCloseTime);
+            
+            // 3. Calc Total Funding for this Window ONCE
+            // Note: pass raw symbol (e.g. PF_ETHUSD) if available, else construct it
+            // Assuming ticker is "ETH-PERP", raw might need reconstruction or use what's in doc.asset
+            const rawContract = session[0].ticker.replace('-PERP', 'USD'); // Approximation or use doc.asset
+            
+            const fundingData = await calculateFundingForPosition(
+                userId, rawContract, sessionOpenedAt, sessionClosedAt
+            );
+            
+            console.log(`🔎 Session ${session[0].ticker} (${sessionOpenedAt.toISOString()} - ${sessionClosedAt.toISOString()})`);
+            console.log(`   --> Total USD Funding: $${fundingData.fundingUsd.toFixed(4)}`);
+            console.log(`   --> Total EUR Funding: €${fundingData.fundingEur.toFixed(4)}`);
+            
+            // 4. Distribute
+            const totalVolume = session.reduce((sum, d) => sum + (Number(d.size)||0), 0);
+            
+            for (const doc of session) {
+                const size = Number(doc.size) || 0;
+                const ratio = totalVolume > 0 ? (size / totalVolume) : 0;
+                const allocatedFunding = ratio * fundingData.fundingEur;
+                
+                // Recalc Net PnL
+                const newNetPnL = (doc.realizedPnlEur || 0) - (doc.feeEur || 0) + allocatedFunding;
+                
+                const docRef = db.collection('users').doc(userId).collection('futures_positions').doc(doc.id);
+                
+                // Update Firestore
+                reconcileBatch.set(docRef, {
+                    openedAt: Timestamp.fromDate(sessionOpenedAt), // Align Date
+                    fundingEur: allocatedFunding,
+                    netRealizedPnlEur: newNetPnL,
+                    updatedAt: FieldValue.serverTimestamp()
+                }, { merge: true });
+
+                // Also update Investment Wrapper
+                const invRef = db.collection('users').doc(userId).collection('investments').doc(doc.id);
+                reconcileBatch.set(invRef, {
+                    purchaseDate: sessionOpenedAt.toISOString(),
+                    realizedPnL: newNetPnL,
+                    updatedAt: FieldValue.serverTimestamp()
+                }, { merge: true });
+
+                // CRITICAL: Update Transaction Metadata for Audit CSV
+                if (doc.closingTradeId) {
+                    const txRef = invRef.collection('transactions').doc(doc.closingTradeId);
+                    // We need to use update() or set() with deep merge carefully
+                    // Firestore set merge matches top level. To merge metadata safely:
+                    reconcileBatch.set(txRef, {
+                        metadata: {
+                            fundingEur: allocatedFunding,
+                            netRealizedPnlEur: newNetPnL
+                        }
+                    }, { merge: true });
+                }
+                
+                reconcileCount++;
+            }
+        }
+    }
+    
+    if (reconcileCount > 0) {
+        await reconcileBatch.commit();
+        console.log(`   ✅ Reconciled ${reconcileCount} closed positions (Funding & Dates corrected).`);
+    }
+
 
     // =========================================================================
     // PHASE 2: SYNC LIVE OPEN POSITIONS
@@ -611,14 +650,14 @@ export async function syncKrakenFutures(userId: string) {
         const trueOpenedAt = findOpenDateForActivePosition(recentFills, symbol, size, side);
         
         // B. Calculate Historical Funding (from logs) + Unrealized Funding (from API)
-        const historicalFundingEur = await calculateFundingForPosition(
+        const fundingData = await calculateFundingForPosition(
             userId, 
             pos.symbol, // Pass raw symbol (e.g. pf_ethusd) which logic lowercases
             trueOpenedAt, 
             today
         );
         const currentUnrealizedEur = unrealizedFunding * currentRate;
-        const totalFundingEur = historicalFundingEur + currentUnrealizedEur;
+        const totalFundingEur = fundingData.fundingEur + currentUnrealizedEur;
 
         const docRef = db.collection('users').doc(userId).collection('futures_positions').doc(docId);
         
@@ -660,7 +699,7 @@ export async function syncKrakenFutures(userId: string) {
 
     return { 
         ok: true, 
-        message: `Synced. Processed ${totalProcessed} logs, found ${totalClosed} closures. Open Positions: ${livePositions.length}.` 
+        message: `Synced. Processed ${totalProcessed} logs, found ${totalClosed} closures. Reconciled ${reconcileCount}. Open: ${livePositions.length}.` 
     };
 
   } catch (error: any) {
