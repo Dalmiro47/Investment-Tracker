@@ -241,16 +241,26 @@ async function createInvestmentWrapperForClosedPosition(
       const isClosingFill = fill.fill_id === closedPosition.closingTradeId;
 
       const txRef = invRef.collection('transactions').doc(fill.fill_id);
+      
+      // FORCE NUMBER TYPES: Prevents "String" pollution in the DB
+      const qtyNum = Number(fillSize) || 0;
+      const priceNum = Number(fill.price) || 0;
+      const eurRateNum = Number(fillEurRate) || 0;
+      const valEurNum = Number((qtyNum * priceNum * eurRateNum).toFixed(4)); // Fix precision to 4 decimals
+
       batch.set(txRef, {
         id: fill.fill_id,
         type: fill.side === 'buy' ? 'Buy' : 'Sell',
         date: fillDate.toISOString(),
-        quantity: fillSize,
-        pricePerUnit: Number(fill.price),
-        totalAmount: fillSize * Number(fill.price) * fillEurRate,
+        
+        // 1. Force Numbers on main fields
+        quantity: qtyNum,
+        pricePerUnit: priceNum,
+        totalAmount: valEurNum,
         currency: 'EUR',
-        exchangeRate: fillEurRate,
-        valueInEur: fillSize * Number(fill.price) * fillEurRate,
+        exchangeRate: eurRateNum,
+        valueInEur: valEurNum,
+        
         metadata: {
           isTaxEvent: isReducing || isClosingFill,
           orderId: fill.order_id,
@@ -258,11 +268,13 @@ async function createInvestmentWrapperForClosedPosition(
           symbol: fill.symbol,
           side: fill.side,
           positionSide: positionSide,
+          
+          // 2. CRITICAL: Force Numbers on Metadata (Columns G-M in CSV)
           ...(isClosingFill && {
-            netRealizedPnlEur: closedPosition.netRealizedPnlEur,
-            grossPnlEur: closedPosition.realizedPnlEur,
-            feeEur: closedPosition.feeEur,
-            fundingEur: closedPosition.fundingEur,
+            netRealizedPnlEur: Number(closedPosition.netRealizedPnlEur) || 0,
+            grossPnlEur: Number(closedPosition.realizedPnlEur) || 0,
+            feeEur: Number(closedPosition.feeEur) || 0,
+            fundingEur: Number(closedPosition.fundingEur) || 0,
             isClosingFill: true,
           }),
         }
