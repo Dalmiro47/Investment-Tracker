@@ -69,29 +69,59 @@ function linkTransactionsToPositions(
   positions.forEach(pos => positionMap.set(pos.id, []));
   
   transactions.forEach(txn => {
+    // Helper to normalize IDs
+    const txnId = txn.id;
+    const txnOrderId = txn.metadata?.orderId ? String(txn.metadata.orderId).trim() : null;
+    const txnSymbol = (txn.asset || txn.metadata?.symbol || (txn as any).symbol || '').toLowerCase();
+    const txnTime = new Date(txn.date).getTime();
+
     let matched = false;
+
     for (const pos of positions) {
+      const posId = pos.id;
+      const posClosingTradeId = pos.closingTradeId ? String(pos.closingTradeId).trim() : null;
       const posOrderId = pos.closingOrderId ? String(pos.closingOrderId).trim() : null;
-      const txnOrderId = txn.metadata?.orderId || (txn.krakenId ? String(txn.krakenId).trim() : null);
       
-      // 1. Strict Order ID Match
+      // ---------------------------------------------------------
+      // STRATEGY 1: Direct Trade ID Match (Highest Confidence)
+      // ---------------------------------------------------------
+      if (posClosingTradeId && posClosingTradeId === txnId) {
+        positionMap.get(posId)?.push(txn);
+        matched = true;
+        break; 
+      }
+
+      // ---------------------------------------------------------
+      // STRATEGY 2: Order ID Match (Group Confidence)
+      // ---------------------------------------------------------
       if (posOrderId && txnOrderId && posOrderId === txnOrderId) {
-        positionMap.get(pos.id)?.push(txn);
+        positionMap.get(posId)?.push(txn);
         matched = true;
         break;
       }
-      
-      // 2. Fallback: Timestamp + Asset Match
+
+      // ---------------------------------------------------------
+      // STRATEGY 3: Time Window + Asset (Fallback)
+      // ---------------------------------------------------------
       if (!matched && pos.closedAt && pos.ticker) {
-        const posClosedDate = formatDate(pos.closedAt);
-        const txnDate = formatDate(txn.date);
+        const posTime = new Date(typeof pos.closedAt === 'string' ? pos.closedAt : (pos.closedAt as any).toDate?.() || pos.closedAt).getTime();
         const posAsset = (pos.asset || pos.ticker || '').toLowerCase();
-        const txnAsset = (txn.asset || '').toLowerCase();
-        
-        if (posClosedDate === txnDate && posAsset.includes(txnAsset.split('/')[0])) {
-          positionMap.get(pos.id)?.push(txn);
-          matched = true;
-          break;
+
+        // Check Asset Match (looking inside metadata.symbol too)
+        // e.g. pos="eth" vs txn="pf_ethusd"
+        const isAssetMatch = 
+            posAsset.includes(txnSymbol.split('/')[0]) || 
+            txnSymbol.includes(posAsset.split('-')[0]) ||
+            (txnSymbol !== '' && posAsset.includes(txnSymbol));
+
+        // Check Time Window (6 hours)
+        const timeDiff = Math.abs(posTime - txnTime);
+        const MAX_DIFF_MS = 6 * 60 * 60 * 1000; 
+
+        if (isAssetMatch && timeDiff <= MAX_DIFF_MS) {
+           positionMap.get(posId)?.push(txn);
+           matched = true;
+           break;
         }
       }
     }

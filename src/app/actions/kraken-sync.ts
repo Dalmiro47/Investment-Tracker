@@ -486,6 +486,59 @@ export async function syncKrakenFutures(userId: string) {
         if (posBatchCount > 0) {
           await posBatch.commit();
           console.log(`      ✅ Saved ${posBatchCount} closed positions.`);
+
+          // --- MISSING PART RESTORED ---
+          // Now create the granular Investment Wrappers (Transactions)
+          console.log(`      🔄 Creating Investment Wrappers for ${closureLogs.length} positions...`);
+          for (const log of closureLogs) {
+            const matchingFill = allFillsMap.get(log.execution);
+            if (!matchingFill) continue;
+
+            const logDate = new Date(log.date);
+            const eurRate = await getRate(logDate);
+            const positionSide = matchingFill.side === 'buy' ? 'SHORT' : 'LONG';
+            const size = Number(matchingFill.size);
+            const exitPrice = Number(matchingFill.price);
+            const realizedPnl = Number(log.realized_pnl);
+
+            let entryPrice = Number(log.old_average_entry_price || 0);
+            if (entryPrice === 0) {
+              const newEntry = Number(log.new_average_entry_price || 0);
+              if (newEntry > 0) entryPrice = newEntry;
+              else entryPrice = calculateFallbackEntry(exitPrice, size, realizedPnl, positionSide as any);
+            }
+
+            const openedAt = findOpenDateForClosure(allFills, matchingFill);
+            
+            // Preliminary Calc for Phase 1 (Phase 1.5 will refine Funding)
+            const realizedPnlEur = realizedPnl * eurRate;
+            const feeEur = (log.fee || 0) * eurRate;
+            let fundingEur = 0; // Will be fixed in Phase 1.5
+            const netRealizedPnlEur = realizedPnlEur - feeEur;
+
+            // Call the Wrapper Creator
+            await createInvestmentWrapperForClosedPosition(userId, {
+              id: `CLOSED-${log.booking_uid}`,
+              asset: formatTicker(matchingFill.symbol),
+              ticker: formatTicker(matchingFill.symbol) + '-PERP',
+              side: positionSide,
+              size: size,
+              entryPrice: entryPrice,
+              exitPrice: exitPrice,
+              realizedPnL: realizedPnl,
+              realizedPnlEur,
+              feeEur,
+              fundingEur,
+              netRealizedPnlEur,
+              closingOrderId: matchingFill.order_id,
+              closingTradeId: matchingFill.fill_id,
+              openedAt: openedAt,
+              closedAt: logDate,
+              exchangeRate: eurRate,
+            }, allFills);
+          }
+          console.log(`      ✅ Investment Wrappers created successfully.`);
+          // -----------------------------
         }
       }
 
