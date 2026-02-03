@@ -41,12 +41,28 @@ const fromInvestmentDoc = (snap: any): Investment => {
 
 const fromTxDoc = (snap: any): Transaction => {
   const d = snap.data();
-  const dt = (d.date?.toDate ? d.date.toDate() : new Date(d.date)) as Date;
+  
+  // ROBUST DATE PARSING
+  let dt: Date;
+  if (d.date?.toDate) {
+    dt = d.date.toDate(); // Handle Firestore Timestamp
+  } else if (typeof d.date === 'string' || typeof d.date === 'number') {
+    dt = new Date(d.date);
+  } else {
+    dt = new Date(0); // Fallback for undefined/null
+  }
+
+  // Final Safety Check
+  if (isNaN(dt.getTime())) {
+    console.warn(`⚠️ Invalid date in transaction ${snap.id}. Falling back to Epoch 0.`);
+    dt = new Date(0);
+  }
+
   return {
     id: snap.id,
     ...d,
-    date: dt.toISOString(),
-    // Explicitly preserve metadata (fees, netPnL, etc.)
+    date: dt.toISOString(), // Now safe to call
+    // Explicitly preserve metadata
     metadata: d.metadata || undefined,
   } as Transaction;
 };
