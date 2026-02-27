@@ -327,13 +327,90 @@ export default function InvestmentListView({
   const showUnrealizedPLCol = !(isSoldView || (isFlat && statusFilter === 'Active'));
 
   return (
-    <div className="mt-2 rounded-md border bg-card">
-      <div className="relative max-h-[70vh] overflow-auto scroll-area">
-        <table className="w-full min-w-[1000px] text-sm">
-          <thead className="sticky top-0 z-10 bg-background/95 text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-[0_1px_0_0_var(--border)]">
-            <tr className="[&>th]:px-4 [&>th]:py-3 [&>th]:whitespace-nowrap text-left">
-              {showTypeColumn && <th>Type</th>}
-              <th>Asset</th>
+    <div className="w-full">
+      {/* ── MOBILE VIEW: Cardified List ── */}
+      <div className="flex flex-col gap-3 md:hidden">
+        {rows.map((r) => {
+          const isIARow = r.type === 'Interest Account';
+          return (
+            <div
+              key={r.key}
+              className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm flex flex-col gap-3 cursor-pointer hover:bg-muted/50 transition-colors"
+              onClick={() => {
+                if (isFlat && onViewHistory) onViewHistory(r.invId);
+              }}
+            >
+              {/* Header Row: Name/Ticker and Total Value */}
+              <div className="flex justify-between items-start">
+                <div className="min-w-0 flex-1 pr-4">
+                  <h4 className="font-semibold text-base truncate">{r.name}</h4>
+                  {r.ticker && <span className="text-xs text-muted-foreground">{r.ticker}</span>}
+                  {!r.ticker && r.type && <span className="text-xs text-muted-foreground">{r.type}</span>}
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <div className="font-medium text-base">{fmtEur.format(r.marketValue)}</div>
+                  {!isIARow && (
+                    <span className="text-xs text-muted-foreground">Cost: {fmtEur.format(r.costBasis)}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Metrics Row: PnL, Quantity, Price */}
+              <div className="flex justify-between items-end text-sm pt-2 border-t border-border">
+                <div className="flex flex-col gap-0.5">
+                  {!isIARow && (
+                    <>
+                      <span className="text-xs text-muted-foreground">Qty: {fmtQty(r.availableQty)}</span>
+                      {r.currentPrice != null && <span className="text-xs text-muted-foreground">Price: {fmtEur.format(r.currentPrice)}</span>}
+                    </>
+                  )}
+                  {isIARow && r.currentRatePct != null && (
+                    <span className="text-xs text-muted-foreground">Rate: {fmtRate(r.currentRatePct)}</span>
+                  )}
+                </div>
+                <div className="text-right flex flex-col items-end gap-0.5">
+                  <span className={`font-medium text-sm ${plClass(r.totalPL)}`}>
+                    {fmtEur.format(r.totalPL)}
+                  </span>
+                  <span className={`text-xs ${plClass(r.performancePct)}`}>
+                    {fmtPct(r.performancePct)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+
+        {/* Mobile Totals Card */}
+        {totals && (
+          <div className="p-4 rounded-lg border-2 border-primary/20 bg-card text-card-foreground shadow-sm flex flex-col gap-2">
+            <div className="flex justify-between items-center">
+              <h4 className="font-bold text-base">Total</h4>
+              <div className="font-bold text-base">{fmtEur.format(totals.marketValue)}</div>
+            </div>
+            <div className="flex justify-between items-end text-sm pt-2 border-t border-border">
+              <span className="text-xs text-muted-foreground">Cost Basis: {fmtEur.format(totals.costBasis)}</span>
+              <div className="text-right flex flex-col items-end gap-0.5">
+                <span className={`font-medium text-sm ${plClass(totals.totalPL)}`}>
+                  {fmtEur.format(totals.totalPL)}
+                </span>
+                <span className={`text-xs ${plClass(totals.performancePct)}`}>
+                  {fmtPct(totals.performancePct)}
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── DESKTOP VIEW: Standard Table ── */}
+      <div className="hidden md:block mt-2 rounded-md border bg-card">
+        <div className="relative max-h-[70vh] overflow-auto scroll-area">
+          <table className="w-full min-w-[1000px] text-sm">
+            <thead className="sticky top-0 z-10 bg-background/95 text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-[0_1px_0_0_var(--border)]">
+              <tr className="[&>th]:px-4 [&>th]:py-3 [&>th]:whitespace-nowrap text-left">
+                {showTypeColumn && <th>Type</th>}
+                <th>Asset</th>
               {showPurchaseDateCol && <th>Purchase Date</th>}
               {showStatusCol && <th>Status</th>}
               
@@ -471,7 +548,8 @@ export default function InvestmentListView({
               </tr>
             </tfoot>
           )}
-        </table>
+          </table>
+        </div>
       </div>
     </div>
   );
