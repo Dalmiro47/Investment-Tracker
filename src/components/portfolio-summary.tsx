@@ -775,7 +775,7 @@ function PortfolioSummaryImpl({
                                 <TabsTrigger value="economic">Economic Value</TabsTrigger>
                             </TabsList>
                         </Tabs>
-                        <ChartContainer config={{}} className="aspect-square h-[250px] w-full">
+                        <ChartContainer config={{}} className="w-full h-[280px] sm:h-[350px] lg:h-[450px] mt-4 relative">
                             {chartData.length > 0 ? (
                             <PieChart>
                                 <RechartsTooltip
