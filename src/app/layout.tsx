@@ -3,6 +3,7 @@ import type {Metadata, Viewport} from 'next';
 import { Toaster } from "@/components/ui/toaster"
 import { AuthProvider } from '@/hooks/use-auth';
 import OfflineToast from '@/components/OfflineToast';
+import { MobileOrientationShell } from '@/components/shell/MobileOrientationShell';
 import './globals.css';
 import { PT_Sans, Space_Grotesk } from 'next/font/google';
 
@@ -50,7 +51,9 @@ export default function RootLayout({
       </head>
       <body className="font-body antialiased min-h-[100svh] bg-background text-foreground overflow-x-hidden">
         <AuthProvider>
-          {children}
+          <MobileOrientationShell>
+            {children}
+          </MobileOrientationShell>
         </AuthProvider>
         <Toaster />
         <OfflineToast />

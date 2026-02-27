@@ -42,6 +42,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { MobileAppShell } from '@/components/shell/MobileAppShell';
 import { MobileFilters } from '@/components/filters/MobileFilters';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { type MobileAppliedFilters, MOBILE_DEFAULTS } from '@/lib/mobile';
 import { FifoSellDialog } from "@/components/fifo-sell-dialog";
 import FuturesPositionsTable from '@/components/futures-positions-table';
 import KrakenTaxSummaryCards from '@/components/KrakenTaxSummaryCards';
@@ -867,11 +868,25 @@ function DashboardPageContent() {
 
   const investmentsView = (
     <>
-      <MobileFilters view={viewMode} setView={setViewMode} mode={listMode} setMode={setListMode} isFuturesView={isFuturesView}>
-        <div className="mt-2 -mx-4 px-4">
-         {advancedFilters}
-        </div>
-      </MobileFilters>
+      <MobileFilters
+        userId={user?.uid ?? ''}
+        initialFilters={{
+          typeFilter: typeFilter === 'Future' ? 'Futures' : (typeFilter as MobileAppliedFilters['typeFilter']),
+          statusFilter: statusFilter as MobileAppliedFilters['statusFilter'],
+          sortKey: sortKey as MobileAppliedFilters['sortKey'],
+          viewMode: viewMode as MobileAppliedFilters['viewMode'],
+          listMode: listMode as MobileAppliedFilters['listMode'],
+          futuresStatusFilter: futuresStatusFilter as MobileAppliedFilters['futuresStatusFilter'],
+        }}
+        onApply={(applied) => {
+          setTypeFilter(applied.typeFilter as TypeFilterValue);
+          setStatusFilter(applied.statusFilter as InvestmentStatus | 'All');
+          setSortKey(applied.sortKey as SortKey);
+          setViewMode(applied.viewMode);
+          setListMode(applied.listMode);
+          setFuturesStatusFilter(applied.futuresStatusFilter as 'All' | 'OPEN' | 'CLOSED' | 'LIQUIDATED');
+        }}
+      />
       
       <div className="mt-2 hidden md:block -mx-4 px-4">
         {advancedFilters}
