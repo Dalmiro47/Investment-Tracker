@@ -1,5 +1,5 @@
 "use client";
-import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle, SheetTrigger, SheetClose } from "@/components/ui/sheet";
 import { Menu, Settings, Scale, ReceiptText } from "lucide-react";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
@@ -40,6 +40,7 @@ export default function TopBar({
              </Button>
           </SheetTrigger>
           <SheetContent side="right" className="w-72">
+            <SheetTitle className="sr-only">Menu</SheetTitle>
             <nav className="mt-6 grid gap-2" aria-label="Quick actions">
                <div className="px-3 pb-3">
                 <div className="flex items-center justify-between">
