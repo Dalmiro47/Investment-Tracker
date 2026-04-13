@@ -1,4 +1,4 @@
-import type { Investment, Transaction, YearFilter, TaxSettings, EtfSimSummary, ViewMode } from './types';
+import type { Investment, Transaction, YearFilter, TaxSettings, ViewMode } from './types';
 import { dec, add, sub, mul, div, toNum } from './money';
 import { isCryptoSellTaxFree, calcCapitalTax, calcCryptoTax, CapitalTaxResult, CryptoTaxResult } from './tax';
 import { calcFuturesTax, FuturesTaxResult } from './futures-tax';
@@ -40,7 +40,6 @@ export interface PositionMetrics {
   performancePct: number; // totalPLDisplay / purchaseValue
   
   type: Investment['type'];
-  planId?: string;
 }
 
 export type AggregatedSymbolRow = {
@@ -49,8 +48,6 @@ export type AggregatedSymbolRow = {
   ticker?: string | null;
   type: Investment['type'];
   positions: number;
-  // when the underlying manual ETF is linked to a plan
-  planId?: string | null;
 
   buyQty: number;
   availableQty: number;
@@ -87,7 +84,6 @@ export function calculatePositionMetrics(
     realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0,
     soldCostBasis: 0,
     type: inv.type,
-    planId: inv.planId,
   };
 
   // ✅ Interest Account: compute using rate schedule + transactions
@@ -276,7 +272,6 @@ export function calculatePositionMetrics(
     totalPLDisplay: toNum(totalPLDisplay),
     performancePct: toNum(performancePct, 4),
     type: inv.type,
-    planId: inv.planId,
   };
 }
 
@@ -302,7 +297,6 @@ export function aggregateBySymbol(
         ticker: inv.ticker ?? null,
         type: inv.type,
         positions: 0,
-        planId: inv.type === 'ETF' ? (inv.planId ?? null) : null,
 
         buyQty: 0,
         availableQty: 0,
@@ -329,11 +323,6 @@ export function aggregateBySymbol(
 
     const a = byKey.get(key)!;
     a.positions += 1;
-    // If multiple manual ETFs get merged, only keep a planId if they all agree.
-    if (inv.type === 'ETF') {
-      if (a.planId == null) a.planId = inv.planId ?? null;
-      else if (a.planId !== (inv.planId ?? null)) a.planId = null;
-    }
     a.buyQty += metrics.buyQty;
     a.availableQty += metrics.availableQty;
 
@@ -410,37 +399,9 @@ export interface AggregatedSummary {
   futuresTransactions?: Transaction[];  // For audit export
 }
 
-function getEtfMetrics(etfSummaries: EtfSimSummary[], yearFilter: YearFilter): {
-  costBasis: number, marketValue: number, realizedPL: number, unrealizedPL: number
-} {
-  let costBasis = 0;
-  let marketValue = 0;
-  let unrealizedPL = 0;
-  const realizedPL = 0; // ETFs are buy-and-hold, no realized P/L in this model
-
-  if (yearFilter.kind === 'all') {
-      etfSummaries.forEach(s => {
-          costBasis += s.lifetime.contrib;
-          marketValue += s.lifetime.marketValue;
-          unrealizedPL += s.lifetime.unrealizedPL;
-      });
-  } else {
-      etfSummaries.forEach(s => {
-          const yearData = s.byYear[yearFilter.year];
-          if (yearData) {
-              costBasis += yearData.contrib; // Cost basis for the year is the contribution for that year
-              marketValue += yearData.endValue;
-              unrealizedPL += yearData.unrealizedPL; // Use the lifetime P/L up to that year's end for a consistent view
-          }
-      });
-  }
-  return { costBasis, marketValue, realizedPL, unrealizedPL };
-}
-
 export function aggregateByType(
   investments: Investment[],
   transactionsMap: Record<string, Transaction[]>,
-  etfSummaries: EtfSimSummary[],
   yearFilter: YearFilter,
   taxSettings: TaxSettings | null,
   rateSchedulesMap: Record<string, SavingsRateChange[]>,
@@ -605,23 +566,6 @@ export function aggregateByType(
     };
   });
 
-  if (etfSummaries.length > 0 && yearFilter.mode !== 'realized') {
-    const etfMetrics = getEtfMetrics(etfSummaries, yearFilter);
-    if (etfMetrics.costBasis > 0 || etfMetrics.marketValue > 0) {
-      const totalPL = etfMetrics.realizedPL + etfMetrics.unrealizedPL;
-      rows.push({
-        type: 'ETF',
-        costBasis: etfMetrics.costBasis,
-        marketValue: etfMetrics.marketValue,
-        realizedPL: etfMetrics.realizedPL,
-        unrealizedPL: etfMetrics.unrealizedPL,
-        totalPL,
-        performancePct: etfMetrics.costBasis > 0 ? totalPL / etfMetrics.costBasis : 0,
-        economicValue: etfMetrics.marketValue + etfMetrics.realizedPL,
-      });
-    }
-  }
-
   // 1. Identify live data from dashboard arguments
   const liveUnrealized = Number(krakenUnrealized || 0);
   const liveNotional = Number(krakenOpenNotional || 0);
@@ -666,8 +610,6 @@ export function aggregateByType(
       const typeSummary = byType[row.type];
       if (typeSummary) {
         acc.purchaseValue = add(acc.purchaseValue, typeSummary.purchaseValue);
-      } else if (row.type === 'ETF') {
-        acc.purchaseValue = add(acc.purchaseValue, dec(row.costBasis));
       }
       return acc;
     },

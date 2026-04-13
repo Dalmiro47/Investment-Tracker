@@ -5,8 +5,8 @@ import React from 'react';
 import { useFuturesPositions } from '@/hooks/useFuturesPositions';
 import { useClosedPositions } from '@/hooks/useClosedPositions';
 import { useKrakenYearlySummary } from '@/hooks/useKrakenYearlySummary';
-import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings, EtfSimSummary } from '@/lib/types';
-import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllEtfSummaries, getAllRateSchedules, addTransaction } from '@/lib/firestore';
+import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings } from '@/lib/types';
+import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllRateSchedules, addTransaction } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
@@ -36,7 +36,6 @@ import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
 import InvestmentListView from '@/components/investment-list';
 import type { SavingsRateChange } from '@/lib/types-savings';
 import RateScheduleDialog from "@/components/rate-schedule-dialog";
-import EtfPlansButton from '@/components/etf/EtfPlansButton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { Card, CardContent } from '@/components/ui/card';
 import { MobileAppShell } from '@/components/shell/MobileAppShell';
@@ -61,7 +60,6 @@ function DashboardPageContent() {
   const { user } = useAuth();
   const { toast } = useToast();
   const [investments, setInvestments] = React.useState<Investment[]>([]);
-  const [etfSummaries, setEtfSummaries] = React.useState<EtfSimSummary[]>([]);
   const [transactionsMap, setTransactionsMap] = React.useState<Record<string, Transaction[]>>({});
   const [rateSchedulesMap, setRateSchedulesMap] = React.useState<Record<string, SavingsRateChange[]>>({});
   const [sellYears, setSellYears] = React.useState<number[]>([]);
@@ -127,40 +125,21 @@ function DashboardPageContent() {
         return n;
       };
 
-      const [userInvestments, etfSums, years, settings] = await Promise.all([
+      const [userInvestments, years, settings] = await Promise.all([
         getInvestments(userId),
-        getAllEtfSummaries(userId),
         getSellYears(userId),
         getTaxSettings(userId),
       ]);
-      
+
       const rateSchedules = await getAllRateSchedules(userId, userInvestments);
-      
+
       setInvestments(userInvestments);
-      setEtfSummaries(etfSums);
       setRateSchedulesMap(rateSchedules);
 
       const yearSet = new Set<number>();
       for (const y of years ?? []) {
         const n = parseYear(y);
         if (n != null) yearSet.add(n);
-      }
-
-      for (const s of etfSums) {
-        const byYear = (s as any).byYear;
-        if (!byYear) continue;
-
-        if (Array.isArray(byYear)) {
-          for (const row of byYear) {
-            const n = parseYear(row?.year);
-            if (n != null) yearSet.add(n);
-          }
-        } else {
-          for (const key of Object.keys(byYear)) {
-            const n = parseYear(key);
-            if (n != null) yearSet.add(n);
-          }
-        }
       }
       
       yearSet.add(new Date().getFullYear());
@@ -481,7 +460,6 @@ function DashboardPageContent() {
     return aggregateByType(
       investments,
       transactionsMap,
-      etfSummaries,
       yearFilter,
       isTaxView ? taxSettings : null,
       rateSchedulesMap,
@@ -495,7 +473,6 @@ function DashboardPageContent() {
   }, [
     investments,
     transactionsMap,
-    etfSummaries,
     yearFilter,
     isTaxView,
     taxSettings,
@@ -981,7 +958,6 @@ function DashboardPageContent() {
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Add First Investment
               </Button>
-             {typeFilter === 'ETF' && <EtfPlansButton />}
             </div>
           </div>
         )}
@@ -1120,7 +1096,6 @@ function DashboardPageContent() {
                   {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                   Refresh Prices
                 </Button>
-                <EtfPlansButton />
                  <Button onClick={() => handleAddClick(typeFilter !== 'All' && typeFilter !== 'Futures' ? typeFilter : undefined)}>
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add Investment
@@ -1216,7 +1191,6 @@ function DashboardPageContent() {
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Add First Investment
                 </Button>
-               {typeFilter === 'ETF' && <EtfPlansButton />}
               </div>
             </div>
           )}

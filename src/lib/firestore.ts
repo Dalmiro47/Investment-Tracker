@@ -2,7 +2,7 @@
 
 import { collection, addDoc, getDocs, doc, updateDoc, deleteDoc, Timestamp, writeBatch, runTransaction, getDoc, serverTimestamp, query, where, collectionGroup, setDoc } from 'firebase/firestore';
 import { db } from './firebase';
-import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues, TaxSettings, EtfSimSummary } from './types';
+import type { Investment, Transaction, TransactionFormValues, InvestmentFormValues, TaxSettings } from './types';
 import type { SavingsRateChange } from './types-savings';
 import { buildInvestmentId, toSlug } from './ids';
 
@@ -166,22 +166,6 @@ export async function getAllRateSchedules(
         map[inv.id] = results[index];
     });
     return map;
-}
-
-export async function getAllEtfSummaries(uid: string): Promise<EtfSimSummary[]> {
-  // list user's ETF plans
-  const plansRef = collection(db, 'users', uid, 'etfPlans');
-  const plansSnap = await getDocs(plansRef);
-
-  // fetch each plan's latest summary doc in parallel
-  const reads = plansSnap.docs.map(async (p) => {
-    const sRef = doc(db, 'users', uid, 'etfPlans', p.id, 'latest_sim_summary', 'latest');
-    const sSnap = await getDoc(sRef);
-    return sSnap.exists() ? (sSnap.data() as EtfSimSummary) : null;
-  });
-
-  const results = await Promise.all(reads);
-  return results.filter((x): x is EtfSimSummary => !!x);
 }
 
 export async function getSellYears(userId: string): Promise<number[]> {

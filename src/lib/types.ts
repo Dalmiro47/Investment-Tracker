@@ -75,8 +75,6 @@ export interface Investment {
   type: InvestmentType;
   ticker?: string;
   exchange?: string;
-  planId?: string; // For linking manual ETF entries to a savings plan
-
   // SINGLE purchase
   purchaseDate: string;          // ISO
   purchaseQuantity: number;      // your initial qty (one-time)
@@ -147,42 +145,12 @@ export interface FuturePosition {
   exchangeRate: number;            // conversion rate to EUR
 }
 
-export interface EtfSimYearBucket {
-  year: number;
-  contrib: number;
-  fees: number;
-  endValue: number;
-  endDate: string | null;
-  cumContribToDate: number;
-  unrealizedPL: number;
-  performance: number;
-};
-
-export interface EtfSimSummary {
-  planId: string;
-  title: string;
-  baseCurrency: 'EUR';
-  startMonth: string;
-  endMonth: string;
-  lastRunAt: string; // ISO
-  lifetime: {
-    contrib: number;
-    fees: number;
-    marketValue: number;
-    unrealizedPL: number;
-    performance: number;
-  };
-  byYear: Record<string, EtfSimYearBucket>;
-};
-
-
 // Schema for adding/editing a new investment (the initial purchase)
 export const investmentSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
   type: z.enum(['Stock', 'Bond', 'Crypto', 'Real Estate', 'ETF', 'Interest Account']),
   ticker: z.string().optional(),
   exchange: z.string().optional(),
-  planId: z.string().optional(),
   purchaseDate: z.date({ required_error: "Purchase date is required." }),
   purchaseQuantity: z.coerce.number().nonnegative(),
   purchasePricePerUnit: z.coerce.number().nonnegative(),

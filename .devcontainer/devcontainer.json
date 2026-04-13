@@ -1,0 +1,4 @@
+{
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "postCreateCommand": "npm install -g @anthropic-ai/claude-code && claude plugins install superpowers && claude plugins install code-simplifier && claude plugins install context7"
+}
