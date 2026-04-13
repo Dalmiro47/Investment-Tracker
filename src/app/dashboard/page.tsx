@@ -5,10 +5,10 @@ import { aggregateByType } from '@/lib/portfolio';
 import { useKrakenYearlySummary } from '@/hooks/useKrakenYearlySummary';
 import PortfolioSummary from '@/components/portfolio-summary';
 import { useAuth } from '@/hooks/use-auth';
-import type { YearFilter, Investment, Transaction, EtfSimSummary, TaxSettings } from '@/lib/types';
+import type { YearFilter, Investment, Transaction, TaxSettings } from '@/lib/types';
 import type { SavingsRateChange } from '@/lib/types-savings';
 import { getInvestments, getAllTransactions } from '@/features/portfolio/actions';
-import { getAllEtfSummaries, getTaxSettings, getAllRateSchedules } from '@/lib/firestore';
+import { getTaxSettings, getAllRateSchedules } from '@/lib/firestore';
 import { useFuturesPositions } from '@/hooks/useFuturesPositions';
 
 export default function DashboardPage() {
@@ -16,7 +16,6 @@ export default function DashboardPage() {
   const [yearFilter, setYearFilter] = useState<YearFilter>({ kind: 'all', mode: 'holdings' });
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [transactionsMap, setTransactionsMap] = useState<Record<string, Transaction[]>>({});
-  const [etfSummaries, setEtfSummaries] = useState<EtfSimSummary[]>([]);
   const [taxSettings, setTaxSettings] = useState<TaxSettings | null>(null);
   const [rateSchedulesMap, setRateSchedulesMap] = useState<Record<string, SavingsRateChange[]>>({});
   const [sellYears, setSellYears] = useState<number[]>([]);
@@ -134,22 +133,6 @@ export default function DashboardPage() {
     fetchData();
   }, [user]);
 
-  // Fetch ETF summaries
-  useEffect(() => {
-    const fetchEtfSummaries = async () => {
-      if (!user?.uid) return;
-      
-      try {
-        const summaries = await getAllEtfSummaries(user.uid);
-        setEtfSummaries(summaries);
-      } catch (error) {
-        console.error('Error fetching ETF summaries:', error);
-      }
-    };
-
-    fetchEtfSummaries();
-  }, [user]);
-
   // Update: Ensure live values are passed to the aggregator
   const summaryData = useMemo(() => {
     // 1. Calculate the visibility flag explicitly - Ensure futuresPositions is always an array
@@ -162,22 +145,21 @@ export default function DashboardPage() {
 
     // 2. HEAVY LIFTING: Precise Argument Mapping
     return aggregateByType(
-      investments,           // 1
-      transactionsMap,       // 2
-      etfSummaries,          // 3
-      yearFilter,            // 4
-      isTaxView ? taxSettings : null, // 5
-      rateSchedulesMap,      // 6
-      krakenSummary,         // 7
-      futuresLive.unrealizedPnLSum,   // 8 (krakenUnrealized)
-      futuresLive.totalNotionalEur,   // 9 (krakenOpenNotional)
-      futuresLive.totalEntryValueEur, // 10 (krakenEntryValueEur)
-      hasOpenPositions,      // 11 (hasOpenPositions)
-      0                      // 12 (krakenClosedRealizedPL) - calculated from closed positions in main page
+      investments,
+      transactionsMap,
+      yearFilter,
+      isTaxView ? taxSettings : null,
+      rateSchedulesMap,
+      krakenSummary,
+      futuresLive.unrealizedPnLSum,
+      futuresLive.totalNotionalEur,
+      futuresLive.totalEntryValueEur,
+      hasOpenPositions,
+      0
     );
   }, [
-    investments, transactionsMap, etfSummaries, yearFilter, 
-    isTaxView, taxSettings, rateSchedulesMap, krakenSummary, 
+    investments, transactionsMap, yearFilter,
+    isTaxView, taxSettings, rateSchedulesMap, krakenSummary,
     futuresLive, futuresPositions
   ]);
 

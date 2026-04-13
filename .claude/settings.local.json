@@ -1,0 +1,4 @@
+{
+  "deny": ["Read(./.env)", "Read(./.env.*)", "Write(./.env)", "Write(./.env.*)"],
+  "allow": ["Bash(git:*)", "Bash(npx:*)"]
+}

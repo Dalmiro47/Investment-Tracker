@@ -24,8 +24,6 @@ import {
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
-import { EtfSimLink } from './etf/EtfSimLink';
-
 
 interface InvestmentCardProps {
   investment: Investment;
@@ -198,7 +196,6 @@ export default function InvestmentCard({
                 {isIA && typeof currentRatePct === "number" ? ` • ${currentRatePct.toFixed(2)}%` : ""}
                 {exchange && ` • ${exchange}`}
               </CardDescription>
-              {isETF && metrics?.planId && <EtfSimLink planId={metrics.planId} showSummary={false} className="mt-1" />}
             </div>
           </div>
            <div className="flex items-center gap-1">

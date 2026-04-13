@@ -1,0 +1,12 @@
+{
+  "statusLine": {
+    "type": "command",
+    "command": "bash /workspaces/Investment-Tracker/.claude/hooks/statusline-command.sh"
+  },
+  "hooks": {
+    "PreToolUse": [{
+      "matcher": "Bash",
+      "hooks": [{ "type": "command", "command": ".claude/hooks/block-dangerous.sh" }]
+    }]
+  }
+}
