@@ -41,3 +41,4 @@ Capture the current state of this project as a milestone thought in Open Brain M
 - Keep content under 1800 characters, compress if needed
 - Always include the branch name in content and at least 3 topics
 - If nothing meaningful changed, skip the capture
+- **Anonymize full names** in `secret` thoughts — truncate last names to initial only (e.g. "Christina Rodriguez" → "Christina R."). Apply to `content`, `people` array, and `action_items`. No full last names anywhere.
