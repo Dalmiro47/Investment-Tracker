@@ -49,7 +49,12 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
   });
   
   // Also fetch closed positions
-  const { positions: closedPositions, loading: closedLoading } = useClosedPositions(userId ?? user?.uid);
+  const {
+    positions: closedPositions,
+    loading: closedLoading,
+    hasMore: hasMoreClosed,
+    loadMore: loadMoreClosed,
+  } = useClosedPositions(userId ?? user?.uid);
 
   // Consolidate positions by session ID to merge OPEN and CLOSED states
   const consolidatedPositions = useMemo(() => {
@@ -165,6 +170,20 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
           </TableBody>
         </Table>
       </div>
+
+      {enabledHook && hasMoreClosed && statusFilter !== 'OPEN' && (
+        <div className="flex justify-center px-4 py-3 border-t border-border bg-muted/20">
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={loadMoreClosed}
+            disabled={closedLoading}
+          >
+            <RefreshCw className={cn("mr-2 h-3.5 w-3.5", closedLoading && "animate-spin")} />
+            {closedLoading ? "Loading..." : "Load more closed positions"}
+          </Button>
+        </div>
+      )}
 
       <Dialog open={isInfoOpen} onOpenChange={setIsInfoOpen}>
         <DialogContent className="w-[96vw] max-w-3xl p-0">

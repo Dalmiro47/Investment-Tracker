@@ -43,3 +43,6 @@ pnpm-debug.log*
 # Firebase
 .firebase
 firebase-debug.log
+
+# Local Firestore exports (may contain personal data)
+/scripts/exports/
