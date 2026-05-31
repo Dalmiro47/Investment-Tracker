@@ -65,3 +65,11 @@ npx shadcn-ui@latest add [component-name]  # Add Shadcn components
 - **Batch writes:** Use `writeBatch` for multiple Firestore operations; avoid N+1 patterns
 - **Precision:** Use `big.js` for financial arithmetic
 - **Data migrations:** Flag any schema change that requires a Firestore backfill script
+
+## Destructive Operations
+
+Before ANY destructive or irreversible operation, do NOT execute directly. First create a snapshot/backup (or confirm a recent one exists), then STOP and ask for explicit confirmation, stating: (a) exactly what will be affected, (b) why it's irreversible, (c) what backup/rollback exists.
+
+Covers (non-exhaustive): deleting or clearing Firestore collections/documents, mass or unscoped Firestore deletes or `writeBatch` updates, schema/backfill migrations that drop or overwrite document fields, deleting files or directories (`rm -rf`, fs deletes), overwriting production Firestore data, force-pushing or rewriting git history on shared branches, destructive Firebase CLI/Admin SDK calls (e.g. `firebase firestore:delete`) against production.
+
+"I'll just do it quickly" is not a reason to skip this. Speed is exactly the risk.

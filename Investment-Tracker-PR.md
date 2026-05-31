@@ -2,14 +2,14 @@
 claude --dangerously-skip-permissions 
 
 ## Pull Request to Github 
-git switch -c fix/futures-positions
+git switch -c chore/brain-sync-readme-audit
 
 ## Do ALL THE CHANGES 
 
 ## Pull Request to Github 
 git add -A 
-git commit -m "fix: Bug - futures positions table hid older closed sessions" 
-git push -u origin fix/futures-positions
+git commit -m "chore(claude): add Step 0b README drift audit to brain-sync" 
+git push -u origin chore/brain-sync-readme-audit
 
 ## Make local main match GitHub
 
@@ -24,5 +24,5 @@ git rev-parse HEAD
 git rev-parse origin/main 
  
 ## After merge, delete the branch
-git branch -D fix/futures-positions
+git branch -D chore/brain-sync-readme-audit
  
