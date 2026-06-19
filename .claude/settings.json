@@ -1,7 +1,7 @@
 {
   "statusLine": {
     "type": "command",
-    "command": "bash /workspaces/Investment-Tracker/.claude/hooks/statusline-command.sh"
+    "command": "node .claude/statusline-command.js"
   },
   "hooks": {
     "PreToolUse": [{
