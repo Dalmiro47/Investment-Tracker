@@ -12,6 +12,7 @@ import {
   eachDayOfInterval,
   isSameMonth,
   isSameDay,
+  isToday,
   format,
   parse,
   isValid,
@@ -253,9 +254,10 @@ export default function AppDatePicker({
           <button
             type="button"
             className={clsx(
-              'w-full grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border px-3 py-2',
-              'bg-background border-border text-foreground',
-              disabled && 'opacity-60 cursor-not-allowed'
+              'grid h-11 w-full grid-cols-[1fr_auto] items-center gap-2 rounded-[10px] border border-input bg-card px-3 text-left md:h-[38px]',
+              'ring-offset-background transition-colors focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2',
+              open && 'border-primary/60',
+              disabled && 'cursor-not-allowed opacity-60'
             )}
             onClick={() => setOpen((s) => !s)}
           >
@@ -269,35 +271,39 @@ export default function AppDatePicker({
                   setOpen(false);
                 }
               }}
-              className="bg-transparent outline-none border-0 p-0 m-0 w-full text-sm"
+              disabled={disabled}
+              className="m-0 w-full border-0 bg-transparent p-0 font-mono text-base font-medium tabular-nums outline-none placeholder:font-body placeholder:font-normal placeholder:text-muted-foreground md:text-[13px]"
               placeholder={placeholder || (includeTime ? "dd/mm/yyyy hh:mm" : "dd/mm/yyyy")}
             />
-            <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+            <CalendarIcon className={clsx('h-4 w-4 transition-colors', open ? 'text-primary' : 'text-muted-foreground')} />
           </button>
         </PopoverTrigger>
 
         <PopoverContent
           align="start"
-          onCloseAutoFocus={(e) => e.preventDefault()} 
-          className="p-0 w-[280px] rounded-md border bg-popover text-popover-foreground shadow-md"
+          onCloseAutoFocus={(e) => e.preventDefault()}
+          className="glass-strong w-[300px] overflow-hidden rounded-[16px] border-white/10 bg-popover p-0 text-popover-foreground"
         >
           {/* Calendar Header */}
-          <div className="flex items-center gap-2 p-2 border-b border-border bg-popover">
+          <div className="flex items-center gap-2 border-b border-white/[.07] px-3 py-2.5">
             <button
               type="button"
-              className="grid place-items-center h-7 w-7 rounded-md border border-border hover:bg-muted"
+              aria-label="Previous month"
+              className="grid h-8 w-8 place-items-center rounded-[9px] border border-white/[.07] bg-white/[.03] text-muted-foreground transition-colors hover:bg-white/[.07] hover:text-foreground"
               onClick={() => setView(subMonths(view, 1))}
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-             <div className="flex-1 text-center font-medium">
-                {format(view, 'MMMM yyyy')}
-             </div>
+            <div className="flex flex-1 items-baseline justify-center gap-1.5">
+              <span className="font-headline text-[14px] font-bold tracking-tight">{format(view, 'MMMM')}</span>
+              <span className="font-mono text-[12px] text-muted-foreground">{format(view, 'yyyy')}</span>
+            </div>
             <button
               type="button"
+              aria-label="Next month"
               className={clsx(
-                "grid place-items-center h-7 w-7 rounded-md border border-border",
-                canGoNext ? "hover:bg-muted" : "opacity-30 cursor-not-allowed"
+                'grid h-8 w-8 place-items-center rounded-[9px] border border-white/[.07] bg-white/[.03] text-muted-foreground transition-colors',
+                canGoNext ? 'hover:bg-white/[.07] hover:text-foreground' : 'cursor-not-allowed opacity-30'
               )}
               onClick={() => canGoNext && setView(addMonths(view, 1))}
               disabled={!canGoNext}
@@ -307,14 +313,15 @@ export default function AppDatePicker({
           </div>
 
           {/* Calendar Grid */}
-          <div className="grid grid-cols-7 gap-y-1 p-2">
+          <div className="grid grid-cols-7 gap-y-1 px-2 pb-2.5 pt-2">
             {['Mo','Tu','We','Th','Fr','Sa','Su'].map(day => (
-                 <div key={day} className="text-center text-xs text-muted-foreground font-medium py-1">{day}</div>
+                 <div key={day} className="py-1 text-center text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">{day}</div>
             ))}
             {days.map((d) => {
                 const isSelected = !!value && isSameDay(d, value);
                 const isCurrentMonth = isSameMonth(d, view);
-                
+                const isTodayDay = isToday(d);
+
                 const isBeforeMin = minDate ? startOfDay(d) < startOfDay(minDate) : false;
                 const isAfterMax = maxDate ? startOfDay(d) > startOfDay(maxDate) : false;
                 const isDisabledDay = isBeforeMin || isAfterMax;
@@ -325,15 +332,19 @@ export default function AppDatePicker({
                   type="button"
                   onClick={(e) => !isDisabledDay && selectDay(e, d)}
                   disabled={isDisabledDay}
+                  aria-pressed={isSelected}
+                  aria-current={isTodayDay ? 'date' : undefined}
                   className={clsx(
-                    'h-8 w-8 mx-auto rounded-md text-sm grid place-items-center',
+                    'relative mx-auto grid h-9 w-9 place-items-center rounded-[9px] font-mono text-[13px] tabular-nums',
                     'transition-colors',
-                    !isCurrentMonth && 'opacity-40 text-muted-foreground',
-                    isSelected 
-                        ? 'bg-primary text-primary-foreground' 
-                        : isDisabledDay 
-                            ? 'opacity-20 cursor-not-allowed' 
-                            : 'hover:bg-secondary'
+                    !isCurrentMonth && !isSelected && 'text-muted-foreground/45',
+                    isSelected
+                        ? 'bg-primary font-bold text-primary-foreground shadow-[0_0_18px_hsl(var(--primary)/.35)]'
+                        : isDisabledDay
+                            ? 'cursor-not-allowed opacity-25'
+                            : 'hover:bg-white/[.07]',
+                    isTodayDay && !isSelected && !isDisabledDay && 'font-bold text-primary',
+                    isTodayDay && !isSelected && 'after:absolute after:bottom-1 after:left-1/2 after:h-1 after:w-1 after:-translate-x-1/2 after:rounded-full after:bg-primary'
                   )}
                 >
                   {d.getDate()}
@@ -343,20 +354,20 @@ export default function AppDatePicker({
 
           {/* TIME SECTION */}
           {includeTime && (
-            <div className="p-3 border-t border-border bg-muted/20">
-                <div className="flex items-center gap-2 mb-2">
+            <div className="border-t border-white/[.07] bg-white/[.02] p-3">
+                <div className="mb-2 flex items-center gap-2">
                     <Clock className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-xs font-medium text-muted-foreground">Time (HH:mm)</span>
+                    <span className="text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">Time (HH:mm)</span>
                 </div>
                 <div className="flex items-center gap-2">
                     <div className="flex-1">
-                        <Label className="text-[10px] text-muted-foreground mb-1 block">Hours</Label>
+                        <Label className="mb-1 block text-[10px] text-muted-foreground">Hours</Label>
                         <Input
                           type="number"
                           min={0}
                           max={23}
                           step={1}
-                          className="h-8 text-center"
+                          className="h-9 text-center font-mono tabular-nums md:h-9"
                           value={hoursDraft}
                           placeholder={value ? format(value, 'HH') : '00'}
                           onChange={(e) => setHoursDraft(e.target.value)}
@@ -369,15 +380,15 @@ export default function AppDatePicker({
                           }}
                         />
                     </div>
-                    <span className="text-muted-foreground font-bold mt-4">:</span>
+                    <span className="mt-4 font-mono font-bold text-muted-foreground">:</span>
                     <div className="flex-1">
-                        <Label className="text-[10px] text-muted-foreground mb-1 block">Mins</Label>
+                        <Label className="mb-1 block text-[10px] text-muted-foreground">Mins</Label>
                         <Input
                           type="number"
                           min={0}
                           max={59}
                           step={1}
-                          className="h-8 text-center"
+                          className="h-9 text-center font-mono tabular-nums md:h-9"
                           value={minutesDraft}
                           placeholder={value ? format(value, 'mm') : '00'}
                           onChange={(e) => setMinutesDraft(e.target.value)}

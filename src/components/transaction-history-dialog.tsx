@@ -43,7 +43,7 @@ import {
     FormLabel,
     FormMessage
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { NumericInput } from "@/components/ui/numeric-input";
 import {
     Select,
     SelectContent,
@@ -75,9 +75,9 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
         defaultValues: {
             type: "Sell",
             date: new Date(),
-            quantity: 0,
-            pricePerUnit: 0,
-            amount: 0,
+            quantity: undefined,
+            pricePerUnit: undefined,
+            amount: undefined,
         }
     });
 
@@ -107,9 +107,9 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
             form.reset({
                 type: defaultType,
                 date: new Date(),
-                quantity: defaultType === 'Sell' ? availableQty(investment) : 0,
-                pricePerUnit: defaultType === 'Sell' ? (investment.currentValue ?? 0) : 0,
-                amount: 0,
+                quantity: defaultType === 'Sell' ? availableQty(investment) : undefined,
+                pricePerUnit: defaultType === 'Sell' ? (investment.currentValue ?? undefined) : undefined,
+                amount: undefined,
             });
         }
     }, [editingTransaction, typeOptions, investment, form]);
@@ -184,7 +184,12 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                                 <FormItem>
                                     <FormLabel>Quantity Sold</FormLabel>
                                     <FormControl>
-                                        <Input type="number" step="any" placeholder="e.g. 10" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
+                                        <NumericInput
+                                            value={field.value as number | null | undefined}
+                                            onCommit={(n) => field.onChange(n ?? undefined)}
+                                            placeholder="e.g. 10"
+                                            allowDecimal
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -197,7 +202,12 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                                 <FormItem>
                                     <FormLabel>Price / Unit (€)</FormLabel>
                                     <FormControl>
-                                        <Input type="number" step="any" placeholder="e.g. 150.50" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
+                                        <NumericInput
+                                            value={field.value as number | null | undefined}
+                                            onCommit={(n) => field.onChange(n ?? undefined)}
+                                            placeholder="e.g. 150.50"
+                                            allowDecimal
+                                        />
                                     </FormControl>
                                     <FormMessage />
                                 </FormItem>
@@ -214,7 +224,12 @@ function TransactionForm({ investment, onFormSubmit, onCancel, editingTransactio
                             <FormItem>
                                 <FormLabel>Total Amount (€)</FormLabel>
                                 <FormControl>
-                                    <Input type="number" step="any" placeholder="e.g. 50.00" {...field} onChange={(e) => field.onChange(parseFloat(e.target.value) || 0)} />
+                                    <NumericInput
+                                        value={field.value as number | null | undefined}
+                                        onCommit={(n) => field.onChange(n ?? undefined)}
+                                        placeholder="e.g. 50.00"
+                                        allowDecimal
+                                    />
                                 </FormControl>
                                 <FormMessage />
                             </FormItem>

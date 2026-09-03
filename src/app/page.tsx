@@ -6,7 +6,7 @@ import { useFuturesPositions } from '@/hooks/useFuturesPositions';
 import { useClosedPositions } from '@/hooks/useClosedPositions';
 import { useKrakenYearlySummary } from '@/hooks/useKrakenYearlySummary';
 import type { Investment, InvestmentType, InvestmentStatus, SortKey, InvestmentFormValues, Transaction, YearFilter, TaxSettings } from '@/lib/types';
-import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, getSellYears, getTaxSettings, updateTaxSettings, getAllRateSchedules, addTransaction } from '@/lib/firestore';
+import { addInvestment, deleteInvestment, getInvestments, updateInvestment, getAllTransactionsForInvestments, deriveSellYears, getTaxSettings, updateTaxSettings, getAllRateSchedules, addTransaction } from '@/lib/firestore';
 import { refreshInvestmentPrices } from './actions';
 import DashboardHeader from '@/components/dashboard-header';
 import InvestmentCard from '@/components/investment-card';
@@ -119,44 +119,30 @@ function DashboardPageContent() {
 
   const fetchAllData = React.useCallback(async (userId: string) => {
     try {
-      const parseYear = (y: unknown): number | null => {
-        const n = typeof y === "number" ? y : parseInt(String(y), 10);
-        if (Number.isNaN(n)) return null;
-        if (n < 1900 || n > 3000) return null;
-        return n;
-      };
-
-      const [userInvestments, years, settings] = await Promise.all([
+      // Wave 1: the two reads that don't depend on anything else.
+      const [userInvestments, settings] = await Promise.all([
         getInvestments(userId),
-        getSellYears(userId),
         getTaxSettings(userId),
       ]);
 
-      const rateSchedules = await getAllRateSchedules(userId, userInvestments);
-
       setInvestments(userInvestments);
-      setRateSchedulesMap(rateSchedules);
-
-      const yearSet = new Set<number>();
-      for (const y of years ?? []) {
-        const n = parseYear(y);
-        if (n != null) yearSet.add(n);
-      }
-      
-      yearSet.add(new Date().getFullYear());
-      const unifiedYears = Array.from(yearSet).sort((a,b) => b - a);
-      setSellYears(unifiedYears);
-      
       if (settings) {
         setTaxSettings(settings);
       }
 
-      if (userInvestments.length > 0) {
-        const txMap = await getAllTransactionsForInvestments(userId, userInvestments);
-        setTransactionsMap(txMap);
-      } else {
-        setTransactionsMap({});
-      }
+      // Wave 2: everything that needs the investment list, all in parallel.
+      // Sell years are derived from the transactions we already fetched
+      // instead of re-reading every investment + transaction a second time.
+      const [txMap, rateSchedules] = await Promise.all([
+        userInvestments.length > 0
+          ? getAllTransactionsForInvestments(userId, userInvestments)
+          : Promise.resolve<Record<string, Transaction[]>>({}),
+        getAllRateSchedules(userId, userInvestments),
+      ]);
+
+      setTransactionsMap(txMap);
+      setRateSchedulesMap(rateSchedules);
+      setSellYears(deriveSellYears(txMap));
     } catch(error) {
        console.error("Error fetching page data:", error);
        toast({ title: "Error", description: "Could not fetch portfolio data.", variant: "destructive" });

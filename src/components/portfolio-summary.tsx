@@ -684,14 +684,23 @@ function PortfolioSummaryImpl({
 
                 {/* ── Asset-type tiles ── */}
                 <div className="grid grid-cols-2 gap-2.5 lg:gap-3">
-                    {typeTiles.map(tile => {
+                    {typeTiles.map((tile, index) => {
                         const TileIcon = TYPE_ICONS[tile.type] ?? Briefcase;
                         const tileValue = donutMode === 'market' ? tile.marketValue : tile.economicValue;
                         const share = totalPortfolioValue > 0 ? tileValue / totalPortfolioValue : 0;
                         const color = colorForType(tile.type);
                         const isFutureTile = tile.type === 'Future';
+                        // Odd tile count: the largest holding takes the full first row
+                        // so the grid never leaves a blank cell.
+                        const spansRow = index === 0 && typeTiles.length % 2 === 1;
                         return (
-                            <div key={tile.type} className="glass flex flex-col justify-between gap-2.5 p-3.5 lg:p-4">
+                            <div
+                                key={tile.type}
+                                className={cn(
+                                    'glass flex flex-col justify-between gap-2.5 p-3.5 lg:p-4',
+                                    spansRow && 'col-span-2',
+                                )}
+                            >
                                 <div className="flex items-center justify-between gap-2">
                                     <span className="flex min-w-0 items-center gap-2 text-[12px] font-bold text-muted-foreground lg:text-[13px]">
                                         <span style={{ color }} className="inline-flex shrink-0">
