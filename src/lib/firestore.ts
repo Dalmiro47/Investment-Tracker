@@ -168,29 +168,31 @@ export async function getAllRateSchedules(
     return map;
 }
 
+// Derive the distinct years with Sell transactions from an already-loaded
+// transactions map. Pure — no Firestore reads — so callers that already
+// hold the transactions don't pay for a second full fetch.
+export function deriveSellYears(txMap: Record<string, Transaction[]>): number[] {
+  const years = new Set<number>();
+  Object.values(txMap).flat().forEach(tx => {
+    if (tx.type === 'Sell') {
+      const y = new Date(tx.date).getFullYear();
+      if (!Number.isNaN(y)) years.add(y);
+    }
+  });
+
+  // Ensure current year is included if no sales have been made
+  years.add(new Date().getFullYear());
+
+  return Array.from(years).sort((a, b) => b - a);
+}
+
 export async function getSellYears(userId: string): Promise<number[]> {
   // NOTE: A collectionGroup query requires a specific rule and index.
   // To avoid this complexity, we fetch all investments for the user
   // and then derive the sell years from their transactions.
   const allInvestments = await getInvestments(userId);
   const txMap = await getAllTransactionsForInvestments(userId, allInvestments);
-
-  const years = new Set<number>();
-  Object.values(txMap).flat().forEach(tx => {
-    if (tx.type === 'Sell') {
-      years.add(new Date(tx.date).getFullYear());
-    }
-  });
-
-  const sortedYears = Array.from(years).sort((a, b) => b - a);
-
-  // Ensure current year is included if no sales have been made
-  const currentYear = new Date().getFullYear();
-  if (!sortedYears.includes(currentYear)) {
-    sortedYears.push(currentYear);
-  }
-
-  return sortedYears.sort((a,b) => b-a);
+  return deriveSellYears(txMap);
 }
 
 

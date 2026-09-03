@@ -10,7 +10,7 @@ import { z } from "zod";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { NumericInput } from "@/components/ui/numeric-input";
 import AppDatePicker from "./ui/app-date-picker";
 import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -41,8 +41,8 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, availableExchange
     resolver: zodResolver(fifoSellSchema),
     defaultValues: {
       date: new Date(),
-      quantity: 0,
-      pricePerUnit: 0,
+      quantity: undefined,
+      pricePerUnit: undefined,
     },
   });
 
@@ -111,10 +111,11 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, availableExchange
                         <FormItem>
                         <FormLabel>Quantity</FormLabel>
                         <FormControl>
-                            <Input 
-                                type="number" step="any" 
-                                {...field} 
-                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
+                            <NumericInput
+                                value={field.value as number | null | undefined}
+                                onCommit={(n) => field.onChange(n ?? undefined)}
+                                placeholder="e.g. 10"
+                                allowDecimal
                             />
                         </FormControl>
                         <FormMessage />
@@ -128,10 +129,11 @@ export function FifoSellDialog({ isOpen, onOpenChange, symbol, availableExchange
                         <FormItem>
                         <FormLabel>Price / Unit (€)</FormLabel>
                         <FormControl>
-                            <Input 
-                                type="number" step="any" 
-                                {...field} 
-                                onChange={e => field.onChange(parseFloat(e.target.value) || 0)} 
+                            <NumericInput
+                                value={field.value as number | null | undefined}
+                                onCommit={(n) => field.onChange(n ?? undefined)}
+                                placeholder="e.g. 150.50"
+                                allowDecimal
                             />
                         </FormControl>
                         <FormMessage />

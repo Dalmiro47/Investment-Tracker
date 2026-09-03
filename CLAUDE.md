@@ -25,6 +25,8 @@ npx shadcn-ui@latest add [component-name]  # Add Shadcn components
 
 **Definition of Done:** Always run `npm run typecheck && npm run lint` before finishing. No `any` types allowed — TypeScript must pass cleanly.
 
+**Known baseline (2026-09-03):** `npm run typecheck` reports 4 pre-existing errors on main (`investment-form.tsx`, `transaction-history-dialog.tsx` line ~100, `ui/calendar.tsx`, `ui/sidebar.tsx`). Compare your error list against that baseline; do not fix them as part of an unrelated task. `ui/calendar.tsx` is unused (the app uses `ui/app-date-picker.tsx`).
+
 ## Architecture
 
 **Framework:** Next.js 15 App Router. Default to Server Components; use `'use client'` only for hooks/event listeners.
