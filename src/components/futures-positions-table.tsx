@@ -113,21 +113,21 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
     });
   };
 
-  if (enabledHook && (loading || closedLoading)) return <div className="p-4 text-sm text-muted-foreground">Loading futures...</div>;
+  if (enabledHook && (loading || closedLoading)) return <div className="glass mt-2 p-4 text-[13px] text-muted-foreground">Loading futures...</div>;
 
   return (
-    <div className="mt-2 rounded-md border bg-card">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-border gap-3 flex-wrap bg-muted/30">
-        <div>
-          <span className="font-semibold block">Kraken Futures</span>
-          <span className="text-xs text-muted-foreground">Aggregated positions & funding fees (Tax §20)</span>
+    <div className="glass mt-2 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3.5">
+        <div className="min-w-0">
+          <div className="font-headline text-[16px] font-bold leading-tight tracking-tight">Kraken Futures</div>
+          <div className="mt-0.5 text-[12px] text-muted-foreground">Aggregated positions &amp; funding fees (Tax §20)</div>
         </div>
         <div className="flex items-center gap-2">
-          {errorMsg && <span className="text-xs text-destructive">{errorMsg}</span>}
-          <Button size="sm" variant="ghost" onClick={() => setIsInfoOpen(true)}>
+          {errorMsg && <span className="text-[12px] text-destructive">{errorMsg}</span>}
+          <Button size="sm" variant="ghost" className="h-8 w-8 p-0" onClick={() => setIsInfoOpen(true)}>
             <Info className="h-4 w-4" />
           </Button>
-          <Button size="sm" variant="outline" onClick={handleSync} disabled={isPending}>
+          <Button size="sm" variant="outline" className="h-8" onClick={handleSync} disabled={isPending}>
             <RefreshCw className={cn("mr-2 h-3.5 w-3.5", isPending && "animate-spin")} />
             {isPending ? "Syncing..." : "Sync Kraken"}
           </Button>
@@ -136,9 +136,9 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
 
       <div className="overflow-x-auto">
         {/* Increased min-width to accommodate new Funding column */}
-        <Table className="min-w-[1450px] text-sm">
-          <TableHeader>
-            <TableRow>
+        <Table className="min-w-[1450px]">
+          <TableHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
+            <TableRow className="hover:bg-transparent">
               <TableHead>Asset</TableHead>
               <TableHead className="text-right">Side</TableHead>
               <TableHead className="text-right">Open Date</TableHead>
@@ -156,14 +156,14 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
               <TableHead className="text-right">Fee</TableHead>
               <TableHead className="text-right">Funding</TableHead>
               <TableHead className="text-right">
-                Net P&L <span className="text-[10px] font-normal text-muted-foreground">(Tax Base)</span>
+                Net P&L <span className="text-[10px] font-medium normal-case tracking-normal text-muted-foreground">(Tax Base)</span>
               </TableHead>
               <TableHead className="text-right">Status</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
-              <TableRow><TableCell colSpan={15} className="h-24 text-center">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={15} className="h-24 text-center font-body text-muted-foreground">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
             ) : rows.map((pos, index) => (
               <FuturesRowWithTaxData key={`${pos.id}-${index}`} position={pos} userId={currentUserId} />
             ))}
@@ -172,10 +172,11 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
       </div>
 
       {enabledHook && hasMoreClosed && statusFilter !== 'OPEN' && (
-        <div className="flex justify-center px-4 py-3 border-t border-border bg-muted/20">
+        <div className="flex justify-center border-t border-border px-4 py-3">
           <Button
             size="sm"
-            variant="outline"
+            variant="ghost"
+            className="h-8"
             onClick={loadMoreClosed}
             disabled={closedLoading}
           >
@@ -200,8 +201,8 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
               <h4 className="font-semibold">Side</h4>
               <p className="text-muted-foreground">The direction of your position:</p>
               <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
-                <li><span className="font-semibold text-emerald-500">LONG:</span> You profit when the price goes up. Formula: (Current Price - Entry Price) × Size</li>
-                <li><span className="font-semibold text-red-500">SHORT:</span> You profit when the price goes down. Formula: (Entry Price - Current Price) × Size</li>
+                <li><span className="font-semibold text-success">LONG:</span> You profit when the price goes up. Formula: (Current Price - Entry Price) × Size</li>
+                <li><span className="font-semibold text-destructive">SHORT:</span> You profit when the price goes down. Formula: (Entry Price - Current Price) × Size</li>
               </ul>
             </div>
             <div>
@@ -236,8 +237,8 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
               <h4 className="font-semibold">Funding (Perpetuals)</h4>
               <p className="text-muted-foreground">
                  Funding payments are the cost of holding a position. 
-                 <br/>• <span className="text-green-600 font-semibold">Positive</span> = Income (You received funding).
-                 <br/>• <span className="text-red-600 font-semibold">Negative</span> = Cost (You paid funding).
+                 <br/>• <span className="text-success font-semibold">Positive</span> = Income (You received funding).
+                 <br/>• <span className="text-destructive font-semibold">Negative</span> = Cost (You paid funding).
                  <br/>These are summed up and included in the Net P&L calculation.
               </p>
             </div>
@@ -407,7 +408,7 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
 
   return (
     <TableRow className={cn(!isOpenPosition && "opacity-75")}>
-      <TableCell className="font-medium">
+      <TableCell className="font-body font-semibold">
         <div className="flex items-center gap-2">
           <span>{position.asset?.toUpperCase() || position.ticker || '—'}</span>
           {/* Show grouping badge when multiple trades are aggregated */}
@@ -415,10 +416,7 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Badge 
-                    variant="outline" 
-                    className="text-[10px] bg-blue-500/10 text-blue-600 border-blue-500/30"
-                  >
+                  <Badge variant="info" className="h-[18px] px-1.5 text-[10px]">
                     {(position as any).tradeCount}x
                   </Badge>
                 </TooltipTrigger>
@@ -439,7 +437,7 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
       
       <TableCell className="text-right">
         {position.side ? (
-          <Badge variant="outline" className={position.side === 'LONG' ? "text-emerald-500 border-emerald-500/30" : "text-red-500 border-red-500/30"}>
+          <Badge variant={position.side === 'LONG' ? 'success' : 'destructive'} className="font-body">
             {position.side}
           </Badge>
         ) : '—'}
@@ -483,17 +481,17 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
       <TableCell className="text-right text-muted-foreground">{notionalValueEur > 0 ? formatEuro(notionalValueEur) : '—'}</TableCell>
 
       {/* REALIZED P&L: Hide if Open */}
-      <TableCell className={cn("text-right font-mono", displayRealized < 0 ? "text-red-500" : "text-emerald-500")}>
+      <TableCell className={cn("text-right", isOpenPosition ? "text-muted-foreground" : displayRealized < 0 ? "loss" : "gain")}>
         {isOpenPosition ? "—" : formatEuro(displayRealized)}
       </TableCell>
 
       {/* UNREALIZED P&L: Show if Open (Existing logic is good) */}
-      <TableCell className={cn("text-right font-mono", !isOpenPosition ? "text-muted-foreground" : (unrealizedPnL ?? 0) < 0 ? "text-red-500" : "text-emerald-500")}>
+      <TableCell className={cn("text-right", !isOpenPosition ? "text-muted-foreground" : (unrealizedPnL ?? 0) < 0 ? "loss" : "gain")}>
         {!isOpenPosition ? "—" : unrealizedPnL === null ? "—" : formatEuro(unrealizedPnL)}
       </TableCell>
 
       {/* FEE: Hide if Open */}
-      <TableCell className="text-right text-muted-foreground font-mono">
+      <TableCell className="text-right text-muted-foreground">
         {isOpenPosition ? "—" : displayFee > 0 ? (
           <TooltipProvider>
             <Tooltip>
@@ -509,7 +507,7 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
       </TableCell>
 
       {/* FUNDING: Show for BOTH (Open & Closed) */}
-      <TableCell className={cn("text-right font-mono font-semibold", displayFunding > 0 ? "text-emerald-500" : displayFunding < 0 ? "text-red-500" : "text-muted-foreground")}>
+      <TableCell className={cn("text-right font-semibold", displayFunding > 0 ? "gain" : displayFunding < 0 ? "loss" : "text-muted-foreground")}>
         {/* For OPEN positions: always show if fundingEur exists in DB, even if small */}
         {/* For CLOSED positions: show if non-zero */}
         {isOpenPosition 
@@ -519,7 +517,7 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
       </TableCell>
 
       {/* NET P&L: Hide if Open */}
-      <TableCell className={cn("text-right font-mono font-bold", netRealized < 0 ? "text-red-500" : "text-emerald-500")}>
+      <TableCell className={cn("text-right font-bold", isOpenPosition ? "text-muted-foreground" : netRealized < 0 ? "loss" : "gain")}>
         {isOpenPosition ? "—" : (
           <TooltipProvider>
             <Tooltip>
@@ -530,8 +528,8 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
                 <div className="space-y-1 text-xs">
                   <div>Gross P&L: <span className="font-semibold">{formatEuro(displayRealized)}</span></div>
                   <div>Fees: <span className="font-semibold">−{formatEuro(displayFee)}</span></div>
-                  <div>Funding: <span className={cn("font-semibold", displayFunding >= 0 ? "text-emerald-400" : "text-red-400")}>{displayFunding >= 0 ? '+' : ''}{formatEuro(displayFunding)}</span></div>
-                  <div className="border-t border-slate-400 pt-1 mt-1">Net Total: <span className="font-semibold">{formatEuro(netRealized)}</span></div>
+                  <div>Funding: <span className={cn("font-semibold", displayFunding >= 0 ? "text-success" : "text-destructive")}>{displayFunding >= 0 ? '+' : ''}{formatEuro(displayFunding)}</span></div>
+                  <div className="mt-1 border-t border-border pt-1">Net Total: <span className="font-semibold">{formatEuro(netRealized)}</span></div>
                 </div>
               </TooltipContent>
             </Tooltip>
@@ -540,12 +538,15 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
       </TableCell>
 
       <TableCell className="text-right">
-        <Badge 
-          variant={position.status === 'OPEN' ? 'default' : 'secondary'}
-          className={cn(
-            "text-[10px] uppercase",
-            position.status === 'OPEN' && "bg-emerald-500/10 text-emerald-600 border-emerald-500/30"
-          )}
+        <Badge
+          variant={
+            position.status === 'OPEN'
+              ? 'info'
+              : position.status === 'LIQUIDATED'
+                ? 'destructive'
+                : 'secondary'
+          }
+          className="font-body text-[10px]"
         >
           {position.status}
         </Badge>

@@ -13,6 +13,7 @@ import type {
 import { aggregateBySymbol, calculatePositionMetrics } from '@/lib/portfolio';
 import { format, parseISO } from 'date-fns';
 import { History, PlusCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import type { SavingsRateChange } from '@/lib/types-savings';
 
 const fmtEur = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' });
@@ -22,7 +23,7 @@ const fmtRate = (v: number | null | undefined) =>
   v == null ? '—' : `${v.toFixed(2)} %`;
 
 const plClass = (v: number) =>
-  v > 1e-6 ? 'text-emerald-500' : v < -1e-6 ? 'text-red-500' : 'text-foreground';
+  v > 1e-6 ? 'gain' : v < -1e-6 ? 'loss' : 'text-foreground';
 
 const num = (v: unknown): number | null =>
   typeof v === 'number' && Number.isFinite(v) ? v : null;
@@ -41,6 +42,107 @@ const getCurrentRate = (rates?: SavingsRateChange[]) => {
   const eligible = rates.filter(r => r.from <= t).sort((a, b) => a.from.localeCompare(b.from));
   return eligible.length ? eligible[eligible.length - 1].annualRatePct : rates[0].annualRatePct;
 };
+
+/* ── Presentation helpers (styling only) ───────────────────────────── */
+
+const THEAD_CLASS =
+  'sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-[0_1px_0_0_hsl(var(--border))]';
+const TH_ROW_CLASS =
+  'text-left [&>th]:whitespace-nowrap [&>th]:px-3 [&>th]:py-2.5 [&>th]:text-[11px] [&>th]:font-bold [&>th]:uppercase [&>th]:tracking-[.08em] [&>th]:text-muted-foreground';
+const TBODY_CLASS =
+  'divide-y divide-border [&>tr>td]:whitespace-nowrap [&>tr>td]:px-3 [&>tr>td]:py-3 [&>tr>td]:font-mono [&>tr>td]:text-[13px] [&>tr>td]:tabular-nums';
+const TR_CLASS = 'transition-colors hover:bg-white/[.02]';
+const TFOOT_CLASS =
+  'sticky bottom-0 z-10 border-t border-input bg-background/95 font-bold backdrop-blur supports-[backdrop-filter]:bg-background/70';
+const TFOOT_ROW_CLASS =
+  '[&>td]:whitespace-nowrap [&>td]:bg-white/[.02] [&>td]:px-3 [&>td]:py-3 [&>td]:font-mono [&>td]:text-[13px] [&>td]:tabular-nums';
+
+/** Glass shell with a header row (title + sub) wrapping a scrollable table. */
+function TableShell({
+  title,
+  sub,
+  children,
+}: {
+  title: string;
+  sub: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="glass mt-2 overflow-hidden">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3.5">
+        <div className="min-w-0">
+          <div className="font-headline text-[16px] font-bold leading-tight tracking-tight">
+            {title}
+          </div>
+          <div className="mt-0.5 text-[12px] text-muted-foreground">{sub}</div>
+        </div>
+      </div>
+      <div className="relative max-h-[70vh] overflow-auto scroll-area">{children}</div>
+    </div>
+  );
+}
+
+/** Name + mono ticker, the shared "asset" cell. */
+function AssetCell({ name, ticker }: { name: string; ticker?: string | null }) {
+  return (
+    <div className="flex min-w-0 flex-col font-body font-semibold">
+      <span className="truncate">{name}</span>
+      {ticker && (
+        <span className="truncate font-mono text-[11px] font-medium text-muted-foreground">
+          {ticker}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status?: string | null }) {
+  if (!status) return <span className="text-muted-foreground">—</span>;
+  return (
+    <Badge variant={status === 'Active' ? 'success' : 'secondary'} className="font-body">
+      {status}
+    </Badge>
+  );
+}
+
+function RowActions({
+  onViewHistory,
+  onAddTransaction,
+}: {
+  onViewHistory?: () => void;
+  onAddTransaction?: () => void;
+}) {
+  return (
+    <div className="flex justify-end gap-1">
+      <button
+        title="View History"
+        className="grid h-8 w-8 place-items-center rounded-[8px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        onClick={onViewHistory}
+      >
+        <History className="h-4 w-4" />
+      </button>
+      <button
+        title="Add Transaction"
+        className="grid h-8 w-8 place-items-center rounded-[8px] text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        onClick={onAddTransaction}
+      >
+        <PlusCircle className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
+
+/** Compact stat tile used inside the mobile cards. */
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5 rounded-[10px] border border-border bg-black/[.28] px-3 py-2">
+      <span className="text-[11px] font-semibold uppercase tracking-[.04em] text-muted-foreground">
+        {label}
+      </span>
+      <span className="truncate font-mono text-[13px] font-semibold tabular-nums">{value}</span>
+    </div>
+  );
+}
 
 type Props = {
   investments: Investment[];
@@ -101,7 +203,7 @@ export default function InvestmentListView({
       const marketValue = num(r.marketValue);
       const performancePct = num(r.performancePct);
       const economicValue = num(r.economicValue ?? (r.marketValue + r.realizedPL));
-      
+
       const isFullySold = r.availableQty < 1e-6;
       const displayBasis = isFullySold ? r.soldBasis : r.costBasis;
 
@@ -137,7 +239,7 @@ export default function InvestmentListView({
 
       const isIA = inv.type === 'Interest Account';
       const isSold = inv.status === 'Sold';
-      
+
       const costBasis = isIA
           ? m.purchaseValue
           : isSold
@@ -213,7 +315,7 @@ export default function InvestmentListView({
 
   const totals = useMemo(() => {
     if (rows.length === 0) return null;
-    
+
     const acc = rows.reduce((a, r) => {
         a.costBasis += r.costBasis ?? 0;
         a.marketValue += r.marketValue ?? 0;
@@ -233,10 +335,19 @@ export default function InvestmentListView({
     };
   }, [rows]);
 
+  const rowLabel = `${rows.length} ${rows.length === 1 ? 'row' : 'rows'}`;
+  const modeLabel = mode === 'flat' ? 'Flat' : 'Aggregated';
+  const statusLabel = statusFilter === 'All' ? 'All statuses' : statusFilter;
+
   if (rows.length === 0) {
     return (
-      <div className="text-center text-muted-foreground py-12">
-        <div>No matching assets for this view.</div>
+      <div className="glass mt-2 p-4">
+        <div className="rounded-xl border border-dashed border-white/[.12] px-6 py-12 text-center">
+          <div className="font-headline text-[17px] font-bold">No matching assets</div>
+          <div className="mt-1 text-[13px] text-muted-foreground">
+            Nothing matches this view. Try a different filter.
+          </div>
+        </div>
       </div>
     );
   }
@@ -245,59 +356,59 @@ export default function InvestmentListView({
   if (IA_MODE) {
     const showPercentPortfolioCol = mode === 'aggregated';
     return (
-      <div className="mt-2 rounded-md border bg-card">
-        <div className="relative max-h-[70vh] overflow-auto scroll-area">
-          <table className="w-full min-w-[1000px] text-sm">
-            <thead className="sticky top-0 z-10 bg-background/95 text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-[0_1px_0_0_var(--border)]">
-              <tr className="[&>th]:px-4 [&>th]:py-3 text-left">
-                <th>Account</th>
-                <th className="text-right">Current Rate</th>
-                <th className="text-right">Net Deposits</th>
-                <th className="text-right">Balance</th>
-                <th className="text-right">Accrued Interest</th>
-                <th className="text-right">Performance</th>
-                {showPercentPortfolioCol && <th className="text-right">% of Portfolio</th>}
-                {mode === 'flat' && <th className="text-right">Actions</th>}
+      <TableShell title="Interest accounts" sub={`${rowLabel} · ${modeLabel} · ${statusLabel}`}>
+        <table className="w-full min-w-[1000px] border-collapse">
+          <thead className={THEAD_CLASS}>
+            <tr className={TH_ROW_CLASS}>
+              <th>Account</th>
+              <th className="text-right">Current Rate</th>
+              <th className="text-right">Net Deposits</th>
+              <th className="text-right">Balance</th>
+              <th className="text-right">Accrued Interest</th>
+              <th className="text-right">Performance</th>
+              {showPercentPortfolioCol && <th className="text-right">% of Portfolio</th>}
+              {mode === 'flat' && <th className="text-right">Actions</th>}
+            </tr>
+          </thead>
+          <tbody className={TBODY_CLASS}>
+            {rows.map((r) => (
+              <tr key={r.key} className={TR_CLASS}>
+                <td>
+                  <AssetCell name={r.name} ticker={r.ticker} />
+                </td>
+                <td className="text-right">{fmtRate(r.currentRatePct)}</td>
+                <td className="text-right">{fmtEur.format(r.costBasis)}</td>
+                <td className="text-right font-semibold">{fmtEur.format(r.marketValue)}</td>
+                <td className={`text-right ${plClass(r.unrealizedPL)}`}>{fmtEur.format(r.unrealizedPL)}</td>
+                <td className={`text-right ${plClass(r.performancePct)}`}>{fmtPct(r.performancePct)}</td>
+                {showPercentPortfolioCol && <td className="text-right">{fmtPct(r.percentPortfolio ?? 0)}</td>}
+                {mode === 'flat' && (
+                  <td className="text-right">
+                    <RowActions
+                      onViewHistory={() => onViewHistory?.(r.invId)}
+                      onAddTransaction={() => onAddTransaction?.(r.invId)}
+                    />
+                  </td>
+                )}
               </tr>
-            </thead>
-            <tbody className="divide-y divide-border [&>tr>td]:px-2 [&>tr>td]:py-3">
-              {rows.map((r) => (
-                <tr key={r.key}>
-                  <td className="font-medium">{r.name}</td>
-                  <td className="text-right">{fmtRate(r.currentRatePct)}</td>
-                  <td className="text-right">{fmtEur.format(r.costBasis)}</td>
-                  <td className="text-right">{fmtEur.format(r.marketValue)}</td>
-                  <td className={`text-right ${plClass(r.unrealizedPL)}`}>{fmtEur.format(r.unrealizedPL)}</td>
-                  <td className={`text-right ${plClass(r.performancePct)}`}>{fmtPct(r.performancePct)}</td>
-                  {showPercentPortfolioCol && <td className="text-right">{fmtPct(r.percentPortfolio ?? 0)}</td>}
-                  {mode === 'flat' && (
-                    <td className="text-right">
-                      <div className="flex justify-end gap-2">
-                        <button title="View History" className="px-2 py-1 rounded hover:bg-muted" onClick={() => onViewHistory?.(r.invId)}><History className="h-4 w-4" /></button>
-                        <button title="Add Transaction" className="px-2 py-1 rounded hover:bg-muted" onClick={() => onAddTransaction?.(r.invId)}><PlusCircle className="h-4 w-4" /></button>
-                      </div>
-                    </td>
-                  )}
-                </tr>
-              ))}
-            </tbody>
-            {totals && (
-              <tfoot className="sticky bottom-0 z-10 font-bold bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-[0_-1px_0_0_var(--border)]">
-                <tr className="[&>td]:px-2 [&>td]:py-3">
-                  <td>Total</td>
-                  <td></td>
-                  <td className="text-right">{fmtEur.format(totals.costBasis)}</td>
-                  <td className="text-right">{fmtEur.format(totals.marketValue)}</td>
-                  <td className={`text-right ${plClass(totals.unrealizedPL)}`}>{fmtEur.format(totals.unrealizedPL)}</td>
-                  <td className={`text-right ${plClass(totals.performancePct)}`}>{fmtPct(totals.performancePct)}</td>
-                  {showPercentPortfolioCol && <td className="text-right">{fmtPct(totals.percentPortfolio)}</td>}
-                  {mode === 'flat' && <td></td>}
-                </tr>
-              </tfoot>
-            )}
-          </table>
-        </div>
-      </div>
+            ))}
+          </tbody>
+          {totals && (
+            <tfoot className={TFOOT_CLASS}>
+              <tr className={TFOOT_ROW_CLASS}>
+                <td className="font-body">Total</td>
+                <td></td>
+                <td className="text-right">{fmtEur.format(totals.costBasis)}</td>
+                <td className="text-right">{fmtEur.format(totals.marketValue)}</td>
+                <td className={`text-right ${plClass(totals.unrealizedPL)}`}>{fmtEur.format(totals.unrealizedPL)}</td>
+                <td className={`text-right ${plClass(totals.performancePct)}`}>{fmtPct(totals.performancePct)}</td>
+                {showPercentPortfolioCol && <td className="text-right">{fmtPct(totals.percentPortfolio)}</td>}
+                {mode === 'flat' && <td></td>}
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </TableShell>
     );
   }
 
@@ -328,44 +439,62 @@ export default function InvestmentListView({
           return (
             <div
               key={r.key}
-              className="p-4 rounded-lg border bg-card text-card-foreground shadow-sm flex flex-col gap-3 cursor-pointer hover:bg-muted/50 transition-colors"
+              className="glass flex cursor-pointer flex-col gap-3 p-3.5 transition-all hover:border-white/[.12]"
               onClick={() => {
                 if (isFlat && onViewHistory) onViewHistory(r.invId);
               }}
             >
               {/* Header Row: Name/Ticker and Total Value */}
-              <div className="flex justify-between items-start">
-                <div className="min-w-0 flex-1 pr-4">
-                  <h4 className="font-semibold text-base truncate">{r.name}</h4>
-                  {r.ticker && <span className="text-xs text-muted-foreground">{r.ticker}</span>}
-                  {!r.ticker && r.type && <span className="text-xs text-muted-foreground">{r.type}</span>}
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 flex-1">
+                  <h4 className="truncate font-headline text-[16px] font-bold leading-tight tracking-tight">
+                    {r.name}
+                  </h4>
+                  <div className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                    {r.ticker ? (
+                      <span className="font-mono">{r.ticker}</span>
+                    ) : (
+                      r.type
+                    )}
+                  </div>
                 </div>
-                <div className="text-right flex-shrink-0">
-                  <div className="font-medium text-base">{fmtEur.format(r.marketValue)}</div>
+                <div className="shrink-0 text-right">
+                  <div className="font-mono text-[15px] font-semibold tabular-nums">
+                    {fmtEur.format(r.marketValue)}
+                  </div>
                   {!isIARow && (
-                    <span className="text-xs text-muted-foreground">Cost: {fmtEur.format(r.costBasis)}</span>
+                    <div className="text-[11px] text-muted-foreground">
+                      Cost <span className="font-mono tabular-nums">{fmtEur.format(r.costBasis)}</span>
+                    </div>
                   )}
                 </div>
               </div>
 
-              {/* Metrics Row: PnL, Quantity, Price */}
-              <div className="flex justify-between items-end text-sm pt-2 border-t border-border">
-                <div className="flex flex-col gap-0.5">
-                  {!isIARow && (
-                    <>
-                      <span className="text-xs text-muted-foreground">Qty: {fmtQty(r.availableQty)}</span>
-                      {r.currentPrice != null && <span className="text-xs text-muted-foreground">Price: {fmtEur.format(r.currentPrice)}</span>}
-                    </>
-                  )}
-                  {isIARow && r.currentRatePct != null && (
-                    <span className="text-xs text-muted-foreground">Rate: {fmtRate(r.currentRatePct)}</span>
-                  )}
+              {/* Metrics tiles */}
+              {isIARow ? (
+                r.currentRatePct != null && (
+                  <div className="grid grid-cols-1 gap-2">
+                    <MiniStat label="Rate" value={fmtRate(r.currentRatePct)} />
+                  </div>
+                )
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  <MiniStat label="Qty" value={fmtQty(r.availableQty)} />
+                  <MiniStat
+                    label="Price"
+                    value={r.currentPrice != null ? fmtEur.format(r.currentPrice) : '—'}
+                  />
                 </div>
-                <div className="text-right flex flex-col items-end gap-0.5">
-                  <span className={`font-medium text-sm ${plClass(r.totalPL)}`}>
+              )}
+
+              {/* Footer: P/L + performance */}
+              <div className="flex items-center justify-between gap-3 border-t border-border pt-2.5">
+                <span className="text-[12px] text-muted-foreground">Total P/L</span>
+                <div className="flex items-center gap-2.5">
+                  <span className={`font-mono text-[15px] font-bold tabular-nums ${plClass(r.totalPL)}`}>
                     {fmtEur.format(r.totalPL)}
                   </span>
-                  <span className={`text-xs ${plClass(r.performancePct)}`}>
+                  <span className={`font-mono text-[12px] font-bold tabular-nums ${plClass(r.performancePct)}`}>
                     {fmtPct(r.performancePct)}
                   </span>
                 </div>
@@ -376,18 +505,22 @@ export default function InvestmentListView({
 
         {/* Mobile Totals Card */}
         {totals && (
-          <div className="p-4 rounded-lg border-2 border-primary/20 bg-card text-card-foreground shadow-sm flex flex-col gap-2">
-            <div className="flex justify-between items-center">
-              <h4 className="font-bold text-base">Total</h4>
-              <div className="font-bold text-base">{fmtEur.format(totals.marketValue)}</div>
+          <div className="glass-strong flex flex-col gap-2 p-3.5">
+            <div className="flex items-center justify-between">
+              <span className="eyebrow">Total</span>
+              <div className="font-mono text-[17px] font-bold tabular-nums">
+                {fmtEur.format(totals.marketValue)}
+              </div>
             </div>
-            <div className="flex justify-between items-end text-sm pt-2 border-t border-border">
-              <span className="text-xs text-muted-foreground">Cost Basis: {fmtEur.format(totals.costBasis)}</span>
-              <div className="text-right flex flex-col items-end gap-0.5">
-                <span className={`font-medium text-sm ${plClass(totals.totalPL)}`}>
+            <div className="flex items-end justify-between gap-3 border-t border-border pt-2.5">
+              <span className="text-[12px] text-muted-foreground">
+                Cost basis <span className="font-mono tabular-nums">{fmtEur.format(totals.costBasis)}</span>
+              </span>
+              <div className="flex flex-col items-end gap-0.5">
+                <span className={`font-mono text-[15px] font-bold tabular-nums ${plClass(totals.totalPL)}`}>
                   {fmtEur.format(totals.totalPL)}
                 </span>
-                <span className={`text-xs ${plClass(totals.performancePct)}`}>
+                <span className={`font-mono text-[12px] font-bold tabular-nums ${plClass(totals.performancePct)}`}>
                   {fmtPct(totals.performancePct)}
                 </span>
               </div>
@@ -397,16 +530,19 @@ export default function InvestmentListView({
       </div>
 
       {/* ── DESKTOP VIEW: Standard Table ── */}
-      <div className="hidden md:block mt-2 rounded-md border bg-card">
-        <div className="relative max-h-[70vh] overflow-auto scroll-area">
-          <table className="w-full min-w-[1000px] text-sm">
-            <thead className="sticky top-0 z-10 bg-background/95 text-muted-foreground backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-[0_1px_0_0_var(--border)]">
-              <tr className="[&>th]:px-4 [&>th]:py-3 [&>th]:whitespace-nowrap text-left">
+      <div className="hidden md:block">
+        <TableShell
+          title={showTypeColumn ? 'All positions' : 'Positions'}
+          sub={`${rowLabel} · ${modeLabel} · ${statusLabel}`}
+        >
+          <table className="w-full min-w-[1000px] border-collapse">
+            <thead className={THEAD_CLASS}>
+              <tr className={TH_ROW_CLASS}>
                 {showTypeColumn && <th>Type</th>}
                 <th>Asset</th>
               {showPurchaseDateCol && <th>Purchase Date</th>}
               {showStatusCol && <th>Status</th>}
-              
+
               {isFlat ? (
                 <>
                   {showBoughtCol && <th className="text-right">Bought</th>}
@@ -436,24 +572,19 @@ export default function InvestmentListView({
             {isFlat && <th className="text-right">Actions</th>}
           </tr>
           </thead>
-          <tbody className="divide-y divide-border [&>tr>td]:px-2 [&>tr>td]:py-3">
+          <tbody className={TBODY_CLASS}>
           {rows.map((r) => {
             const isSoldRow = r.status === 'Sold';
             const isIARow = r.type === 'Interest Account';
             return (
-              <tr key={r.key}>
-                {showTypeColumn && <td className="font-medium">{r.type}</td>}
-                <td className="font-medium">
-                  <div className="flex items-center gap-2">
-                    <div>
-                      <div>{r.name}</div>
-                      {r.ticker && <div className="text-xs text-muted-foreground">{r.ticker}</div>}
-                    </div>
-                  </div>
+              <tr key={r.key} className={TR_CLASS}>
+                {showTypeColumn && <td className="font-body font-semibold text-muted-foreground">{r.type}</td>}
+                <td>
+                  <AssetCell name={r.name} ticker={r.ticker} />
                 </td>
 
                 {showPurchaseDateCol && <td className="text-muted-foreground">{r.purchaseDate ? format(parseISO(r.purchaseDate), 'dd MMM yyyy') : '—'}</td>}
-                {showStatusCol && <td className="text-muted-foreground">{r.status}</td>}
+                {showStatusCol && <td><StatusBadge status={r.status} /></td>}
 
                 { isFlat ? (
                     <>
@@ -475,20 +606,20 @@ export default function InvestmentListView({
                     </>
                 )}
 
-                <td className="text-right" title={isIARow ? "Balance" : undefined}>{fmtEur.format(r.marketValue)}</td>
+                <td className="text-right font-semibold" title={isIARow ? "Balance" : undefined}>{fmtEur.format(r.marketValue)}</td>
 
                 {showRealizedPLCol && <td className={`text-right ${plClass(r.realizedPL)}`}>{fmtEur.format(r.realizedPL)}</td>}
                 {showUnrealizedPLCol && <td className={`text-right ${plClass(r.unrealizedPL)}`} title={isIARow ? "Accrued Interest" : undefined}>{fmtEur.format(r.unrealizedPL)}</td>}
-                
-                <td className={`text-right ${plClass(r.totalPL)}`}>{fmtEur.format(r.totalPL)}</td>
+
+                <td className={`text-right font-bold ${plClass(r.totalPL)}`}>{fmtEur.format(r.totalPL)}</td>
                 <td className={`text-right ${plClass(r.performancePct)}`}>{fmtPct(r.performancePct)}</td>
                 {showPercentPortfolioCol && <td className="text-right">{fmtPct(r.percentPortfolio ?? 0)}</td>}
 
                 {isFlat && <td className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <button title="View History" className="px-2 py-1 rounded hover:bg-muted" onClick={() => onViewHistory?.(r.invId)}><History className="h-4 w-4" /></button>
-                      <button title="Add Transaction" className="px-2 py-1 rounded hover:bg-muted" onClick={() => onAddTransaction?.(r.invId)}><PlusCircle className="h-4 w-4" /></button>
-                    </div>
+                    <RowActions
+                      onViewHistory={() => onViewHistory?.(r.invId)}
+                      onAddTransaction={() => onAddTransaction?.(r.invId)}
+                    />
                   </td>
                 }
               </tr>
@@ -496,13 +627,13 @@ export default function InvestmentListView({
           })}
           </tbody>
           {totals && (
-            <tfoot className="sticky bottom-0 z-10 font-bold bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70 shadow-[0_-1px_0_0_var(--border)]">
-              <tr className="[&>td]:px-4 [&>td]:py-3 [&>td]:whitespace-nowrap">
-                <td>Total</td>
+            <tfoot className={TFOOT_CLASS}>
+              <tr className={TFOOT_ROW_CLASS}>
+                <td className="font-body">Total</td>
                 {showTypeColumn && <td></td>}
                 {showPurchaseDateCol && <td></td>}
                 {showStatusCol && <td></td>}
-                
+
                 {isFlat ? (
                     <>
                         {showBoughtCol && <td className="text-right">{fmtQty(totals.boughtQty)}</td>}
@@ -534,7 +665,7 @@ export default function InvestmentListView({
             </tfoot>
           )}
           </table>
-        </div>
+        </TableShell>
       </div>
     </div>
   );

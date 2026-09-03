@@ -20,6 +20,8 @@ const dbg = (...a: any[]) => {
 };
 
 const FOCUS_DEBOUNCE_MS = 15_000;
+// After a failed refresh (quota, network), don't retry on every remount/focus.
+const FAIL_BACKOFF_MS = 10 * 60 * 1000;
 
 export function useAutoRefreshPrices({
   userId,
@@ -46,19 +48,23 @@ export function useAutoRefreshPrices({
       if (!investments || investments.length === 0) { dbg('skip: no investments yet'); return; }
 
       const now = Date.now();
-      if (reason === 'focus' && now - lastAttemptRef.current < FOCUS_DEBOUNCE_MS) {
-        dbg('skip: focus debounce');
+      // Debounce every reason: effect re-runs (investments reload, HMR, StrictMode) count as 'mount' too.
+      if (now - lastAttemptRef.current < FOCUS_DEBOUNCE_MS) {
+        dbg(`skip: debounce (${reason})`);
         return;
       }
       lastAttemptRef.current = now;
-      
+
       const LAST_KEY = `prices:lastRefreshAt:${userId}`;
       const RUN_KEY  = `prices:refresh:inflight:${userId}`;
+      const FAIL_KEY = `prices:lastFailAt:${userId}`;
 
       const last = Number(localStorage.getItem(LAST_KEY) || 0);
       const shouldLocalRefresh = now - last > localIntervalMs;
 
       if (!shouldLocalRefresh) { dbg(`skip: local throttle (${reason})`, { last, localIntervalMs }); return; }
+      const lastFail = Number(localStorage.getItem(FAIL_KEY) || 0);
+      if (now - lastFail < FAIL_BACKOFF_MS) { dbg('skip: failure backoff', { lastFail }); return; }
       if (localStorage.getItem(RUN_KEY)) { dbg('skip: inflight lock present'); return; }
 
       try {
@@ -101,12 +107,14 @@ export function useAutoRefreshPrices({
           onComplete?.();
         } else {
           dbg('error result', res?.message);
+          localStorage.setItem(FAIL_KEY, String(Date.now()));
           if (!toastSilent) {
             toast({ title: 'Price refresh failed', description: res.message, variant: 'destructive' });
           }
         }
       } catch (err: any) {
         dbg('exception', err?.message);
+        localStorage.setItem(`prices:lastFailAt:${userId}`, String(Date.now()));
         if (!toastSilent && !cancelled) {
           toast({ title: 'Price refresh failed', description: err?.message || 'Please try again later.', variant: 'destructive' });
         }

@@ -1,9 +1,10 @@
 "use client";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
-import { SlidersHorizontal } from "lucide-react";
+import { Check, LayoutGrid, List, SlidersHorizontal } from "lucide-react";
 import React from "react";
+import { cn } from "@/lib/utils";
 
 import {
   type MobileAppliedFilters,
@@ -13,17 +14,59 @@ import {
   ViewModeEnum,
   ListModeEnum,
   FuturesStatusEnum,
+  MOBILE_DEFAULTS,
   filterReducer,
   initialFilterState,
   commitDraftFilters,
+  normalizeAppliedFilters,
 } from "@/lib/mobile";
 import { useToast } from "@/hooks/use-toast";
+
+type TypeFilterValue = (typeof TypeFilterEnum)[number];
+type StatusFilterValue = (typeof StatusFilterEnum)[number];
+type SortKeyValue = (typeof SortKeyEnum)[number];
+type ViewModeValue = (typeof ViewModeEnum)[number];
+type ListModeValue = (typeof ListModeEnum)[number];
+type FuturesStatusValue = (typeof FuturesStatusEnum)[number];
+
+const TYPE_LABELS: Record<TypeFilterValue, string> = {
+  All: "All",
+  Stock: "Stocks",
+  Crypto: "Crypto",
+  ETF: "ETFs",
+  "Interest Account": "Interest",
+  Bond: "Bonds",
+  "Real Estate": "Real Estate",
+  Futures: "Futures",
+};
+
+const SORT_LABELS: Record<SortKeyValue, string> = {
+  purchaseDate: "Purchase date",
+  performance: "Performance",
+  totalAmount: "Total amount",
+};
+
+const SORT_SHORT: Record<SortKeyValue, string> = {
+  purchaseDate: "date",
+  performance: "performance",
+  totalAmount: "amount",
+};
+
+const FILTER_KEYS = Object.keys(MOBILE_DEFAULTS) as (keyof MobileAppliedFilters)[];
+
+function countDiff(a: MobileAppliedFilters, b: MobileAppliedFilters): number {
+  return FILTER_KEYS.filter((key) => a[key] !== b[key]).length;
+}
 
 interface MobileFiltersProps {
   userId: string;
   initialFilters: MobileAppliedFilters;
   /** Called when the user applies the draft — parent syncs its own state. */
   onApply: (applied: MobileAppliedFilters) => void;
+  /** Per-type position counts for the chip rail (optional). */
+  typeCounts?: Partial<Record<TypeFilterValue, number>>;
+  /** Number of rows currently rendered, shown in the status line. */
+  resultCount?: number;
   children?: React.ReactNode;
 }
 
@@ -31,6 +74,8 @@ export function MobileFilters({
   userId,
   initialFilters,
   onApply,
+  typeCounts,
+  resultCount,
   children,
 }: MobileFiltersProps) {
   const { toast } = useToast();
@@ -58,225 +103,301 @@ export function MobileFilters({
     dispatch({ type: "RESET_ALL_TO_DEFAULTS" });
   };
 
+  /**
+   * Chip-rail taps commit straight through the same pipeline as Apply —
+   * the patch is merged onto the live `applied` bag, normalized by the
+   * shared contract, then persisted by `commitDraftFilters`.
+   */
+  const commitPatch = async (patch: Partial<MobileAppliedFilters>) => {
+    const { applied: next } = normalizeAppliedFilters({ ...state.applied, ...patch });
+    if (countDiff(next, state.applied) === 0) return;
+    await commitDraftFilters(next, dispatch, userId, toast);
+    onApply(next);
+  };
+
   const isFuturesDraft = state.draft.typeFilter === "Futures";
+  const isFuturesApplied = state.applied.typeFilter === "Futures";
+
+  const activeCount = countDiff(state.applied, MOBILE_DEFAULTS);
+  const pendingCount = countDiff(state.draft, state.applied);
+
+  const statusText = isFuturesApplied
+    ? state.applied.futuresStatusFilter === "All"
+      ? "All statuses"
+      : state.applied.futuresStatusFilter
+    : state.applied.statusFilter === "All"
+      ? "All statuses"
+      : state.applied.statusFilter;
 
   return (
-    <div className="md:hidden my-3 flex flex-col gap-3">
-      <Sheet
-        open={state.sheetOpen}
-        onOpenChange={(open) =>
-          dispatch({ type: open ? "OPEN_SHEET" : "CLOSE_SHEET" })
-        }
+    <Sheet
+      open={state.sheetOpen}
+      onOpenChange={(open) =>
+        dispatch({ type: open ? "OPEN_SHEET" : "CLOSE_SHEET" })
+      }
+    >
+      {/* ── Always-visible chip rail + status line ── */}
+      <div
+        className="sticky-bar sticky z-30 -mx-4 py-2.5 sm:-mx-6 md:hidden"
+        style={{ top: "calc(56px + env(safe-area-inset-top))" }}
       >
-        <SheetTrigger className="ml-auto flex items-center rounded border px-3 py-2 text-sm">
-          <SlidersHorizontal className="mr-2 size-4" /> Filters
-        </SheetTrigger>
-        <SheetContent
-          side="bottom"
-          className="h-[75vh] flex flex-col pb-[env(safe-area-inset-bottom)]"
-        >
-          <SheetTitle>Configure View</SheetTitle>
+        <div className="hide-scroll flex gap-1.5 overflow-x-auto px-4 sm:px-6" role="tablist" aria-label="Asset type">
+          {TypeFilterEnum.map((type) => {
+            const active = state.applied.typeFilter === type;
+            const count = typeCounts?.[type];
+            return (
+              <button
+                key={type}
+                type="button"
+                role="tab"
+                aria-selected={active}
+                onClick={() => void commitPatch({ typeFilter: type })}
+                className={cn(
+                  "flex h-[34px] shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold transition-colors",
+                  active
+                    ? "border-primary/45 bg-primary/[.12] text-primary shadow-[0_0_18px_hsl(var(--primary)/.12)]"
+                    : "border-input text-muted-foreground",
+                )}
+              >
+                {TYPE_LABELS[type]}
+                {count !== undefined && (
+                  <span className={cn("font-mono text-[11px] font-medium", active ? "text-primary/75" : "text-muted-foreground/70")}>
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
 
-          <div className="flex-1 overflow-y-auto px-4 mt-4 flex flex-col gap-6">
-            {/* ── Asset Type ── */}
-            <div className="space-y-2">
-              <label className="text-sm font-medium leading-none">
-                Asset Type
-              </label>
-              <Select
-                value={state.draft.typeFilter}
+        <div className="flex items-center justify-between gap-3 px-4 pt-2.5 sm:px-6">
+          <span className="min-w-0 truncate text-[12px] text-muted-foreground">
+            {resultCount !== undefined && (
+              <span className="font-mono text-foreground">{resultCount}</span>
+            )}{" "}
+            positions · {statusText} · by {SORT_SHORT[state.applied.sortKey]}
+          </span>
+          <SheetTrigger asChild>
+            <button
+              type="button"
+              className="flex h-9 shrink-0 items-center gap-2 rounded-full border border-input px-3 text-[13px] font-semibold text-foreground"
+              aria-label="Open filters"
+            >
+              <SlidersHorizontal size={16} />
+              Filters
+              {activeCount > 0 && (
+                <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-primary px-[5px] font-mono text-[11px] font-extrabold text-primary-foreground">
+                  {activeCount}
+                </span>
+              )}
+            </button>
+          </SheetTrigger>
+        </div>
+      </div>
+
+      <SheetContent
+        side="bottom"
+        className="flex max-h-[88dvh] flex-col gap-0 px-0 pb-0 pt-2"
+      >
+        <div className="flex items-center justify-between px-[18px] pb-2 pt-1">
+          <SheetTitle className="text-[18px]">Configure view</SheetTitle>
+        </div>
+
+        <div className="hide-scroll flex flex-1 flex-col gap-5 overflow-y-auto px-[18px] pb-3 pt-1">
+          {/* ── Asset Type ── */}
+          <div className="flex flex-col gap-2.5">
+            <span className="eyebrow">Asset type</span>
+            <div className="grid grid-cols-2 gap-2">
+              {TypeFilterEnum.map((type) => {
+                const active = state.draft.typeFilter === type;
+                return (
+                  <button
+                    key={type}
+                    type="button"
+                    aria-pressed={active}
+                    onClick={() =>
+                      dispatch({ type: "EDIT_DRAFT", patch: { typeFilter: type } })
+                    }
+                    className={cn(
+                      "flex h-10 items-center justify-center gap-1.5 rounded-full border text-[13px] font-semibold transition-colors",
+                      active
+                        ? "border-primary/45 bg-primary/[.12] text-primary"
+                        : "border-input text-muted-foreground",
+                    )}
+                  >
+                    {active && <Check size={16} />}
+                    {TYPE_LABELS[type]}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── Status ── */}
+          {!isFuturesDraft ? (
+            <div className="flex flex-col gap-2.5">
+              <span className="eyebrow">Status</span>
+              <Tabs
+                value={state.draft.statusFilter}
                 onValueChange={(val) =>
                   dispatch({
                     type: "EDIT_DRAFT",
-                    patch: {
-                      typeFilter: val as (typeof TypeFilterEnum)[number],
-                    },
+                    patch: { statusFilter: val as StatusFilterValue },
                   })
                 }
               >
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Select asset type" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TypeFilterEnum.map((type) => (
-                    <SelectItem key={type} value={type}>
-                      {type}
-                    </SelectItem>
+                <TabsList className="grid w-full grid-cols-3">
+                  {StatusFilterEnum.map((s) => (
+                    <TabsTrigger key={s} value={s} className="py-2.5">
+                      {s === "All" ? "All" : s}
+                    </TabsTrigger>
                   ))}
-                </SelectContent>
-              </Select>
+                </TabsList>
+              </Tabs>
             </div>
+          ) : (
+            <div className="flex flex-col gap-2.5">
+              <span className="eyebrow">Futures status</span>
+              <Tabs
+                value={state.draft.futuresStatusFilter}
+                onValueChange={(val) =>
+                  dispatch({
+                    type: "EDIT_DRAFT",
+                    patch: { futuresStatusFilter: val as FuturesStatusValue },
+                  })
+                }
+              >
+                <TabsList className="grid w-full grid-cols-4">
+                  {FuturesStatusEnum.map((s) => (
+                    <TabsTrigger key={s} value={s} className="px-1 py-2.5 text-[12px]">
+                      {s === "All" ? "All" : s}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
+          )}
 
-            {/* ── Status ── */}
-            {!isFuturesDraft ? (
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">
-                  Status
-                </label>
-                <Select
-                  value={state.draft.statusFilter}
-                  onValueChange={(val) =>
-                    dispatch({
-                      type: "EDIT_DRAFT",
-                      patch: {
-                        statusFilter: val as (typeof StatusFilterEnum)[number],
-                      },
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {StatusFilterEnum.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s === "All" ? "All Statuses" : s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          {/* ── Sort ── */}
+          {!isFuturesDraft && (
+            <div className="flex flex-col gap-2.5">
+              <span className="eyebrow">Sort by</span>
+              <div
+                className="flex flex-col overflow-hidden rounded-xl border border-border"
+                role="radiogroup"
+                aria-label="Sort by"
+              >
+                {SortKeyEnum.map((key, index) => {
+                  const active = state.draft.sortKey === key;
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() =>
+                        dispatch({ type: "EDIT_DRAFT", patch: { sortKey: key } })
+                      }
+                      className={cn(
+                        "flex h-[46px] items-center justify-between px-3.5 text-left text-[13px] font-semibold transition-colors",
+                        index > 0 && "border-t border-border",
+                        active ? "bg-primary/[.08] text-primary" : "text-foreground",
+                      )}
+                    >
+                      {SORT_LABELS[key]}
+                      <span
+                        aria-hidden
+                        className={cn(
+                          "grid h-[18px] w-[18px] shrink-0 place-items-center rounded-full border-2",
+                          active ? "border-primary" : "border-input",
+                        )}
+                      >
+                        {active && (
+                          <span className="h-2 w-2 rounded-full bg-primary shadow-[0_0_8px_hsl(var(--primary))]" />
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
-            ) : (
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">
-                  Futures Status
-                </label>
-                <Select
-                  value={state.draft.futuresStatusFilter}
-                  onValueChange={(val) =>
-                    dispatch({
-                      type: "EDIT_DRAFT",
-                      patch: {
-                        futuresStatusFilter:
-                          val as (typeof FuturesStatusEnum)[number],
-                      },
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Filter by status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FuturesStatusEnum.map((s) => (
-                      <SelectItem key={s} value={s}>
-                        {s === "All" ? "All Statuses" : s}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+            </div>
+          )}
 
-            {/* ── Sort ── */}
-            {!isFuturesDraft && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">
-                  Sort By
-                </label>
-                <Select
-                  value={state.draft.sortKey}
-                  onValueChange={(val) =>
-                    dispatch({
-                      type: "EDIT_DRAFT",
-                      patch: {
-                        sortKey: val as (typeof SortKeyEnum)[number],
-                      },
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Sort by" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="purchaseDate">Date</SelectItem>
-                    <SelectItem value="performance">Performance</SelectItem>
-                    <SelectItem value="totalAmount">Total Amount</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+          {/* ── View Mode ── */}
+          {!isFuturesDraft && (
+            <div className="flex flex-col gap-2.5">
+              <span className="eyebrow">View</span>
+              <Tabs
+                value={state.draft.viewMode}
+                onValueChange={(val) =>
+                  dispatch({
+                    type: "EDIT_DRAFT",
+                    patch: { viewMode: val as ViewModeValue },
+                  })
+                }
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="grid" className="py-2.5">
+                    <LayoutGrid size={16} /> Cards
+                  </TabsTrigger>
+                  <TabsTrigger value="list" className="py-2.5">
+                    <List size={16} /> List
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+            </div>
+          )}
 
-            {/* ── View Mode ── */}
-            {!isFuturesDraft && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">
-                  View Mode
-                </label>
-                <Select
-                  value={state.draft.viewMode}
-                  onValueChange={(val) =>
-                    dispatch({
-                      type: "EDIT_DRAFT",
-                      patch: {
-                        viewMode: val as (typeof ViewModeEnum)[number],
-                      },
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="grid">Cards</SelectItem>
-                    <SelectItem value="list">List</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+          {/* ── List Mode (only when list + non-Futures) ── */}
+          {!isFuturesDraft && state.draft.viewMode === "list" && (
+            <div className="flex flex-col gap-2.5">
+              <span className="eyebrow">List mode</span>
+              <Tabs
+                value={state.draft.listMode}
+                onValueChange={(val) =>
+                  dispatch({
+                    type: "EDIT_DRAFT",
+                    patch: { listMode: val as ListModeValue },
+                  })
+                }
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  {ListModeEnum.map((m) => (
+                    <TabsTrigger key={m} value={m} className="py-2.5 capitalize">
+                      {m}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
+            </div>
+          )}
 
-            {/* ── List Mode (only when list + non-Futures) ── */}
-            {!isFuturesDraft && state.draft.viewMode === "list" && (
-              <div className="space-y-2">
-                <label className="text-sm font-medium leading-none">
-                  List Mode
-                </label>
-                <Select
-                  value={state.draft.listMode}
-                  onValueChange={(val) =>
-                    dispatch({
-                      type: "EDIT_DRAFT",
-                      patch: {
-                        listMode: val as (typeof ListModeEnum)[number],
-                      },
-                    })
-                  }
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="aggregated">Aggregated</SelectItem>
-                    <SelectItem value="flat">Flat</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
+          {/* ── Extra controls passed by parent ── */}
+          {children && <div className="space-y-4">{children}</div>}
+        </div>
 
-            {/* ── Extra controls passed by parent ── */}
-            {children && (
-              <div className="space-y-4">{children}</div>
+        {/* ── Footer: Reset + Apply ── */}
+        <div
+          className="mt-auto flex gap-2.5 border-t border-border px-[18px] pt-3"
+          style={{ paddingBottom: "calc(18px + env(safe-area-inset-bottom))" }}
+        >
+          <Button variant="outline" className="h-[46px] flex-1" onClick={handleReset}>
+            Reset
+          </Button>
+          <Button
+            className="h-[46px] flex-[2]"
+            disabled={!state.dirty}
+            onClick={handleApply}
+          >
+            Apply
+            {pendingCount > 0 && (
+              <span className="font-mono font-semibold opacity-75">
+                ({pendingCount} {pendingCount === 1 ? "change" : "changes"})
+              </span>
             )}
-          </div>
-
-          {/* ── Footer: Reset + Apply ── */}
-          <div className="mt-auto border-t p-4 flex gap-3">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={handleReset}
-            >
-              Reset
-            </Button>
-            <Button
-              className="flex-1"
-              disabled={!state.dirty}
-              onClick={handleApply}
-            >
-              Apply
-            </Button>
-          </div>
-        </SheetContent>
-      </Sheet>
-    </div>
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
   );
 }

@@ -2,6 +2,7 @@
 
 import * as React from 'react';
 import { Input } from '@/components/ui/input';
+import { cn } from '@/lib/utils';
 
 export type NumericInputProps = {
   value: number | null | undefined;
@@ -55,7 +56,7 @@ export function NumericInput({
 
   return (
     <Input
-      className={className}
+      className={cn('font-mono tabular-nums', className)}
       placeholder={placeholder}
       value={s}
       onChange={(e) => setS(sanitize(e.target.value))}

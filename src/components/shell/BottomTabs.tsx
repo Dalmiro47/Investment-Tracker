@@ -1,7 +1,13 @@
 "use client";
-import { Home, BarChart3 } from "lucide-react";
+import { PieChart, Wallet } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export type Section = "summary" | "investments";
+
+const TABS: { id: Section; label: string; Icon: typeof PieChart }[] = [
+  { id: "summary", label: "Summary", Icon: PieChart },
+  { id: "investments", label: "Investments", Icon: Wallet },
+];
 
 export default function BottomTabs({
   section,
@@ -12,37 +18,38 @@ export default function BottomTabs({
 }) {
   return (
     <nav
-      className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-border bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/70"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+      className="fixed bottom-0 inset-x-0 z-40 md:hidden border-t border-border bg-background/85 backdrop-blur-lg"
+      style={{ paddingBottom: "calc(22px + env(safe-area-inset-bottom))" }}
       aria-label="Primary"
       role="tablist"
     >
-      <div className="mx-auto flex w-full items-stretch justify-around py-2">
-        <button
-          role="tab"
-          aria-selected={section === "summary"}
-          aria-label="Summary"
-          className={`flex flex-col items-center gap-1 px-6 py-1 rounded-md ${
-            section === "summary" ? "text-primary" : "text-muted-foreground"
-          }`}
-          onClick={() => onChange("summary")}
-        >
-          <BarChart3 className="h-5 w-5" />
-          <span className="text-xs">Summary</span>
-        </button>
-
-        <button
-          role="tab"
-          aria-selected={section === "investments"}
-          aria-label="Investments"
-          className={`flex flex-col items-center gap-1 px-6 py-1 rounded-md ${
-            section === "investments" ? "text-primary" : "text-muted-foreground"
-          }`}
-          onClick={() => onChange("investments")}
-        >
-          <Home className="h-5 w-5" />
-          <span className="text-xs">Investments</span>
-        </button>
+      <div className="grid grid-cols-2 pt-2">
+        {TABS.map(({ id, label, Icon }) => {
+          const active = section === id;
+          return (
+            <button
+              key={id}
+              role="tab"
+              type="button"
+              aria-selected={active}
+              aria-label={label}
+              className={cn(
+                "relative flex h-12 flex-col items-center justify-center gap-[3px] transition-colors",
+                active ? "text-primary" : "text-muted-foreground",
+              )}
+              onClick={() => onChange(id)}
+            >
+              {active && (
+                <span
+                  aria-hidden
+                  className="absolute -top-2 h-[2px] w-7 rounded-full bg-primary shadow-[0_0_10px_hsl(var(--primary))]"
+                />
+              )}
+              <Icon size={22} strokeWidth={1.8} />
+              <span className="text-[11px] font-bold leading-none">{label}</span>
+            </button>
+          );
+        })}
       </div>
     </nav>
   );
