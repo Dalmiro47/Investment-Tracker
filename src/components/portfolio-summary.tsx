@@ -7,15 +7,27 @@ import { useClosedPositionsForYear } from '@/hooks/useClosedPositionsForYear';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow, TableFooter } from '@/components/ui/table';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
 import { PieChart, Pie, Cell, Tooltip as RechartsTooltip } from 'recharts';
-import { TrendingUp, TrendingDown, Info, Scale, ArrowLeft } from 'lucide-react';
+import {
+  TrendingUp,
+  TrendingDown,
+  Info,
+  Scale,
+  ArrowLeft,
+  LineChart,
+  Briefcase,
+  Bitcoin,
+  Landmark,
+  FileText,
+  Building2,
+  CandlestickChart,
+  type LucideIcon,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatCurrency, formatPercent, toNum } from '@/lib/money';
 import { YearTaxSummary } from '@/lib/portfolio';
 import { Tabs, TabsList, TabsTrigger } from './ui/tabs';
-import { Skeleton } from './ui/skeleton';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from './ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TAX, defaultCapitalAllowance, defaultCryptoThreshold } from '@/lib/tax';
 import { Separator } from './ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
@@ -24,11 +36,62 @@ import { AuditExportButton } from './tax/AuditExportButton';
 
 const CHART_COLORS = [
     'hsl(var(--chart-1))', 'hsl(var(--chart-2))', 'hsl(var(--chart-3))',
-    'hsl(var(--chart-4))', 'hsl(var(--chart-5))', 'hsl(220 70% 50%)',
-    'hsl(30 80% 55%)'
+    'hsl(var(--chart-4))', 'hsl(var(--chart-5))', 'hsl(var(--chart-6))',
+    'hsl(var(--chart-7))'
 ];
 
 type DonutMode = 'market' | 'economic';
+
+const TYPE_ICONS: Record<string, LucideIcon> = {
+    Stock: LineChart,
+    ETF: Briefcase,
+    Crypto: Bitcoin,
+    'Interest Account': Landmark,
+    Bond: FileText,
+    'Real Estate': Building2,
+    Future: CandlestickChart,
+};
+
+const TYPE_SHORT: Record<string, string> = {
+    'Interest Account': 'Interest',
+    Future: 'Futures',
+};
+
+const shortType = (type: string) => TYPE_SHORT[type] ?? type;
+
+/** Splits a formatted de-DE currency string into the major part and the cents tail. */
+const splitCurrency = (value: number): { major: string; cents: string } => {
+    const formatted = formatCurrency(value);
+    const idx = formatted.lastIndexOf(',');
+    if (idx === -1) return { major: formatted, cents: '' };
+    return { major: formatted.slice(0, idx), cents: formatted.slice(idx) };
+};
+
+// de-DE compact notation only abbreviates from millions, so below that show whole euros.
+const compactCurrency = (value: number) =>
+    new Intl.NumberFormat('de-DE', {
+        style: 'currency',
+        currency: 'EUR',
+        ...(Math.abs(value) >= 1_000_000
+            ? { notation: 'compact' as const, maximumFractionDigits: 1 }
+            : { maximumFractionDigits: 0 }),
+    }).format(value);
+
+function DeltaChip({ positive, children }: { positive: boolean; children: React.ReactNode }) {
+    return (
+        <span
+            className={cn(
+                'inline-flex h-[26px] items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-[12px] font-bold',
+                positive
+                    ? 'border-success/30 bg-success/[.12] text-success'
+                    : 'border-destructive/30 bg-destructive/[.12] text-destructive',
+            )}
+        >
+            {positive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+            <span className="font-mono">{children}</span>
+        </span>
+    );
+}
 
 interface TaxEstimateDialogProps {
     isOpen: boolean;
@@ -88,9 +151,9 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
               </DialogDescription>
             </DialogHeader>
 
-            <div className="px-6 pb-6 max-h-[70vh] overflow-y-auto space-y-4">
+            <div className="px-6 pb-6 etf-dialog-scroll max-h-[70vh] overflow-y-auto space-y-4">
                {/* Capital Gains Section */}
-              <div className="p-4 rounded-md bg-muted/30 border">
+              <div className="rounded-[10px] border border-border bg-black/[.28] p-4">
                 <h4 className="font-semibold mb-3 flex items-center gap-2">
                     Capital Income <span className="text-xs font-normal text-muted-foreground">(§20 EStG)</span>
                 </h4>
@@ -135,7 +198,7 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
               </div>
 
               {/* Crypto Section */}
-              <div className="p-4 rounded-md bg-muted/30 border">
+              <div className="rounded-[10px] border border-border bg-black/[.28] p-4">
                 <h4 className="font-semibold mb-3 flex items-center gap-2">
                     Crypto Private Sales <span className="text-xs font-normal text-muted-foreground">(§23 EStG)</span>
                 </h4>
@@ -180,7 +243,7 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
               </div>
 
               {/* Futures & Derivatives Section */}
-              <div className="p-4 rounded-md bg-muted/30 border">
+              <div className="rounded-[10px] border border-border bg-black/[.28] p-4">
                 <h4 className="font-semibold mb-3 flex items-center gap-2">
                   Futures & Derivatives <span className="text-xs font-normal text-muted-foreground">(§20 Abs. 6 EStG)</span>
                 </h4>
@@ -191,11 +254,11 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                     <div className="grid grid-cols-2 gap-4">
                       <div>
                         <p className="text-muted-foreground">Total Gains</p>
-                        <p className="font-medium text-green-600">+{formatCurrency(futuresTax.totalGains)}</p>
+                        <p className="font-bold gain">+{formatCurrency(futuresTax.totalGains)}</p>
                       </div>
                       <div>
                         <p className="text-muted-foreground">Total Losses</p>
-                        <p className="font-medium text-red-600">-{formatCurrency(futuresTax.totalLosses)}</p>
+                        <p className="font-bold loss">-{formatCurrency(futuresTax.totalLosses)}</p>
                       </div>
                     </div>
 
@@ -203,13 +266,13 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                     
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Deductible Losses (Max {formatCurrency(futuresTax.lossCap)})</span>
-                      <span className="font-medium text-red-500">-{formatCurrency(futuresTax.deductibleLosses)}</span>
+                      <span className="font-bold loss">-{formatCurrency(futuresTax.deductibleLosses)}</span>
                     </div>
 
                     {/* Shared Sparer-Pauschbetrag usage */}
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Allowance Used (shared with Capital Income)</span>
-                      <span className="font-medium text-emerald-600">-{formatCurrency(futuresTax.allowanceUsed ?? 0)}</span>
+                      <span className="font-bold gain">-{formatCurrency(futuresTax.allowanceUsed ?? 0)}</span>
                     </div>
                     <div className="flex justify-between text-xs">
                       <span className="text-muted-foreground pl-2 border-l-2 border-muted ml-1">Shared Allowance Remaining ({formatCurrency(capital.allowance ?? 0)})</span>
@@ -217,7 +280,7 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                     </div>
 
                     {futuresTax.unusedLosses > 0 && (
-                      <div className="flex justify-between text-xs text-amber-600 dark:text-amber-400">
+                      <div className="flex justify-between text-xs text-warning">
                         <span>Unused Losses (Carry Forward)</span>
                         <span>{formatCurrency(futuresTax.unusedLosses)}</span>
                       </div>
@@ -261,7 +324,7 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
               </div>
 
               {/* Grand Total */}
-              <div className="p-4 rounded-md bg-primary/10 border border-primary/20">
+              <div className="p-4 rounded-md border border-primary/25 bg-primary/[.1]">
                 <div className="flex justify-between items-center">
                   <span className="font-bold text-lg text-primary">Grand Total Estimated Tax</span>
                   <span className="font-mono font-bold text-xl">{formatCurrency(taxSummary.grandTotal)}</span>
@@ -282,9 +345,9 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                   <DialogTitle>German Tax Basics for {year}</DialogTitle>
                </div>
             </DialogHeader>
-            <div className="px-6 pb-6 max-h-[70vh] overflow-y-auto">
+            <div className="px-6 pb-6 etf-dialog-scroll max-h-[70vh] overflow-y-auto">
                 <div className="text-sm space-y-6">
-                  <div className="p-4 rounded-md bg-muted/30 border">
+                  <div className="rounded-[10px] border border-border bg-black/[.28] p-4">
                     <h4 className="font-semibold text-base mb-2">Capital Income (§20 EStG)</h4>
                     <ul className="list-disc pl-5 text-muted-foreground space-y-2 leading-relaxed">
                       <li>
@@ -304,7 +367,7 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                     </ul>
                   </div>
 
-                  <div className="p-4 rounded-md bg-muted/30 border">
+                  <div className="rounded-[10px] border border-border bg-black/[.28] p-4">
                     <h4 className="font-semibold text-base mb-2">Crypto Private Sales (§23 EStG)</h4>
                     <ul className="list-disc pl-5 text-muted-foreground space-y-2 leading-relaxed">
                       <li>
@@ -320,7 +383,7 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                     </ul>
                   </div>
 
-                  <div className="p-4 rounded-md bg-muted/30 border">
+                  <div className="rounded-[10px] border border-border bg-black/[.28] p-4">
                     <h4 className="font-semibold text-base mb-2">Futures & Derivatives (§20 Abs. 6 EStG)</h4>
                     <ul className="list-disc pl-5 text-muted-foreground space-y-2 leading-relaxed">
                       <li>
@@ -334,7 +397,7 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
                         <strong>Shared Allowance:</strong> The annual <i>Sparer-Pauschbetrag</i> for Capital Income is <strong>shared</strong> with Futures & Derivatives. Any unused allowance from Capital Income may reduce taxable futures gains.
                       </li>
                       <li>
-                        <strong>The "Tax Trap":</strong> Be careful. You can owe taxes on gross gains even if your net PnL is negative (if gross losses exceed €20k).
+                        <strong>The &quot;Tax Trap&quot;:</strong> Be careful. You can owe taxes on gross gains even if your net PnL is negative (if gross losses exceed €20k).
                       </li>
                       <li>
                         Taxed at the flat <strong>25% Abgeltungsteuer</strong> rate (+ Soli/Church).
@@ -417,10 +480,9 @@ interface PortfolioSummaryProps {
     userId: string | null | undefined;
 }
 
-function PortfolioSummaryImpl({ 
-    summaryData, 
-    sellYears, 
-    isTaxView, 
+function PortfolioSummaryImpl({
+    summaryData,
+    isTaxView,
     taxSettings,
     yearFilter,
     onYearFilterChange,
@@ -451,15 +513,6 @@ function PortfolioSummaryImpl({
       }
     }, [yearFilter.kind, isTaxView]);
     
-    const handleYearChange = (value: string) => {
-        const currentMode = yearFilter.mode ?? 'combined';
-        if (value === 'all') {
-            onYearFilterChange({ kind: 'all', mode: currentMode });
-        } else {
-            onYearFilterChange({ kind: 'year', year: parseInt(value), mode: currentMode });
-        }
-    };
-
     const handleModeChange = (mode: ViewMode) => {
         if (yearFilter.kind === 'year') {
             onYearFilterChange({ ...yearFilter, mode });
@@ -495,21 +548,19 @@ function PortfolioSummaryImpl({
     }
 
     const { rows, totals, taxSummary } = summaryData;
-    
+
     // Adjust totals to exclude Future from Cost Basis and Market Value (since they're N/A)
-    const adjustedTotals = useMemo(() => {
-        const futureRow = rows.find(r => r.type === 'Future');
-        if (!futureRow) return totals;
-        
-        return {
+    const futureRow = rows.find(r => r.type === 'Future');
+    const adjustedTotals = futureRow
+        ? {
             ...totals,
             costBasis: totals.costBasis - futureRow.costBasis,
             marketValue: totals.marketValue - futureRow.marketValue,
-        };
-    }, [rows, totals]);
-    
+        }
+        : totals;
+
     const totalPortfolioValue = donutMode === 'market' ? totals.marketValue : totals.economicValue;
-    const showTaxEstimatorButton = isTaxView && taxSummary && yearFilter.kind === 'year';
+    const showTaxEstimatorButton = Boolean(isTaxView && taxSummary && yearFilter.kind === 'year');
 
     const { title, description } = getSummaryContext(yearFilter);
     const isYearView = yearFilter.kind === 'year';
@@ -525,60 +576,216 @@ function PortfolioSummaryImpl({
             ? '(Realized)'
             : donutMode === 'market' ? '(Market)' : '(Economic)';
 
+    const donutLabel = donutMode === 'market' ? 'Market' : 'Economic';
+    const periodLabel = isYearView ? String(yearFilter.year) : 'All years';
+    const modeLabel = mode === 'holdings' ? 'Holdings' : mode === 'realized' ? 'Realized' : 'Combined';
+    const heroAmount = splitCurrency(totalPortfolioValue);
+    const colorForType = (type: string) =>
+        CHART_COLORS[Math.max(0, rows.findIndex(r => r.type === type)) % CHART_COLORS.length];
+    const typeTiles = [...rows].sort((a, b) => b.marketValue - a.marketValue).slice(0, 4);
+    const clampPct = (value: number) => Math.max(0, Math.min(100, value * 100));
+
     return (
         <TooltipProvider>
-        <Card>
-            <CardHeader>
-               <div className="flex flex-col sm:flex-row items-start justify-between gap-4">
-                    <div>
-                        <div className="flex items-center gap-2">
-                           <CardTitle className="font-headline text-2xl">{title}</CardTitle>
-                            <Button variant="ghost" size="icon" onClick={() => setIsInfoOpen(true)}>
-                                <Info className="h-5 w-5" />
-                                <span className="sr-only">Show Explanations</span>
-                            </Button>
-                        </div>
-                        <CardDescription>{description}</CardDescription>
-                    </div>
-                    <div className="flex items-center gap-2">
-                         <Select
-                          value={yearFilter.kind === 'year' ? String(yearFilter.year) : 'all'}
-                          onValueChange={(val) => {
-                            if (val === 'all') {
-                              onYearFilterChange({ kind: 'all', mode: yearFilter.mode });
-                            } else {
-                              const yr = Number(val);
-                              onYearFilterChange({ kind: 'year', year: yr, mode: yearFilter.mode });
-                            }
-                          }}
+        <div className="flex flex-col gap-4 lg:gap-5">
+            {/* ── HERO ───────────────────────────────────────────────── */}
+            <section className="animate-enter grid grid-cols-1 gap-3 lg:grid-cols-[1.35fr_1fr] lg:items-stretch lg:gap-5">
+                <div className="glass-strong flex flex-col justify-between gap-4 overflow-hidden p-5 sm:p-[26px] sm:px-7">
+                    <div
+                        aria-hidden
+                        className="pointer-events-none absolute -right-16 -top-20 h-[320px] w-[320px] rounded-full bg-[radial-gradient(circle,hsl(var(--primary)/.16),transparent_62%)]"
+                    />
+                    <div className="relative flex items-start justify-between gap-3">
+                        <span className="eyebrow" title={title}>
+                            Portfolio value · {modeLabel} · {donutLabel} · {periodLabel}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setIsInfoOpen(true)}
+                            className="flex shrink-0 items-center gap-1.5 text-[12px] text-muted-foreground transition-colors hover:text-foreground"
                         >
-                            <SelectTrigger className="w-[180px]">
-                                <SelectValue placeholder="Select Tax Year" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">All Years</SelectItem>
-                                {sellYears.map(year => (
-                                    <SelectItem key={year} value={String(year)}>{year}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            <Info className="h-4 w-4" />
+                            <span className="hidden sm:inline">Explanations</span>
+                            <span className="sr-only">Show Explanations</span>
+                        </button>
+                    </div>
+
+                    <h2 className="sr-only">{title}</h2>
+
+                    <div className="relative flex flex-wrap items-end gap-4">
+                        <div className="font-headline font-mono text-[40px] font-bold leading-none tracking-[-.035em] sm:text-[52px] lg:text-[64px]">
+                            {heroAmount.major}
+                            <span className="text-[20px] text-muted-foreground sm:text-[26px] lg:text-[30px]">
+                                {heroAmount.cents}
+                            </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 pb-1.5">
+                            <DeltaChip positive={totals.performancePct >= 0}>
+                                {formatPercent(totals.performancePct)}
+                            </DeltaChip>
+                            {showUnrealizedCol && (
+                                <DeltaChip positive={totals.unrealizedPL >= 0}>
+                                    {formatCurrency(totals.unrealizedPL)} unrealized
+                                </DeltaChip>
+                            )}
+                            {showRealizedCol && (
+                                <DeltaChip positive={totals.realizedPL >= 0}>
+                                    {formatCurrency(totals.realizedPL)} realized
+                                </DeltaChip>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="relative flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[12px] text-muted-foreground">
+                            <span>
+                                Cost basis{' '}
+                                <span className="font-mono text-foreground">{formatCurrency(adjustedTotals.costBasis)}</span>
+                            </span>
+                            <span>
+                                Realized {periodLabel}{' '}
+                                <span className={cn('font-mono', totals.realizedPL >= 0 ? 'gain' : 'loss')}>
+                                    {formatCurrency(totals.realizedPL)}
+                                </span>
+                            </span>
+                            <span>
+                                Positions <span className="font-mono text-foreground">{rows.length}</span>
+                            </span>
+                        </div>
+
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
+                            {showTaxEstimatorButton && (
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="justify-center text-warning hover:text-warning"
+                                    onClick={openEstimate}
+                                >
+                                    <Scale className="h-4 w-4" />
+                                    View tax estimate
+                                </Button>
+                            )}
+                            {(isYearView || isAllView) && (
+                                <Tabs
+                                    value={yearFilter.mode ?? 'combined'}
+                                    onValueChange={(v) => handleModeChange(v as ViewMode)}
+                                    className="w-full sm:w-auto"
+                                >
+                                    <TabsList className="grid w-full grid-cols-3 sm:inline-flex sm:w-auto">
+                                        <TabsTrigger value="holdings">Holdings</TabsTrigger>
+                                        <TabsTrigger value="realized">Realized</TabsTrigger>
+                                        <TabsTrigger value="combined">Combined</TabsTrigger>
+                                    </TabsList>
+                                </Tabs>
+                            )}
+                        </div>
                     </div>
                 </div>
-                 {(isYearView || isAllView) && (
-                    <div className="mt-4">
-                        <Tabs value={yearFilter.mode ?? 'combined'} onValueChange={(v) => handleModeChange(v as ViewMode)}>
-                            <TabsList>
-                                <TabsTrigger value="holdings">Holdings</TabsTrigger>
-                                <TabsTrigger value="realized">Realized (Tax)</TabsTrigger>
-                                <TabsTrigger value="combined">Combined</TabsTrigger>
-                            </TabsList>
-                        </Tabs>
-                    </div>
-                )}
+
+                {/* ── Asset-type tiles ── */}
+                <div className="grid grid-cols-2 gap-2.5 lg:gap-3">
+                    {typeTiles.map(tile => {
+                        const TileIcon = TYPE_ICONS[tile.type] ?? Briefcase;
+                        const tileValue = donutMode === 'market' ? tile.marketValue : tile.economicValue;
+                        const share = totalPortfolioValue > 0 ? tileValue / totalPortfolioValue : 0;
+                        const color = colorForType(tile.type);
+                        const isFutureTile = tile.type === 'Future';
+                        return (
+                            <div key={tile.type} className="glass flex flex-col justify-between gap-2.5 p-3.5 lg:p-4">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="flex min-w-0 items-center gap-2 text-[12px] font-bold text-muted-foreground lg:text-[13px]">
+                                        <span style={{ color }} className="inline-flex shrink-0">
+                                            <TileIcon size={20} />
+                                        </span>
+                                        <span className="truncate">{shortType(tile.type)}</span>
+                                    </span>
+                                    <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+                                        {isFutureTile ? '—' : formatPercent(share)}
+                                    </span>
+                                </div>
+                                <div className="font-headline font-mono text-[20px] font-bold tracking-[-.02em] lg:text-[24px]">
+                                    {isFutureTile ? '—' : formatCurrency(tileValue)}
+                                </div>
+                                <div className="flex items-center justify-between gap-2.5">
+                                    <div className="bar flex-1" style={{ color }}>
+                                        <i style={{ width: `${clampPct(share)}%` }} />
+                                    </div>
+                                    <span
+                                        className={cn(
+                                            'shrink-0 font-mono text-[11px] font-bold lg:text-[12px]',
+                                            tile.totalPL >= 0 ? 'gain' : 'loss',
+                                        )}
+                                    >
+                                        {isFutureTile ? formatCurrency(tile.totalPL) : formatPercent(tile.performancePct)}
+                                    </span>
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            </section>
+
+            {/* ── ALLOCATION ─────────────────────────────────────────── */}
+            <Card className="animate-enter delay-2 p-4 sm:p-5 lg:px-[22px]">
+            <CardHeader className="flex-row items-start justify-between gap-4 space-y-0 p-0 pb-4">
+                <div className="min-w-0">
+                    <CardTitle className="text-[16px] lg:text-[18px]">Allocation by asset type</CardTitle>
+                    <CardDescription className="mt-1">{description}</CardDescription>
+                </div>
+                <Tabs value={donutMode} onValueChange={(v) => setDonutMode(v as DonutMode)}>
+                    <TabsList>
+                        <TabsTrigger value="market">Market</TabsTrigger>
+                        <TabsTrigger value="economic">Economic</TabsTrigger>
+                    </TabsList>
+                </Tabs>
             </CardHeader>
-            <CardContent>
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                    <div className="lg:col-span-2 overflow-x-auto">
+            <CardContent className="p-0">
+                <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px] lg:items-center lg:gap-7">
+                    <div className="order-2 min-w-0 lg:order-1">
+                        {/* Mobile: per-type list */}
+                        <div className="divide-y divide-border overflow-hidden rounded-xl border border-border md:hidden">
+                            {rows.length === 0 ? (
+                                <div className="px-4 py-8 text-center text-[13px] text-muted-foreground">
+                                    {yearFilter.kind === 'year'
+                                        ? `No assets were sold in ${yearFilter.year}.`
+                                        : 'No assets match this view.'}
+                                </div>
+                            ) : (
+                                <>
+                                    {rows.map(item => {
+                                        const isFuture = item.type === 'Future';
+                                        const value = donutMode === 'market' ? item.marketValue : item.economicValue;
+                                        return (
+                                            <div key={item.type} className="flex items-center justify-between gap-3 px-4 py-3">
+                                                <div className="min-w-0">
+                                                    <div className="truncate text-[14px] font-bold">{shortType(item.type)}</div>
+                                                    <div className="font-mono text-[12px] text-muted-foreground">
+                                                        {isFuture ? '—' : formatCurrency(value)}
+                                                    </div>
+                                                </div>
+                                                <div className="shrink-0 text-right">
+                                                    <div className={cn('font-mono text-[14px] font-bold', item.totalPL >= 0 ? 'gain' : 'loss')}>
+                                                        {formatCurrency(item.totalPL)}
+                                                    </div>
+                                                    <div className="font-mono text-[11px] text-muted-foreground">
+                                                        {isFuture ? 'P/L only' : formatPercent(item.performancePct)}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    <div className="flex items-center justify-between gap-3 border-t border-input bg-white/[.02] px-4 py-3">
+                                        <span className="text-[14px] font-extrabold">Total</span>
+                                        <span className={cn('font-mono text-[14px] font-extrabold', totals.totalPL >= 0 ? 'gain' : 'loss')}>
+                                            {formatCurrency(totals.totalPL)}
+                                        </span>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {/* md+: full table */}
+                        <div className="hidden overflow-x-auto md:block">
                         <Table>
                             <TableHeader>
                                 <TableRow>
@@ -688,22 +895,24 @@ function PortfolioSummaryImpl({
                                         </TableCell>
                                         
                                         {showRealizedCol && (
-                                            <TableCell className={cn("text-right font-mono", item.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                            <TableCell className={cn("text-right", item.realizedPL >= 0 ? "gain" : "loss")}>
                                                 {formatCurrency(item.realizedPL)}
                                             </TableCell>
                                         )}
-                                        
+
                                         {showUnrealizedCol && (
-                                            <TableCell className={cn("text-right font-mono", item.unrealizedPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                            <TableCell className={cn("text-right", item.unrealizedPL >= 0 ? "gain" : "loss")}>
                                                 {formatCurrency(item.unrealizedPL)}
                                             </TableCell>
                                         )}
 
-                                        <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", item.totalPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                        <TableCell className={cn("text-right", item.totalPL >= 0 ? "gain" : "loss")}>
+                                          <span className="inline-flex items-center justify-end gap-1">
                                           {item.totalPL >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                                           {formatCurrency(item.totalPL)}
+                                          </span>
                                         </TableCell>
-                                        <TableCell className={cn("text-right font-mono", item.performancePct >= 0 ? "text-green-500" : "text-destructive")}>
+                                        <TableCell className={cn("text-right", item.performancePct >= 0 ? "gain" : "loss")}>
                                           {isFuture ? (
                                             <Tooltip>
                                               <TooltipTrigger className="cursor-help text-muted-foreground">
@@ -717,128 +926,139 @@ function PortfolioSummaryImpl({
                                             formatPercent(item.performancePct)
                                           )}
                                         </TableCell>
-                                        <TableCell className="text-right font-mono">{formatPercent(portfolioPercentage)}</TableCell>
+                                        <TableCell className="text-right">
+                                          <div className="flex items-center justify-end gap-2">
+                                            <div className="bar w-14 shrink-0" style={{ color: colorForType(item.type) }}>
+                                              <i style={{ width: `${clampPct(portfolioPercentage)}%` }} />
+                                            </div>
+                                            <span className="min-w-[44px] text-right">{formatPercent(portfolioPercentage)}</span>
+                                          </div>
+                                        </TableCell>
                                     </TableRow>
                                 )})
                               )}
                             </TableBody>
                             <TableFooter>
-                                <TableRow className="bg-muted/50 font-bold">
+                                <TableRow>
                                     <TableCell>Total</TableCell>
-                                    <TableCell className="text-right font-mono">
+                                    <TableCell className="text-right">
                                       <Tooltip>
                                         <TooltipTrigger className="cursor-help">
                                           {formatCurrency(adjustedTotals.costBasis)}
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                          Excludes derivatives (Futures) as they don't have traditional cost basis
+                                          Excludes derivatives (Futures) as they don&apos;t have traditional cost basis
                                         </TooltipContent>
                                       </Tooltip>
                                     </TableCell>
-                                    <TableCell className="text-right font-mono">
+                                    <TableCell className="text-right">
                                       <Tooltip>
                                         <TooltipTrigger className="cursor-help">
                                           {formatCurrency(adjustedTotals.marketValue)}
                                         </TooltipTrigger>
                                         <TooltipContent>
-                                          Excludes derivatives (Futures) as they don't have traditional market value
+                                          Excludes derivatives (Futures) as they don&apos;t have traditional market value
                                         </TooltipContent>
                                       </Tooltip>
                                     </TableCell>
-                                    
+
                                     {showRealizedCol && (
-                                        <TableCell className={cn("text-right font-mono", totals.realizedPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                        <TableCell className={cn("text-right", totals.realizedPL >= 0 ? "gain" : "loss")}>
                                             {formatCurrency(totals.realizedPL)}
                                         </TableCell>
                                     )}
 
                                     {showUnrealizedCol && (
-                                        <TableCell className={cn("text-right font-mono", totals.unrealizedPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                        <TableCell className={cn("text-right", totals.unrealizedPL >= 0 ? "gain" : "loss")}>
                                             {formatCurrency(totals.unrealizedPL)}
                                         </TableCell>
                                     )}
 
-                                    <TableCell className={cn("text-right font-mono flex items-center justify-end gap-1", totals.totalPL >= 0 ? "text-green-500" : "text-destructive")}>
+                                    <TableCell className={cn("text-right", totals.totalPL >= 0 ? "gain" : "loss")}>
+                                        <span className="inline-flex items-center justify-end gap-1">
                                         {totals.totalPL >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
                                         {formatCurrency(totals.totalPL)}
+                                        </span>
                                     </TableCell>
-                                    <TableCell className={cn("text-right font-mono", totals.performancePct >= 0 ? "text-green-500" : "text-destructive")}>{formatPercent(totals.performancePct)}</TableCell>
-                                    <TableCell className="text-right font-mono">{formatPercent(1)}</TableCell>
+                                    <TableCell className={cn("text-right", totals.performancePct >= 0 ? "gain" : "loss")}>{formatPercent(totals.performancePct)}</TableCell>
+                                    <TableCell className="text-right">{formatPercent(1)}</TableCell>
                                 </TableRow>
                             </TableFooter>
                         </Table>
+                        </div>
                     </div>
-                    <div className="flex flex-col items-center justify-center lg:col-span-1">
-                        <Tabs value={donutMode} onValueChange={(v) => setDonutMode(v as DonutMode)} className='mb-2'>
-                            <TabsList>
-                                <TabsTrigger value="market">Market Value</TabsTrigger>
-                                <TabsTrigger value="economic">Economic Value</TabsTrigger>
-                            </TabsList>
-                        </Tabs>
-                        <ChartContainer config={{}} className="w-full h-[280px] sm:h-[350px] lg:h-[450px] mt-4 relative">
-                            {chartData.length > 0 ? (
-                            <PieChart>
-                                <RechartsTooltip
-                                    cursor={false}
-                                    content={<ChartTooltipContent 
-                                        hideLabel
-                                        formatter={(value, name, props) => (
-                                            <div className="flex flex-col">
-                                                <span className="font-bold">{props.payload.name}</span>
-                                                <span>{formatCurrency(props.payload.value as number)}</span>
-                                                <span className="text-muted-foreground">{formatPercent((props.payload.payload as any).percentage / 100)} of portfolio</span>
-                                            </div>
-                                        )}
-                                    />}
-                                />
-                                <Pie
-                                    data={chartData} dataKey="value" nameKey="name"
-                                    cx="50%" cy="50%" outerRadius={80} innerRadius={50}
-                                    paddingAngle={2} labelLine={false}
-                                    label={({ cx, cy, midAngle, innerRadius, outerRadius, percent, index }) => {
-                                        const RADIAN = Math.PI / 180;
-                                        const radius = innerRadius + (outerRadius - innerRadius) * 1.4;
-                                        const x = cx + radius * Math.cos(-midAngle * RADIAN);
-                                        const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                                        const percentage = (percent * 100).toFixed(0);
-                                        if (parseInt(percentage) < 5) return null;
 
-                                        return (
-                                                <text x={x} y={y} fill="hsl(var(--foreground))" textAnchor={x > cx ? 'start' : 'end'} dominantBaseline="central" className="text-xs font-semibold">
-                                                {`${chartData[index].name} (${percentage}%)`}
-                                            </text>
-                                        );
-                                    }}
-                                >
-                                    {chartData.map((entry, index) => ( <Cell key={`cell-${index}`} fill={entry.fill} /> ))}
-                                </Pie>
-                            </PieChart>
-                            ) : (
-                                <div className="flex flex-col items-center justify-center text-center h-full">
-                                    <Info className="h-8 w-8 text-muted-foreground mb-2"/>
-                                    <p className="text-sm text-muted-foreground">No data to display in chart.</p>
+                    {/* ── Donut ── */}
+                    <div className="order-1 flex flex-col items-center gap-4 lg:order-2">
+                        <div className="relative w-full max-w-[260px]">
+                            <ChartContainer config={{}} className="aspect-square h-auto w-full">
+                                {chartData.length > 0 ? (
+                                <PieChart>
+                                    <RechartsTooltip
+                                        cursor={false}
+                                        content={<ChartTooltipContent
+                                            hideLabel
+                                            formatter={(value, name, props) => (
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold">{props.payload.name}</span>
+                                                    <span className="font-mono">{formatCurrency(props.payload.value as number)}</span>
+                                                    <span className="text-muted-foreground">{formatPercent((props.payload.payload as any).percentage / 100)} of portfolio</span>
+                                                </div>
+                                            )}
+                                        />}
+                                    />
+                                    <Pie
+                                        data={chartData} dataKey="value" nameKey="name"
+                                        cx="50%" cy="50%" outerRadius="90%" innerRadius="60%"
+                                        paddingAngle={3} labelLine={false} label={false}
+                                        stroke="hsl(var(--card))"
+                                    >
+                                        {chartData.map((entry, index) => ( <Cell key={`cell-${index}`} fill={entry.fill} /> ))}
+                                    </Pie>
+                                </PieChart>
+                                ) : (
+                                    <div className="flex h-full flex-col items-center justify-center text-center">
+                                        <Info className="mb-2 h-8 w-8 text-muted-foreground"/>
+                                        <p className="text-sm text-muted-foreground">No data to display in chart.</p>
+                                    </div>
+                                )}
+                            </ChartContainer>
+                            {chartData.length > 0 && (
+                                <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-0.5">
+                                    <span className="eyebrow text-[9px]">{donutLabel}</span>
+                                    <span className="font-headline font-mono text-[18px] font-bold lg:text-[22px]">
+                                        {compactCurrency(totalPortfolioValue)}
+                                    </span>
                                 </div>
                             )}
-                        </ChartContainer>
-                            <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-4 text-xs">
+                        </div>
+
+                        <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
                             {chartData.map((entry, index) => (
-                                <div key={`legend-${index}`} className="flex items-center gap-2">
-                                    <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.fill }} />
-                                    <span>{entry.name}</span>
-                                </div>
+                                <span key={`legend-${index}`} className="flex items-center gap-[7px] text-[12px] text-muted-foreground">
+                                    <span
+                                        className="h-2 w-2 rounded-[3px]"
+                                        style={{ backgroundColor: entry.fill, boxShadow: `0 0 8px ${entry.fill}` }}
+                                    />
+                                    {shortType(entry.name)}{' '}
+                                    <span className="font-mono text-muted-foreground/70">
+                                        {formatPercent(entry.percentage / 100)}
+                                    </span>
+                                </span>
                             ))}
                         </div>
                     </div>
                 </div>
             </CardContent>
         </Card>
+        </div>
         <Dialog open={isInfoOpen} onOpenChange={setIsInfoOpen}>
             <DialogContent className="w-[96vw] max-w-3xl p-0">
                 <DialogHeader className="px-6 pt-6 pb-2">
                     <DialogTitle>Summary Column Explanations</DialogTitle>
                     <DialogDescription>How each value in the summary table is calculated.</DialogDescription>
                 </DialogHeader>
-                <div className="px-6 pb-6 max-h-[65vh] overflow-y-auto space-y-4">
+                <div className="px-6 pb-6 etf-dialog-scroll max-h-[65vh] overflow-y-auto space-y-4">
                     <div>
                         <h4 className="font-semibold">Filter Explanation</h4>
                         <ul className="list-disc pl-5 mt-2 space-y-2 text-muted-foreground">
@@ -886,7 +1106,7 @@ function PortfolioSummaryImpl({
                     </div>
                     <div>
                         <h4 className="font-semibold">% of Portfolio (Donut Chart)</h4>
-                        <p className="text-muted-foreground">This shows the allocation of your portfolio's value. It has two modes:</p>
+                        <p className="text-muted-foreground">This shows the allocation of your portfolio&apos;s value. It has two modes:</p>
                         <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
                             <li><span className="font-semibold text-foreground">Market Value Mode:</span> Shows the percentage based on the current market value of what you own.</li>
                             <li><span className="font-semibold text-foreground">Economic Value Mode:</span> Shows a broader view, including your realized gains. The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>

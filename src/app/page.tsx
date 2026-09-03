@@ -16,7 +16,8 @@ import { TaxSettingsDialog } from '@/components/tax-settings-dialog';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PlusCircle, SlidersHorizontal, Loader2, RefreshCw } from 'lucide-react';
+import { Plus, Loader2, RefreshCw, Search, LayoutGrid, List, Wallet } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { useAuth } from '@/hooks/use-auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAutoRefreshPrices } from '@/hooks/use-auto-refresh-prices';
@@ -687,14 +688,6 @@ function DashboardPageContent() {
       : viewMode !== 'grid' && isMobile
       ? 'Switch to Cards view to see per-asset estimates.'
       : undefined;
-      
-  const canOpenEstimate = selectedYear != null && isTaxView;
-  const estimateDisabledReason =
-    selectedYear == null
-      ? 'Select a year to view the estimate.'
-      : !isTaxView
-      ? 'Turn on German Tax Report to view the estimate.'
-      : undefined;
 
   // Force List view when Futures is selected
   React.useEffect(() => {
@@ -748,99 +741,186 @@ function DashboardPageContent() {
     return result;
   };
 
+  const typePills: { value: TypeFilterValue; label: string; count?: number }[] = [
+    { value: 'All', label: 'All', count: typeCounts.All },
+    { value: 'Stock', label: 'Stocks', count: typeCounts.Stock },
+    { value: 'Crypto', label: 'Crypto', count: typeCounts.Crypto },
+    { value: 'ETF', label: 'ETFs', count: typeCounts.ETF },
+    { value: 'Interest Account', label: 'Interest', count: typeCounts['Interest Account'] },
+    { value: 'Bond', label: 'Bonds', count: typeCounts.Bond },
+    { value: 'Real Estate', label: 'Real Estate', count: typeCounts['Real Estate'] },
+    { value: 'Futures', label: 'Futures', count: typeCounts.Future },
+  ];
+
+  const listDisabledReason = isTaxView
+    ? 'Turn off German Tax Report to use List view.'
+    : undefined;
+  const cardsDisabledReason = isFuturesView
+    ? 'Futures trades require List view (already active).'
+    : undefined;
+
   const advancedFilters = (
-    <>
-      <div className="flex flex-col sm:flex-row items-center gap-4 mt-4">
-        <div className="w-full sm:w-auto">
-          <Tabs value={typeFilter} onValueChange={(value) => setTypeFilter(value as TypeFilterValue)}>
-            <TabsList className="h-auto overflow-x-auto whitespace-nowrap [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              <TabsTrigger value="All">All Types ({typeCounts.All})</TabsTrigger>
-              <TabsTrigger value="Stock">Stocks ({typeCounts.Stock})</TabsTrigger>
-              <TabsTrigger value="Crypto">Crypto ({typeCounts.Crypto})</TabsTrigger>
-              <TabsTrigger value="ETF">ETFs ({typeCounts.ETF})</TabsTrigger>
-              <TabsTrigger value="Interest Account">Interest Accounts ({typeCounts['Interest Account']})</TabsTrigger>
-              <TabsTrigger value="Bond">Bonds ({typeCounts.Bond})</TabsTrigger>
-              <TabsTrigger value="Real Estate">Real Estate ({typeCounts['Real Estate']})</TabsTrigger>
-              <TabsTrigger value="Futures">Futures</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </div>
-        <div className="flex-grow" />
-        {!isFuturesView ? (
-          // General filters for investments
-          <div className="flex items-center gap-3 w-full sm:w-auto min-w-0">
-            <div className="w-full sm:w-[220px]">
-              <Select
-                value={investmentNameFilter}
-                onValueChange={(v) => setInvestmentNameFilter(v as 'All' | string)}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Filter by investment" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="All">All Investments</SelectItem>
-                  {investmentNameOptions.map((n) => (
-                    <SelectItem key={n} value={n}>{n}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <div className="w-full sm:w-[180px]">
-                      <Select 
-                          value={isTaxView ? 'Sold' : statusFilter}
-                          onValueChange={(value) => setStatusFilter(value as InvestmentStatus | 'All')}
-                          disabled={isTaxView}
-                      >
-                      <SelectTrigger>
-                          <SelectValue placeholder="Filter by status" />
-                      </SelectTrigger>
-                      <SelectContent>
-                          <SelectItem value="All">All Statuses</SelectItem>
-                          <SelectItem value="Active">Active</SelectItem>
-                          <SelectItem value="Sold">Sold</SelectItem>
-                      </SelectContent>
-                      </Select>
-                  </div>
-                </TooltipTrigger>
-                {isTaxView && (
-                  <TooltipContent>
-                    <p>Status is locked to &quot;Sold&quot; in Tax Report view.</p>
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-            <Select value={sortKey} onValueChange={(value) => setSortKey(value as SortKey)}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Sort by" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="purchaseDate">Sort by Date</SelectItem>
-                <SelectItem value="performance">Sort by Performance</SelectItem>
-                <SelectItem value="totalAmount">Sort by Total Amount</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        ) : (
-          // Futures-specific filter
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <Select value={futuresStatusFilter} onValueChange={(value) => setFuturesStatusFilter(value as 'All' | 'OPEN' | 'CLOSED' | 'LIQUIDATED')}>
-              <SelectTrigger className="w-full sm:w-[180px]">
-                <SelectValue placeholder="Filter by status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="All">All Statuses</SelectItem>
-                <SelectItem value="OPEN">Open</SelectItem>
-                <SelectItem value="CLOSED">Closed</SelectItem>
-                <SelectItem value="LIQUIDATED">Liquidated</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        )}
+    <div className="glass flex flex-wrap items-center gap-3 p-3 px-3.5">
+      {/* Type pill rail */}
+      <div
+        className="hide-scroll flex min-w-0 flex-1 basis-[560px] gap-1.5 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)]"
+        role="tablist"
+        aria-label="Asset type"
+      >
+        {typePills.map(({ value, label, count }) => {
+          const active = typeFilter === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTypeFilter(value)}
+              className={cn(
+                'flex h-8 shrink-0 items-center gap-1.5 rounded-full border px-3 text-[13px] font-semibold transition-colors',
+                active
+                  ? 'border-primary/45 bg-primary/[.1] text-primary shadow-[0_0_18px_hsl(var(--primary)/.12)]'
+                  : 'border-input text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {label}
+              {count !== undefined && (
+                <span className={cn('font-mono text-[11px] font-medium', active ? 'text-primary/75' : 'text-muted-foreground/70')}>
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
-    </>
+
+      {!isFuturesView ? (
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Select
+            value={investmentNameFilter}
+            onValueChange={(v) => setInvestmentNameFilter(v as 'All' | string)}
+          >
+            <SelectTrigger className="w-[190px]">
+              <Search size={16} className="shrink-0 text-muted-foreground" />
+              <SelectValue placeholder="All investments" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Investments</SelectItem>
+              {investmentNameOptions.map((n) => (
+                <SelectItem key={n} value={n}>{n}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="w-[150px]">
+                  <Select
+                    value={isTaxView ? 'Sold' : statusFilter}
+                    onValueChange={(value) => setStatusFilter(value as InvestmentStatus | 'All')}
+                    disabled={isTaxView}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Filter by status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="All">All Statuses</SelectItem>
+                      <SelectItem value="Active">Active</SelectItem>
+                      <SelectItem value="Sold">Sold</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </TooltipTrigger>
+              {isTaxView && (
+                <TooltipContent>
+                  <p>Status is locked to &quot;Sold&quot; in Tax Report view.</p>
+                </TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+
+          <Select value={sortKey} onValueChange={(value) => setSortKey(value as SortKey)}>
+            <SelectTrigger className="w-[165px]">
+              <SelectValue placeholder="Sort by" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="purchaseDate">Sort: Date</SelectItem>
+              <SelectItem value="performance">Sort: Performance</SelectItem>
+              <SelectItem value="totalAmount">Sort: Total Amount</SelectItem>
+            </SelectContent>
+          </Select>
+
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span>
+                  <Tabs value={viewMode} onValueChange={(v) => setModeSafely(v as 'grid' | 'list')}>
+                    <TabsList>
+                      <TabsTrigger value="grid" disabled={isFuturesView} aria-disabled={isFuturesView}>
+                        <LayoutGrid size={16} /> Cards
+                      </TabsTrigger>
+                      <TabsTrigger value="list" disabled={isTaxView} aria-disabled={isTaxView}>
+                        <List size={16} /> List
+                      </TabsTrigger>
+                    </TabsList>
+                  </Tabs>
+                </span>
+              </TooltipTrigger>
+              {(listDisabledReason ?? cardsDisabledReason) && (
+                <TooltipContent>{listDisabledReason ?? cardsDisabledReason}</TooltipContent>
+              )}
+            </Tooltip>
+          </TooltipProvider>
+
+          {viewMode === 'list' && (
+            <Tabs value={listMode} onValueChange={(v) => setListMode(v as 'aggregated' | 'flat')}>
+              <TabsList>
+                <TabsTrigger value="aggregated">Aggregated</TabsTrigger>
+                <TabsTrigger value="flat">Flat</TabsTrigger>
+              </TabsList>
+            </Tabs>
+          )}
+        </div>
+      ) : (
+        // Futures-specific filter
+        <div className="flex items-center gap-2">
+          <Select value={futuresStatusFilter} onValueChange={(value) => setFuturesStatusFilter(value as 'All' | 'OPEN' | 'CLOSED' | 'LIQUIDATED')}>
+            <SelectTrigger className="w-[165px]">
+              <SelectValue placeholder="Filter by status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="All">All Statuses</SelectItem>
+              <SelectItem value="OPEN">Open</SelectItem>
+              <SelectItem value="CLOSED">Closed</SelectItem>
+              <SelectItem value="LIQUIDATED">Liquidated</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+    </div>
+  );
+
+  const emptyState = (
+    <div className="glass animate-enter p-4 sm:p-6">
+      <div className="flex flex-col items-center justify-center gap-4 rounded-xl border border-dashed border-input px-6 py-12 text-center sm:py-16">
+        <div className="grid h-14 w-14 place-items-center rounded-[16px] border border-primary/20 bg-primary/10 text-primary">
+          <Wallet size={24} />
+        </div>
+        <div className="space-y-1.5">
+          <h3 className="font-headline text-[20px] font-bold tracking-tight text-foreground">
+            No investments found
+          </h3>
+          <p className="text-[13px] text-muted-foreground">
+            {isTaxView ? 'No sold positions match the current filters.' : 'Add a new investment to get started.'}
+          </p>
+        </div>
+        <Button onClick={() => handleAddClick(typeFilter !== 'All' && typeFilter !== 'Futures' ? typeFilter : undefined)}>
+          <Plus size={16} />
+          Add first investment
+        </Button>
+      </div>
+    </div>
   );
 
   const investmentsView = (
@@ -863,9 +943,11 @@ function DashboardPageContent() {
           setListMode(applied.listMode);
           setFuturesStatusFilter(applied.futuresStatusFilter as 'All' | 'OPEN' | 'CLOSED' | 'LIQUIDATED');
         }}
+        typeCounts={typeCounts}
+        resultCount={filteredAndSortedInvestments.length}
       />
-      
-      <div className="mt-2 hidden md:block -mx-4 px-4">
+
+      <div className="mt-3 hidden md:block">
         {advancedFilters}
       </div>
 
@@ -916,8 +998,8 @@ function DashboardPageContent() {
               </Card>
             )
           ) : filteredAndSortedInvestments.length > 0 ? (
-          <div className="space-y-4">
-            {filteredAndSortedInvestments.map(investment => {
+          <div className="space-y-3">
+            {filteredAndSortedInvestments.map((investment, index) => {
               const metrics = investmentMetrics.get(investment.id);
               const txs = transactionsMap[investment.id] ?? [];
               const lastSoldOn = txs
@@ -926,9 +1008,9 @@ function DashboardPageContent() {
                 .at(-1)?.date ?? null;
 
               return (
-                <InvestmentCard 
-                  key={investment.id} 
-                  investment={investment} 
+                <div key={investment.id} className={cn('animate-enter', `delay-${(index % 5) + 1}`)}>
+                <InvestmentCard
+                  investment={investment}
                   metrics={metrics}
                   isTaxView={isTaxView}
                   onEdit={() => handleEditClick(investment)}
@@ -944,29 +1026,22 @@ function DashboardPageContent() {
                   taxSummary={summaryData.taxSummary}
                   soldOn={lastSoldOn}
                 />
+                </div>
               )
             })}
           </div>
         ) : (
-          <div className="text-center py-16">
-            <h3 className="text-xl font-semibold text-foreground">No Investments Found</h3>
-            <p className="text-muted-foreground mt-2">
-               {isTaxView ? "No sold positions match the current filters." : "Add a new investment to get started."}
-            </p>
-            <div className="mt-4 flex items-center justify-center gap-3">
-              <Button onClick={() => handleAddClick(typeFilter !== 'All' && typeFilter !== 'Futures' ? typeFilter : undefined)}>
-                <PlusCircle className="mr-2 h-4 w-4" />
-                Add First Investment
-              </Button>
-            </div>
-          </div>
+          emptyState
         )}
-         <button
+        <button
+          type="button"
           onClick={() => handleAddClick(typeFilter !== 'All' && typeFilter !== 'Futures' ? typeFilter : undefined)}
-          className="md:hidden fixed right-4 z-50 rounded-full bg-primary text-primary-foreground shadow-lg px-5 py-3 font-medium"
-          style={{ bottom: "calc(72px + env(safe-area-inset-bottom) + 8px)" }}
+          className="md:hidden fixed right-4 z-50 inline-flex h-[52px] items-center gap-2 rounded-full bg-gradient-to-b from-[#63dbb3] to-[#3fc396] pl-4 pr-5 text-[14px] font-extrabold text-primary-foreground shadow-[0_0_0_1px_hsl(var(--primary)/.4),0_10px_30px_hsl(var(--primary)/.35),inset_0_1px_0_rgba(255,255,255,.35)] transition active:scale-[.98]"
+          style={{ bottom: "calc(78px + env(safe-area-inset-bottom) + 12px)" }}
+          aria-label="Add investment"
         >
-          Add Investment
+          <Plus size={18} />
+          Add
         </button>
     </>
   );
@@ -989,19 +1064,24 @@ function DashboardPageContent() {
         onViewTaxEstimate={handleOpenTaxEstimate}
         isTaxView={isTaxView}
         onToggleTaxView={handleToggleTaxView}
+        sellYears={sellYears}
+        yearFilter={yearFilter}
+        onYearFilterChange={setYearFilterHoldingsSafe}
       >
-        <div className="mx-auto w-full px-4 sm:px-6 overflow-x-hidden">
+        <div className="mx-auto w-full px-4 sm:px-6">
           {section === "summary" ? (
-            <PortfolioSummary 
-              ref={summaryRef}
-              summaryData={summaryData}
-              sellYears={sellYears} 
-              isTaxView={isTaxView}
-              taxSettings={taxSettings}
-              yearFilter={yearFilter}
-              onYearFilterChange={setYearFilterHoldingsSafe}
-              userId={user?.uid}
-            />
+            <div className="pt-4">
+              <PortfolioSummary
+                ref={summaryRef}
+                summaryData={summaryData}
+                sellYears={sellYears}
+                isTaxView={isTaxView}
+                taxSettings={taxSettings}
+                yearFilter={yearFilter}
+                onYearFilterChange={setYearFilterHoldingsSafe}
+                userId={user?.uid}
+              />
+            </div>
           ) : (
             investmentsView
           )}
@@ -1010,101 +1090,52 @@ function DashboardPageContent() {
   );
 
   const desktopView = (
-      <div className="min-h-[100svh] w-full bg-background overflow-x-hidden">
-        <DashboardHeader 
-            isTaxView={isTaxView} 
+      <div className="relative z-[1] min-h-[100svh] w-full">
+        <DashboardHeader
+            isTaxView={isTaxView}
             onTaxViewChange={setIsTaxView}
             onTaxSettingsClick={() => setIsTaxSettingsOpen(true)}
             canToggleTaxReport={canToggleTaxReport}
-            selectedYear={selectedYear}
-            onViewTaxEstimate={() => summaryRef.current?.openEstimate()}
             toggleDisabledReason={toggleDisabledReason}
-            canOpenEstimate={canOpenEstimate}
-            estimateDisabledReason={estimateDisabledReason}
+            sellYears={sellYears}
+            yearFilter={yearFilter}
+            onYearFilterChange={setYearFilterHoldingsSafe}
         />
-        <main className="p-4 sm:p-6 lg:p-8">
-          <PortfolioSummary 
+        <main className="mx-auto flex max-w-[1376px] flex-col gap-5 px-4 py-7 sm:px-6 lg:px-8">
+          <PortfolioSummary
             ref={summaryRef}
             summaryData={summaryData}
-            sellYears={sellYears} 
+            sellYears={sellYears}
             isTaxView={isTaxView}
             taxSettings={taxSettings}
             yearFilter={yearFilter}
             onYearFilterChange={setYearFilterHoldingsSafe}
             userId={user?.uid}
           />
-          <div className="mt-8 mb-8 p-4 bg-card/50 rounded-lg shadow-sm">
-            <div className="flex flex-col sm:flex-row items-center gap-4">
-              <div className="flex items-center gap-2">
-                <SlidersHorizontal className="h-5 w-5 text-muted-foreground"/>
-                <h2 className="text-lg font-semibold">Filters &amp; Sorting</h2>
-              </div>
-              <div className="flex items-center gap-2 ml-4">
-                <div className="rounded-md border p-1">
-                  <button
-                    className={`px-3 py-1 rounded ${viewMode === 'grid' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'} ${isFuturesView ? 'opacity-50 cursor-not-allowed' : ''}`}
-                    onClick={() => setModeSafely('grid')}
-                    disabled={isFuturesView}
-                    aria-disabled={isFuturesView}
-                  >
-                    Cards
-                  </button>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <span>
-                          <button
-                            className={`px-3 py-1 rounded ${viewMode === 'list' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                            onClick={() => setModeSafely('list')}
-                            disabled={isTaxView}
-                            aria-disabled={isTaxView}
-                          >
-                            List
-                          </button>
-                        </span>
-                      </TooltipTrigger>
-                      {isTaxView && (
-                        <TooltipContent>Turn off German Tax Report to use List view.</TooltipContent>
-                      )}
-                      {isFuturesView && (
-                        <TooltipContent>Futures trades require List view (already active).</TooltipContent>
-                      )}
-                    </Tooltip>
-                  </TooltipProvider>
-                </div>
 
-                {viewMode === 'list' && !isFuturesView && (
-                  <div className="rounded-md border p-1">
-                    <button
-                      className={`px-3 py-1 rounded ${listMode === 'aggregated' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                      onClick={() => setListMode('aggregated')}
-                    >
-                      Aggregated
-                    </button>
-                    <button
-                      className={`px-3 py-1 rounded ${listMode === 'flat' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
-                      onClick={() => setListMode('flat')}
-                    >
-                      Flat
-                    </button>
-                  </div>
-                )}
-              </div>
-              <div className="flex-grow" />
-              <div className="flex items-center gap-4 w-full sm:w-auto">
-                 <Button onClick={handleRefreshPrices} disabled={isRefreshing}>
-                  {isRefreshing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
-                  Refresh Prices
+          {/* Investments section header + filter rail */}
+          <section className="animate-enter delay-3 flex flex-col gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="font-headline text-[22px] font-bold tracking-tight">
+                Investments
+                <span className="ml-1.5 font-mono text-[13px] font-medium text-muted-foreground">
+                  {filteredAndSortedInvestments.length} positions
+                </span>
+              </h2>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" onClick={handleRefreshPrices} disabled={isRefreshing}>
+                  {isRefreshing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                  Refresh prices
                 </Button>
-                 <Button onClick={() => handleAddClick(typeFilter !== 'All' && typeFilter !== 'Futures' ? typeFilter : undefined)}>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Add Investment
+                <Button onClick={() => handleAddClick(typeFilter !== 'All' && typeFilter !== 'Futures' ? typeFilter : undefined)}>
+                  <Plus size={16} />
+                  Add investment
                 </Button>
               </div>
             </div>
             {advancedFilters}
-          </div>
-          
+          </section>
+
           {initialLoading ? (
              <div className="flex justify-center items-center py-16">
               <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -1149,8 +1180,8 @@ function DashboardPageContent() {
                 </Card>
               )
             ) : filteredAndSortedInvestments.length > 0 ? (
-            <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6">
-              {filteredAndSortedInvestments.map(investment => {
+            <div className="grid grid-cols-1 gap-3.5 lg:grid-cols-2 2xl:grid-cols-3">
+              {filteredAndSortedInvestments.map((investment, index) => {
                 const metrics = investmentMetrics.get(investment.id);
                 const txs = transactionsMap[investment.id] ?? [];
                 const lastSoldOn = txs
@@ -1159,9 +1190,9 @@ function DashboardPageContent() {
                   .at(-1)?.date ?? null;
 
                 return (
-                  <InvestmentCard 
-                    key={investment.id} 
-                    investment={investment} 
+                  <div key={investment.id} className={cn('animate-enter', `delay-${(index % 5) + 1}`)}>
+                  <InvestmentCard
+                    investment={investment}
                     metrics={metrics}
                     isTaxView={isTaxView}
                     onEdit={() => handleEditClick(investment)}
@@ -1177,22 +1208,12 @@ function DashboardPageContent() {
                     taxSummary={summaryData.taxSummary}
                     soldOn={lastSoldOn}
                   />
+                  </div>
                 )
               })}
             </div>
           ) : (
-            <div className="text-center py-16">
-              <h3 className="text-xl font-semibold text-foreground">No Investments Found</h3>
-              <p className="text-muted-foreground mt-2">
-                 {isTaxView ? "No sold positions match the current filters." : "Add a new investment to get started."}
-              </p>
-              <div className="mt-4 flex items-center justify-center gap-3">
-                <Button onClick={() => handleAddClick(typeFilter !== 'All' && typeFilter !== 'Futures' ? typeFilter : undefined)}>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Add First Investment
-                </Button>
-              </div>
-            </div>
+            emptyState
           )}
         </main>
       </div>

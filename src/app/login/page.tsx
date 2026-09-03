@@ -1,48 +1,68 @@
 "use client";
 
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { GoogleIcon } from '@/components/icons';
-import { ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/hooks/use-auth';
 
+function LogoMark({ size = 64 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      aria-hidden
+      className="drop-shadow-[0_0_28px_hsl(var(--primary)/.35)]"
+    >
+      <path d="M12 2 22 12 12 22 2 12Z" stroke="hsl(var(--primary))" strokeWidth="1.2" />
+      <path d="M12 7 17 12 12 17 7 12Z" fill="hsl(var(--primary))" />
+    </svg>
+  );
+}
+
 export default function LoginPage() {
-  const { signInWithGoogle, user, loading } = useAuth();
+  const { signInWithGoogle, loading } = useAuth();
 
   if (loading) {
     return (
-       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 animate-pulse">
-                <ShieldCheck className="h-8 w-8 text-primary" />
-            </div>
-            <p className="text-muted-foreground">Loading...</p>
+      <div className="relative z-[1] flex min-h-[100svh] flex-col items-center justify-center gap-4 p-4">
+        <div className="animate-pulse">
+          <LogoMark />
         </div>
-    )
+        <p className="eyebrow">Loading</p>
+      </div>
+    );
   }
-  
+
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-      <Card className="w-full max-w-md shadow-2xl">
-        <CardHeader className="text-center">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-            <ShieldCheck className="h-8 w-8 text-primary" />
+    <div className="relative z-[1] flex min-h-[100svh] flex-col items-center justify-center p-4">
+      <div className="glass-strong animate-enter w-full max-w-md overflow-hidden p-7 text-center sm:p-9">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -right-16 -top-20 h-64 w-64 rounded-full bg-[radial-gradient(circle,hsl(var(--primary)/.18),transparent_62%)]"
+        />
+        <div className="relative flex flex-col items-center gap-5">
+          <LogoMark />
+          <div className="space-y-1.5">
+            <h1 className="font-headline text-[28px] font-bold leading-tight tracking-tight">
+              DDS Investment
+            </h1>
+            <p className="text-[13px] text-muted-foreground">
+              Secure sign-in for your portfolio
+            </p>
           </div>
-          <CardTitle className="font-headline text-3xl">DDS Investment Tracker</CardTitle>
-          <CardDescription>Secure sign-in for your portfolio</CardDescription>
-        </CardHeader>
-        <CardContent>
+
           <Button className="w-full" size="lg" onClick={signInWithGoogle}>
-            <GoogleIcon className="mr-2 h-5 w-5" />
+            <GoogleIcon className="h-5 w-5" />
             Sign in with Google
           </Button>
-        </CardContent>
-        <CardFooter>
-          <p className="text-center text-xs text-muted-foreground">
+
+          <p className="max-w-sm text-[12px] leading-relaxed text-muted-foreground">
             Your data is protected according to German data protection standards.
             We ensure the privacy and security of your financial information.
           </p>
-        </CardFooter>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

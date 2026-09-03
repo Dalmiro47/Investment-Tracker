@@ -5,10 +5,26 @@ import { AuthProvider } from '@/hooks/use-auth';
 import OfflineToast from '@/components/OfflineToast';
 import { MobileOrientationShell } from '@/components/shell/MobileOrientationShell';
 import './globals.css';
-import { PT_Sans, Space_Grotesk } from 'next/font/google';
+import { Bricolage_Grotesque, Manrope, JetBrains_Mono } from 'next/font/google';
 
-const ptSans = PT_Sans({ subsets: ['latin'], weight: ['400','700'], style: ['normal','italic'], variable: '--font-pt-sans' });
-const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], weight: ['300','400','500','600','700'], variable: '--font-space-grotesk' });
+const bricolageGrotesque = Bricolage_Grotesque({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-display',
+  display: 'swap',
+});
+const manrope = Manrope({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700', '800'],
+  variable: '--font-body',
+  display: 'swap',
+});
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500', '600', '700'],
+  variable: '--font-mono',
+  display: 'swap',
+});
 
 export const metadata: Metadata = {
   title: 'DDS Investment Tracker',
@@ -31,8 +47,8 @@ export const viewport: Viewport = {
   userScalable: false,
   viewportFit: "cover",
   themeColor: [
-    { media: "(prefers-color-scheme: light)", color: "#0B1220" },
-    { media: "(prefers-color-scheme: dark)",  color: "#0B1220" },
+    { media: "(prefers-color-scheme: light)", color: "#0c0f12" },
+    { media: "(prefers-color-scheme: dark)",  color: "#0c0f12" },
   ],
 };
 
@@ -42,7 +58,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${ptSans.variable} ${spaceGrotesk.variable} dark h-full`}>
+    <html lang="en" className={`${bricolageGrotesque.variable} ${manrope.variable} ${jetbrainsMono.variable} dark h-full`}>
       <head>
         {/* iOS PWA friendliness */}
         <meta name="apple-mobile-web-app-capable" content="yes" />

@@ -3,10 +3,9 @@
 
 import { useState, useRef, useEffect } from 'react';
 import type { Investment, TaxSettings } from '@/lib/types';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Separator } from '@/components/ui/separator';
-import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Wallet, Briefcase, MoreVertical, Trash2, Edit, History, PlusCircle, Info, PiggyBank } from 'lucide-react';
+import { Bitcoin, CandlestickChart, Home, Landmark, TrendingDown, TrendingUp, Briefcase, MoreVertical, Trash2, Edit, History, PlusCircle, Info, PiggyBank } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { dec, toNum, formatCurrency, formatQty, formatPercent, div, mul, sub, add } from '@/lib/money';
@@ -44,22 +43,72 @@ interface InvestmentCardProps {
 }
 
 const typeIcons: Record<Investment['type'], React.ReactNode> = {
-  Stock: <CandlestickChart className="h-6 w-6" />,
-  Bond: <Landmark className="h-6 w-6" />,
-  Crypto: <Bitcoin className="h-6 w-6" />,
-  Future: <CandlestickChart className="h-6 w-6" />,
-  'Real Estate': <Home className="h-6 w-6" />,
-  ETF: <Briefcase className="h-6 w-6" />,
-  'Interest Account': <PiggyBank className="h-6 w-6" />,
+  Stock: <CandlestickChart className="h-5 w-5" />,
+  Bond: <Landmark className="h-5 w-5" />,
+  Crypto: <Bitcoin className="h-5 w-5" />,
+  Future: <CandlestickChart className="h-5 w-5" />,
+  'Real Estate': <Home className="h-5 w-5" />,
+  ETF: <Briefcase className="h-5 w-5" />,
+  'Interest Account': <PiggyBank className="h-5 w-5" />,
 };
 
-export default function InvestmentCard({ 
-  investment, 
+/** Small label/value tile — the card's `stat` vocabulary. */
+function Stat({ label, value, trend }: { label: string; value: string; trend?: 'up' | 'down' }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1 rounded-[10px] border border-border bg-black/[.28] p-3">
+      <span className="text-[11px] font-semibold uppercase tracking-[.04em] text-muted-foreground">
+        {label}
+      </span>
+      <span
+        className={cn(
+          'truncate font-mono text-[15px] font-semibold tabular-nums',
+          trend === 'up' && 'gain',
+          trend === 'down' && 'loss'
+        )}
+      >
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/** Inline label/value pair (no box) for the dense quantity / price rows. */
+function Mini({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[11px] font-semibold uppercase tracking-[.04em] text-muted-foreground">
+        {label}
+      </div>
+      <div className="truncate font-mono text-[13px] font-semibold tabular-nums">{value}</div>
+    </div>
+  );
+}
+
+/** Rounded perf chip used in the card footer. */
+function PerfChip({ pct }: { pct: number }) {
+  const up = pct >= 0;
+  return (
+    <span
+      className={cn(
+        'inline-flex h-[26px] shrink-0 items-center gap-1.5 rounded-full border px-2.5 text-[12px] font-bold',
+        up
+          ? 'border-success/30 bg-success/[.12] text-success'
+          : 'border-destructive/30 bg-destructive/[.12] text-destructive'
+      )}
+    >
+      {up ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
+      <span className="font-mono tabular-nums">{formatPercent(pct)}</span>
+    </span>
+  );
+}
+
+export default function InvestmentCard({
+  investment,
   metrics,
-  isTaxView, 
-  onEdit, 
-  onDelete, 
-  onViewHistory, 
+  isTaxView,
+  onEdit,
+  onDelete,
+  onViewHistory,
   onAddTransaction,
   taxSettings,
   taxSummary,
@@ -84,10 +133,10 @@ export default function InvestmentCard({
       const t = setTimeout(() => { debugRenderCount.current = 0; }, 500);
       return () => clearTimeout(t);
   });
-  
+
   const { name, type, status, ticker, purchaseDate, realizedPnL, exchange } = investment;
   const [isInfoOpen, setIsInfoOpen] = useState(false);
-  
+
   const isIA = investment.type === 'Interest Account';
   const isETF = investment.type === 'ETF';
 
@@ -96,10 +145,10 @@ export default function InvestmentCard({
   const currentPrice = dec(investment.currentValue);
   const purchaseQty = dec(investment.purchaseQuantity);
   const soldQty = dec(investment.totalSoldQty);
-  
+
   const availableQty = sub(purchaseQty, soldQty).round(8);
   const costBasisNonIA = mul(availableQty, purchasePrice);
-  
+
   // NEW: Calculate the cost basis of the sold portion
   const soldCostBasis = mul(soldQty, purchasePrice);
 
@@ -107,17 +156,17 @@ export default function InvestmentCard({
 
   const unrealizedPLNonIA = sub(marketValueNonIA, costBasisNonIA);
   const totalPLNonIA = add(unrealizedPLNonIA, dec(realizedPnL));
-  
+
   const performanceNonIA = div(totalPLNonIA, mul(purchaseQty, purchasePrice));
 
   const avgSellPrice = div(dec(investment.realizedProceeds), soldQty);
-  
+
   // --- IA values come from metrics ----
   const netDeposits  = metrics?.purchaseValue  ?? 0;
   const balance      = metrics?.marketValue    ?? 0;
   const accrued      = metrics?.unrealizedPL   ?? 0;
   const perf         = metrics?.performancePct ?? 0;
-  
+
   // --- Display-ready values (rounded) ---
   const displayCostBasis = toNum(costBasisNonIA);
   const displaySoldCostBasis = toNum(soldCostBasis); // NEW
@@ -131,9 +180,9 @@ export default function InvestmentCard({
 
   const isCrypto = investment.type === 'Crypto';
   const cryptoTax = isCrypto ? getCryptoTaxInfo(investment) : null;
-  
+
   const totalTaxable = realizedPLYear + dividendsYear + interestYear;
-  
+
   // ---- Capital income (stocks/ETFs/bonds/interest) allowance-aware estimate ----
   const isCapitalAsset =
     investment.type === 'Stock' ||
@@ -170,96 +219,108 @@ export default function InvestmentCard({
       }
   }
 
-  const Stat = ({ label, value, trend }: { label: string, value: string, trend?: 'up' | 'down' }) => (
-    <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md text-center">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <span className={cn("font-headline text-xl font-bold flex items-center gap-1", trend === 'up' ? 'text-green-600' : trend === 'down' ? 'text-destructive' : '')}>
-        {trend === 'up' && <TrendingUp className="h-5 w-5" />}
-        {trend === 'down' && <TrendingDown className="h-5 w-5" />}
-        {value}
-      </span>
-    </div>
-  );
+  const isSold = status === 'Sold';
 
+  // Sub-line: "{type} · {ticker} · {rate} · {exchange}"
+  const subParts = [
+    type,
+    ticker || null,
+    isIA && typeof currentRatePct === 'number' ? `${currentRatePct.toFixed(2)}% p.a.` : null,
+    exchange || null,
+  ].filter(Boolean) as string[];
+
+  // Footer left-hand summary: "qty × price"
+  const qtyPriceLabel = isIA
+    ? null
+    : isSold
+      ? `${formatQty(soldQty)} × ${!soldQty.eq(0) ? formatCurrency(displayAvgSellPrice) : formatCurrency(investment.purchasePricePerUnit)}`
+      : `${formatQty(availableQty)} × ${formatCurrency(investment.currentValue ?? 0)}`;
+
+  const footerPL = isIA ? accrued : displayTotalPL;
 
   return (
     <>
-    <Card className="flex flex-col transition-all hover:shadow-lg hover:-translate-y-1">
-      <CardHeader>
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3">
-            <span className="p-2 bg-secondary rounded-md text-primary">{typeIcons[type]}</span>
-            <div>
-              <CardTitle className="font-headline text-xl">{name}</CardTitle>
-              <CardDescription className="font-medium text-primary">
-                {type} {ticker ? `(${ticker})` : ""}
-                {isIA && typeof currentRatePct === "number" ? ` • ${currentRatePct.toFixed(2)}%` : ""}
-                {exchange && ` • ${exchange}`}
-              </CardDescription>
+    <Card className="flex flex-col gap-3.5 p-[18px] transition-all hover:-translate-y-0.5 hover:border-white/[.12]">
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-[11px] border border-primary/20 bg-primary/10 text-primary">
+            {typeIcons[type]}
+          </span>
+          <div className="min-w-0">
+            <div className="truncate font-headline text-[17px] font-bold leading-tight tracking-tight">
+              {name}
             </div>
-          </div>
-           <div className="flex items-center gap-1">
-            <Badge variant={status === 'Active' ? 'default' : 'secondary'} className={cn(status === 'Active' && 'bg-green-600 text-white')}>{status}</Badge>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsInfoOpen(true)}>
-                <Info className="h-4 w-4" />
-            </Button>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                 <DropdownMenuItem onClick={onAddTransaction}>
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Add Transaction
-                </DropdownMenuItem>
-                 <DropdownMenuItem onClick={onViewHistory}>
-                  <History className="mr-2 h-4 w-4" />
-                  View History
-                </DropdownMenuItem>
-                {isIA && onManageRates && (
-                  <DropdownMenuItem onClick={onManageRates}>
-                    <History className="mr-2 h-4 w-4" />
-                    Manage Rates
-                  </DropdownMenuItem>
-                )}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={onEdit}>
-                  <Edit className="mr-2 h-4 w-4" />
-                  Edit Investment
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
-                  <Trash2 className="mr-2 h-4 w-4" />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="mt-0.5 truncate text-[12px] text-muted-foreground">
+              {subParts.join(' · ')}
+            </div>
           </div>
         </div>
-      </CardHeader>
-      <CardContent className="flex-grow space-y-4">
+        <div className="flex shrink-0 items-center gap-1.5">
+          {isCrypto && cryptoTax?.isEligibleNow && (
+            <Badge variant="warning">Tax-free</Badge>
+          )}
+          <Badge variant={status === 'Active' ? 'success' : 'secondary'}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current shadow-[0_0_8px_currentColor]" />
+            {status}
+          </Badge>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setIsInfoOpen(true)}>
+              <Info className="h-4 w-4" />
+          </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+               <DropdownMenuItem onClick={onAddTransaction}>
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add Transaction
+              </DropdownMenuItem>
+               <DropdownMenuItem onClick={onViewHistory}>
+                <History className="mr-2 h-4 w-4" />
+                View History
+              </DropdownMenuItem>
+              {isIA && onManageRates && (
+                <DropdownMenuItem onClick={onManageRates}>
+                  <History className="mr-2 h-4 w-4" />
+                  Manage Rates
+                </DropdownMenuItem>
+              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={onEdit}>
+                <Edit className="mr-2 h-4 w-4" />
+                Edit Investment
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={onDelete} className="text-destructive focus:text-destructive">
+                <Trash2 className="mr-2 h-4 w-4" />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {/* ── Body ── */}
+      <div className="flex-grow">
         {isTaxView ? (
-          <div className="space-y-3 rounded-md border p-4">
-            <h4 className="font-semibold text-center text-muted-foreground">Tax Report View</h4>
-            <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Realized P/L (Year)</span>
-              <span className="font-mono font-semibold">{formatCurrency(realizedPLYear)}</span>
+          <div className="space-y-3">
+            <span className="eyebrow">Tax report view</span>
+            <div className="grid grid-cols-2 gap-2">
+              <Stat label="Realized P/L (Year)" value={formatCurrency(realizedPLYear)} />
+              <Stat label="Dividends / Interest" value={formatCurrency(dividendsYear + interestYear)} />
             </div>
-             <div className="flex justify-between items-center">
-              <span className="text-muted-foreground">Dividends/Interest (Year)</span>
-              <span className="font-mono font-semibold">{formatCurrency(dividendsYear + interestYear)}</span>
-            </div>
-             <div className="flex justify-between items-center text-foreground font-bold border-t pt-2 mt-1">
-              <span className="">Total Taxable Income (Year)</span>
-              <span className="font-mono">{formatCurrency(totalTaxable)}</span>
+            <div className="flex items-center justify-between border-t border-border pt-2.5 text-[13px] font-semibold text-foreground">
+              <span>Total Taxable Income (Year)</span>
+              <span className="font-mono tabular-nums">{formatCurrency(totalTaxable)}</span>
             </div>
             {taxSettings && (
-              <div className="flex justify-between items-center text-primary font-bold border-t pt-2 mt-1">
+              <div className="flex items-center justify-between border-t border-border pt-2.5 text-[13px] font-semibold text-warning">
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <span className="flex items-center gap-1.5 cursor-help">
+                        <span className="flex cursor-help items-center gap-1.5">
                           Estimated Tax Due (This Asset)
                           <Info className="h-3.5 w-3.5" />
                         </span>
@@ -279,7 +340,7 @@ export default function InvestmentCard({
                               <span className="font-medium">Taxable Base</span>
                               <span className="font-mono">{formatCurrency(expl.taxableBase)}</span>
                             </div>
-                            <div className="border-t my-1" />
+                            <div className="my-1 border-t border-border" />
                             <div className="flex justify-between text-xs">
                               <span>Base Tax ({formatPercent(TAX.abgeltungsteuer)})</span>
                               <span className="font-mono">{formatCurrency(expl.baseTax)}</span>
@@ -292,140 +353,130 @@ export default function InvestmentCard({
                               <span>Church Tax ({taxSettings?.churchTaxRate ? formatPercent(taxSettings.churchTaxRate) : '0%'})</span>
                               <span className="font-mono">{formatCurrency(expl.church)}</span>
                             </div>
-                            <div className="border-t my-1" />
+                            <div className="my-1 border-t border-border" />
                             <div className="flex justify-between font-semibold">
                               <span>Estimated Tax (this asset)</span>
                               <span className="font-mono">{formatCurrency(allowanceAwareTaxDue)}</span>
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1 pt-1 border-t">
+                            <p className="mt-1 border-t border-border pt-1 text-xs text-muted-foreground">
                               Uses your remaining annual capital gains allowance before applying taxes. Final tax depends on your full-year totals.
                             </p>
                           </div>
                         ) : isCrypto ? (
-                            <div className="font-normal text-sm space-y-1">
-                                <p className="font-semibold text-green-500">Crypto tax is based on personal income rate.</p>
+                            <div className="space-y-1 text-sm font-normal">
+                                <p className="font-semibold text-success">Crypto tax is based on personal income rate.</p>
                                 <p>This estimate uses the global setting. See the main Tax Estimate dialog for a full breakdown.</p>
                             </div>
                         ) : null}
                       </TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
-                <span className="font-mono">{formatCurrency(estimatedTaxForCard)}</span>
+                <span className="font-mono tabular-nums">{formatCurrency(estimatedTaxForCard)}</span>
               </div>
             )}
           </div>
         ) : isIA ? (
-           <div className="grid grid-cols-2 gap-3">
+           <div className="grid grid-cols-2 gap-2">
             <Stat label="Net Deposits" value={formatCurrency(netDeposits)} />
             <Stat label="Balance" value={formatCurrency(balance)} />
             <Stat label="Accrued Interest" value={formatCurrency(accrued)} trend={accrued >= 0 ? 'up' : 'down'} />
             <Stat label="Performance" value={formatPercent(perf)} />
           </div>
         ) : (
-          <div className="space-y-4">
-             <div className="grid grid-cols-2 gap-2">
-                <div className="flex flex-col items-center justify-center p-3 bg-secondary/50 rounded-md">
-                    {/* UPDATED LOGIC HERE */}
-                    <span className="text-xs text-muted-foreground">
-                      {status === 'Sold' ? 'Original Cost' : 'Cost Basis'}
-                    </span>
-                    <span className="font-headline text-xl font-bold">
-                      {formatCurrency(status === 'Sold' ? displaySoldCostBasis : displayCostBasis)}
-                    </span>
-                </div>
-                 <div className="flex flex-col items-center justify-center p-3 bg-primary/10 rounded-md">
-                    <span className="text-xs text-muted-foreground">{status === 'Sold' ? 'Realized Value' : 'Market Value'}</span>
-                    <span className="font-headline text-xl font-bold text-primary">{formatCurrency(status === 'Sold' ? displayRealizedValue : displayMarketValue)}</span>
-                </div>
+          <div className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <Stat
+                label={isSold ? 'Original Cost' : 'Cost Basis'}
+                value={formatCurrency(isSold ? displaySoldCostBasis : displayCostBasis)}
+              />
+              <Stat
+                label={isSold ? 'Proceeds' : 'Market Value'}
+                value={formatCurrency(isSold ? displayRealizedValue : displayMarketValue)}
+              />
             </div>
 
-            <div className="text-sm border-t border-b py-2">
-                 <div className="grid grid-cols-3 gap-x-4 text-center">
-                    <div>
-                        <p className="text-muted-foreground">Bought</p>
-                        <p className="font-mono font-semibold">{formatQty(purchaseQty)}</p>
-                    </div>
-                     <div>
-                        <p className="text-muted-foreground">Sold</p>
-                        <p className="font-mono font-semibold">{formatQty(soldQty)}</p>
-                    </div>
-                     <div>
-                        <p className="text-muted-foreground">Available</p>
-                        <p className="font-mono font-semibold">{formatQty(availableQty)}</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div className="grid grid-cols-3 gap-x-4 gap-y-2 text-sm text-center">
-                <div className="space-y-1">
-                    <p className="text-muted-foreground">Buy Price</p>
-                    <p className="font-mono font-semibold">{formatCurrency(investment.purchasePricePerUnit)}</p>
-                </div>
-                <div className="space-y-1">
-                    <p className="text-muted-foreground">Avg. Sell Price</p>
-                    <p className="font-mono font-semibold">{!soldQty.eq(0) ? formatCurrency(displayAvgSellPrice) : 'N/A'}</p>
-                </div>
-                {status !== 'Sold' && (
-                  <div className="space-y-1">
-                      <p className="text-muted-foreground">Current Price</p>
-                      <p className="font-mono font-semibold">{formatCurrency(investment.currentValue ?? 0)}</p>
-                  </div>
-                )}
-            </div>
-            
-            <Separator />
-
-            <div className="grid grid-cols-2 gap-4">
-               <div className="text-center">
-                  <div className="text-sm text-muted-foreground">Unrealized P/L</div>
-                  <div className={cn("flex items-center justify-center font-bold text-lg", displayUnrealizedPL >= 0 ? "text-green-600" : "text-destructive")}>
-                    {displayUnrealizedPL >= 0 ? <TrendingUp className="h-5 w-5 mr-1" /> : <TrendingDown className="h-5 w-5 mr-1" />}
-                    {formatCurrency(displayUnrealizedPL)}
-                  </div>
-              </div>
-               <div className="text-center">
-                  <div className="text-sm text-muted-foreground">Realized P/L</div>
-                  <div className={cn("font-bold text-lg", displayRealizedPL >= 0 ? "text-green-600" : "text-destructive")}>{formatCurrency(displayRealizedPL)}</div>
-              </div>
+            <div className="grid grid-cols-3 gap-x-3 border-y border-border py-2.5">
+              <Mini label="Bought" value={formatQty(purchaseQty)} />
+              <Mini label="Sold" value={formatQty(soldQty)} />
+              <Mini label="Available" value={formatQty(availableQty)} />
             </div>
 
-             <div className="text-center pt-2">
-                <div className="text-sm text-muted-foreground">Total P/L (Performance)</div>
-                <div className={cn("flex items-center justify-center font-bold text-xl", displayTotalPL >= 0 ? "text-green-600" : "text-destructive")}>
-                  {formatCurrency(displayTotalPL)} ({formatPercent(performance)})
-                </div>
-              </div>
-          </div>
-        )}
-      </CardContent>
-      <CardFooter className="flex-col items-start text-xs text-muted-foreground pt-4">
-          {purchaseDate && (
-            <div>
-                {isIA ? 'Started on ' : 'Purchased on '}{format(parseISO(purchaseDate), 'dd MMM yyyy')}
-            </div>
-          )}
-          {status === 'Sold' && soldOn && (
-            <div className="mt-1">
-              Sold on {format(parseISO(soldOn), 'dd MMM yyyy')}
-            </div>
-          )}
-          {isCrypto && cryptoTax?.taxFreeDate && (
-            <div className="mt-1 flex items-center gap-2">
-              {cryptoTax.isEligibleNow ? (
-                <span className="text-green-600 font-medium">
-                  ✓ Tax-free eligible now (since {format(cryptoTax.taxFreeDate, 'dd MMM yyyy')})
-                </span>
-              ) : (
-                <span className="text-muted-foreground">
-                  Can be sold without taxes from {format(cryptoTax.taxFreeDate, 'dd MMM yyyy')}
-                  {typeof cryptoTax.daysUntilEligible === 'number' &&
-                    cryptoTax.daysUntilEligible > 0 &&
-                    ` (in ${cryptoTax.daysUntilEligible} days)`}
-                </span>
+            <div className="grid grid-cols-3 gap-x-3">
+              <Mini label="Buy Price" value={formatCurrency(investment.purchasePricePerUnit)} />
+              <Mini
+                label="Avg. Sell"
+                value={!soldQty.eq(0) ? formatCurrency(displayAvgSellPrice) : 'N/A'}
+              />
+              {!isSold && (
+                <Mini label="Current" value={formatCurrency(investment.currentValue ?? 0)} />
               )}
             </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <Stat
+                label="Unrealized P/L"
+                value={formatCurrency(displayUnrealizedPL)}
+                trend={displayUnrealizedPL >= 0 ? 'up' : 'down'}
+              />
+              <Stat
+                label="Realized P/L"
+                value={formatCurrency(displayRealizedPL)}
+                trend={displayRealizedPL >= 0 ? 'up' : 'down'}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── Footer ── */}
+      <div className="flex flex-col gap-2 border-t border-border pt-3">
+        <div className="flex items-end justify-between gap-3">
+          <div className="min-w-0 text-[12px] text-muted-foreground">
+            {(qtyPriceLabel || purchaseDate) && (
+              <div className="truncate">
+                {qtyPriceLabel && (
+                  <span className="font-mono tabular-nums">{qtyPriceLabel}</span>
+                )}
+                {qtyPriceLabel && purchaseDate && ' · '}
+                {purchaseDate &&
+                  `${isIA ? 'Started' : 'Bought'} ${format(parseISO(purchaseDate), 'dd MMM yyyy')}`}
+              </div>
+            )}
+            {isSold && soldOn && (
+              <div className="truncate">Sold {format(parseISO(soldOn), 'dd MMM yyyy')}</div>
+            )}
+          </div>
+          {!isTaxView && (
+            <div className="flex shrink-0 items-center gap-2.5">
+              <span
+                className={cn(
+                  'font-mono text-[15px] font-bold tabular-nums',
+                  footerPL >= 0 ? 'gain' : 'loss'
+                )}
+              >
+                {formatCurrency(footerPL)}
+              </span>
+              <PerfChip pct={performance} />
+            </div>
           )}
-        </CardFooter>
+        </div>
+        {isCrypto && cryptoTax?.taxFreeDate && (
+          <div className="text-[12px]">
+            {cryptoTax.isEligibleNow ? (
+              <span className="font-medium text-success">
+                Tax-free eligible now (since {format(cryptoTax.taxFreeDate, 'dd MMM yyyy')})
+              </span>
+            ) : (
+              <span className="text-muted-foreground">
+                Can be sold without taxes from {format(cryptoTax.taxFreeDate, 'dd MMM yyyy')}
+                {typeof cryptoTax.daysUntilEligible === 'number' &&
+                  cryptoTax.daysUntilEligible > 0 &&
+                  ` (in ${cryptoTax.daysUntilEligible} days)`}
+              </span>
+            )}
+          </div>
+        )}
+      </div>
     </Card>
     {/* Info Dialog */}
     <Dialog open={isInfoOpen} onOpenChange={setIsInfoOpen}>

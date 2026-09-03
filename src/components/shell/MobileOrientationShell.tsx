@@ -19,11 +19,16 @@ export function MobileOrientationShell({ children }: MobileOrientationShellProps
 
   return (
     <div
-      className="relative w-full transition-opacity duration-150"
+      className="relative z-[1] w-full transition-opacity duration-150"
       style={{
         minHeight: stable ? "100dvh" : `${height}px`,
         opacity: stable ? 1 : 0.98,
-        overflowX: "hidden",
+        // `clip` (not `hidden`) so this wrapper does not become a scroll
+        // container — `overflow-x: hidden` forces `overflow-y: auto`, which
+        // silently disables every `position: sticky` descendant (header,
+        // filter rails). Horizontal overflow is still clipped here and on
+        // <body>. Stability values above are untouched.
+        overflowX: "clip",
       }}
     >
       {children}
