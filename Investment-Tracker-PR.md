@@ -2,14 +2,14 @@
 claude --dangerously-skip-permissions 
 
 ## Pull Request to Github 
-git switch -c chore/brain-sync-skill-gate-no-skills-clause
+git switch -c fix/frozen-bug
 
 ## Do ALL THE CHANGES 
 
 ## Pull Request to Github 
 git add -A 
-git commit -m "chore(brain-sync): handle no-skills-yet case in Step 0c gate" 
-git push -u origin chore/brain-sync-skill-gate-no-skills-clause
+git commit -m "fix: app getting frozen" 
+git push -u origin fix/frozen-bug
 
 ## Make local main match GitHub
 
@@ -24,5 +24,8 @@ git rev-parse HEAD
 git rev-parse origin/main 
  
 ## After merge, delete the branch
-git branch -D chore/brain-sync-skill-gate-no-skills-clause
+git branch -D fix/frozen-bug
  
+
+## To kill ports in use: 
+taskkill /PID 20704 /F

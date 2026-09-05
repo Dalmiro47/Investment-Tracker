@@ -16,7 +16,10 @@ const ToastViewport = React.forwardRef<
   <ToastPrimitives.Viewport
     ref={ref}
     className={cn(
-      "fixed top-0 z-[100] flex max-h-screen w-full flex-col-reverse p-4 sm:bottom-0 sm:right-0 sm:top-auto sm:flex-col md:max-w-[420px]",
+      // Mobile: stack below the fixed TopBar (56px + status-bar safe area) so a
+      // toast never covers the "DDS Investment" banner, the year select or the
+      // menu button. Desktop (md+, where the mobile shell is hidden): bottom-right.
+      "fixed top-[calc(56px_+_env(safe-area-inset-top)_+_8px)] z-[100] flex max-h-screen w-full flex-col-reverse p-4 md:bottom-0 md:right-0 md:top-auto md:max-w-[420px] md:flex-col",
       className
     )}
     {...props}
@@ -25,7 +28,7 @@ const ToastViewport = React.forwardRef<
 ToastViewport.displayName = ToastPrimitives.Viewport.displayName
 
 const toastVariants = cva(
-  "group pointer-events-auto relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-2xl border border-white/[.1] bg-popover p-4 pr-10 text-popover-foreground shadow-[inset_0_1px_0_rgba(255,255,255,.08),0_12px_40px_rgba(0,0,0,.45)] backdrop-blur-md transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:sm:slide-in-from-bottom-full",
+  "group pointer-events-auto relative flex w-full items-center justify-between gap-3 overflow-hidden rounded-2xl border border-white/[.1] bg-popover p-4 pr-10 text-popover-foreground shadow-[inset_0_1px_0_rgba(255,255,255,.08),0_12px_40px_rgba(0,0,0,.45)] backdrop-blur-md transition-all data-[swipe=cancel]:translate-x-0 data-[swipe=end]:translate-x-[var(--radix-toast-swipe-end-x)] data-[swipe=move]:translate-x-[var(--radix-toast-swipe-move-x)] data-[swipe=move]:transition-none data-[state=open]:animate-in data-[state=closed]:animate-out data-[swipe=end]:animate-out data-[state=closed]:fade-out-80 data-[state=closed]:slide-out-to-right-full data-[state=open]:slide-in-from-top-full data-[state=open]:md:slide-in-from-bottom-full",
   {
     variants: {
       variant: {

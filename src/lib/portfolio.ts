@@ -36,6 +36,7 @@ export interface PositionMetrics {
 
   // Display-centric metrics
   realizedPLDisplay: number; // P/L to show based on filter (all or year)
+  realizedProceedsDisplay: number; // sale proceeds for the same slice as realizedPLDisplay (0 in Holdings mode)
   totalPLDisplay: number; // unrealized + realizedPLDisplay
   performancePct: number; // totalPLDisplay / purchaseValue
   
@@ -64,7 +65,7 @@ export type AggregatedSymbolRow = {
   totalPL: number;
   performancePct: number;
 
-  economicValue: number; // marketValue + realizedPL (what donuts use)
+  economicValue: number; // marketValue + realized proceeds (what donuts / % of portfolio use)
   percentPortfolio?: number;
 };
 
@@ -81,7 +82,7 @@ export function calculatePositionMetrics(
     realizedPLAll: 0, realizedPLYear: 0, unrealizedPL: 0, shortTermCryptoGainYear: 0,
     capitalGainsYear: 0, dividendsYear: 0, interestYear: 0, futuresGainsYear: 0, futuresLossesYear: 0,
     realizedProceedsAll: 0, realizedProceedsYear: 0,
-    realizedPLDisplay: 0, totalPLDisplay: 0, performancePct: 0,
+    realizedPLDisplay: 0, realizedProceedsDisplay: 0, totalPLDisplay: 0, performancePct: 0,
     soldCostBasis: 0,
     type: inv.type,
   };
@@ -245,6 +246,12 @@ export function calculatePositionMetrics(
       }
   }
 
+  // Sale proceeds for the same slice; Holdings mode never counts sales.
+  let realizedProceedsDisplay = yearFilter.kind === 'year' ? realizedProceedsYear : realizedProceedsAll;
+  if (yearFilter.mode === 'holdings') {
+      realizedProceedsDisplay = dec(0);
+  }
+
   const totalPLDisplay = add(realizedPLDisplay, unrealizedPL);
   const performancePct = purchaseValue.gt(0) ? div(totalPLDisplay, purchaseValue) : dec(0);
 
@@ -269,6 +276,7 @@ export function calculatePositionMetrics(
       futuresGainsYear: toNum(futuresGainsYear),
       futuresLossesYear: toNum(futuresLossesYear),
     realizedPLDisplay: toNum(realizedPLDisplay),
+    realizedProceedsDisplay: toNum(realizedProceedsDisplay),
     totalPLDisplay: toNum(totalPLDisplay),
     performancePct: toNum(performancePct, 4),
     type: inv.type,
@@ -337,7 +345,8 @@ export function aggregateBySymbol(
     a.realizedPL += metrics.realizedPLDisplay;
     a.unrealizedPL += metrics.unrealizedPL;
     a.totalPL += metrics.totalPLDisplay;
-    a.economicValue += metrics.marketValue + metrics.realizedPLDisplay;
+    // Value the row delivered: what is still held + what was cashed out.
+    a.economicValue += metrics.marketValue + metrics.realizedProceedsDisplay;
 
     a.purchaseValue += metrics.purchaseValue;
   }
@@ -549,10 +558,15 @@ export function aggregateByType(
     }
 
     const totalPL = add(unrealizedPL, realizedPL);
+    // Allocation basis per mode:
+    //   Holdings  → market value of what is held
+    //   Realized  → sale proceeds (marketValue was swapped for realizedValue above)
+    //   Combined  → market value + sale proceeds, so Combined = Holdings + Realized
+    //               and value − cost basis = total P/L.
     const econValue =
-      yearFilter.mode === 'realized'
-        ? marketValue
-        : add(marketValue, realizedPL);
+      yearFilter.mode === 'combined'
+        ? add(marketValue, t.realizedValue)
+        : marketValue;
 
     return {
       type: t.type,
@@ -625,10 +639,8 @@ export function aggregateByType(
     performancePct: totals.purchaseValue.gt(0)
       ? totals.totalPL / toNum(totals.purchaseValue)
       : 0,
-    economicValue:
-      yearFilter.mode === 'realized'
-        ? totals.marketValue
-        : totals.marketValue + totals.realizedPL,
+    // Sum of the per-row bases (includes the Futures row's own definition).
+    economicValue: rows.reduce((s, row) => s + row.economicValue, 0),
   };
 
   let taxSummary: YearTaxSummary | null = null;

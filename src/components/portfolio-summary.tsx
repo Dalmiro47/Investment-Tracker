@@ -489,14 +489,11 @@ function PortfolioSummaryImpl({
     userId,
 }: PortfolioSummaryProps, ref: React.Ref<PortfolioSummaryHandle>) {
     
-    const [donutMode, setDonutMode] = useState<DonutMode>('market');
+    // Allocation basis follows the view mode: Holdings → market value,
+    // Realized / Combined → economic value (market value + realized P/L).
+    const donutMode: DonutMode = (yearFilter.mode ?? 'holdings') === 'holdings' ? 'market' : 'economic';
     const [isEstimateOpen, setIsEstimateOpen] = useState(false);
     const [isInfoOpen, setIsInfoOpen] = useState(false);
-
-    useEffect(() => {
-      if (yearFilter.mode === 'holdings') setDonutMode('market');
-      else setDonutMode('economic');
-    }, [yearFilter.mode]);
 
     const openEstimate = useCallback(() => setIsEstimateOpen(true), []);
     useImperativeHandle(ref, () => ({ openEstimate }), [openEstimate]);
@@ -741,12 +738,6 @@ function PortfolioSummaryImpl({
                     <CardTitle className="text-[16px] lg:text-[18px]">Allocation by asset type</CardTitle>
                     <CardDescription className="mt-1">{description}</CardDescription>
                 </div>
-                <Tabs value={donutMode} onValueChange={(v) => setDonutMode(v as DonutMode)}>
-                    <TabsList>
-                        <TabsTrigger value="market">Market</TabsTrigger>
-                        <TabsTrigger value="economic">Economic</TabsTrigger>
-                    </TabsList>
-                </Tabs>
             </CardHeader>
             <CardContent className="p-0">
                 <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_300px] lg:items-center lg:gap-7">
@@ -1115,10 +1106,10 @@ function PortfolioSummaryImpl({
                     </div>
                     <div>
                         <h4 className="font-semibold">% of Portfolio (Donut Chart)</h4>
-                        <p className="text-muted-foreground">This shows the allocation of your portfolio&apos;s value. It has two modes:</p>
+                        <p className="text-muted-foreground">This shows the allocation of your portfolio&apos;s value. The basis follows the selected view:</p>
                         <ul className="list-disc pl-5 mt-2 space-y-1 text-muted-foreground">
-                            <li><span className="font-semibold text-foreground">Market Value Mode:</span> Shows the percentage based on the current market value of what you own.</li>
-                            <li><span className="font-semibold text-foreground">Economic Value Mode:</span> Shows a broader view, including your realized gains. The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>
+                            <li><span className="font-semibold text-foreground">Holdings:</span> Percentages are based on the current market value of what you own.</li>
+                            <li><span className="font-semibold text-foreground">Realized / Combined:</span> Percentages include your realized gains. The value is calculated as <code className="text-xs">(Market Value + Realized P/L)</code>.</li>
                         </ul>
                     </div>
                     <div className="pt-2">
