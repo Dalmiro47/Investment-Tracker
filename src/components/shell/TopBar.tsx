@@ -83,7 +83,14 @@ export default function TopBar({
                 <Menu size={20} />
               </Button>
             </SheetTrigger>
-            <SheetContent side="right" className="glass-strong w-72 max-w-[85vw] rounded-l-[22px] p-4">
+            <SheetContent
+              side="right"
+              className="glass-strong w-72 max-w-[85vw] rounded-l-[22px] p-4"
+              // Start below the TopBar (56px + status-bar safe area): the drawer and
+              // its close button must never overlap the phone's clock/battery strip
+              // or the "DDS Investment" banner.
+              style={{ top: "calc(56px + env(safe-area-inset-top))" }}
+            >
               <SheetTitle className="px-2 pb-2 pt-1">Menu</SheetTitle>
               <nav className="mt-2 flex flex-col" aria-label="Quick actions">
                 <div className="flex h-[46px] items-center justify-between gap-3 rounded-[10px] px-3">

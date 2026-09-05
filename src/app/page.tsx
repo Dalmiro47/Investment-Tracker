@@ -746,10 +746,12 @@ function DashboardPageContent() {
     : undefined;
 
   const advancedFilters = (
-    <div className="glass flex flex-wrap items-center gap-3 p-3 px-3.5">
+    // Two rows: the type pill rail gets the full width, the dropdowns sit
+    // underneath — sharing a row squeezed the rail under the selects.
+    <div className="glass flex flex-col gap-3 p-3 px-3.5">
       {/* Type pill rail */}
       <div
-        className="hide-scroll flex min-w-0 flex-1 basis-[560px] gap-1.5 overflow-x-auto [mask-image:linear-gradient(to_right,black_calc(100%-28px),transparent)]"
+        className="hide-scroll flex w-full gap-1.5 overflow-x-auto"
         role="tablist"
         aria-label="Asset type"
       >
@@ -1078,6 +1080,8 @@ function DashboardPageContent() {
   const desktopView = (
       <div className="relative z-[1] min-h-[100svh] w-full">
         <DashboardHeader
+            section={section}
+            onSectionChange={setSection}
             isTaxView={isTaxView}
             onTaxViewChange={setIsTaxView}
             onTaxSettingsClick={() => setIsTaxSettingsOpen(true)}
@@ -1088,6 +1092,8 @@ function DashboardPageContent() {
             onYearFilterChange={setYearFilterHoldingsSafe}
         />
         <main className="mx-auto flex max-w-[1376px] flex-col gap-5 px-4 py-7 sm:px-6 lg:px-8">
+          {/* Two pages, like mobile: Dashboard (summary) or Investments */}
+          {section === "summary" ? (
           <PortfolioSummary
             ref={summaryRef}
             summaryData={summaryData}
@@ -1098,9 +1104,10 @@ function DashboardPageContent() {
             onYearFilterChange={setYearFilterHoldingsSafe}
             userId={user?.uid}
           />
-
+          ) : (
+          <>
           {/* Investments section header + filter rail */}
-          <section className="animate-enter delay-3 flex flex-col gap-3">
+          <section className="animate-enter flex flex-col gap-3">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className="font-headline text-[22px] font-bold tracking-tight">
                 Investments
@@ -1200,6 +1207,8 @@ function DashboardPageContent() {
             </div>
           ) : (
             emptyState
+          )}
+          </>
           )}
         </main>
       </div>

@@ -17,13 +17,12 @@ import {
   parse,
   isValid,
   startOfDay,
-  setHours,
-  setMinutes,
 } from 'date-fns';
-import { Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { Calendar as CalendarIcon, Check, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
 
 // --- Helper Functions ---
 const DATE_FORMAT = 'dd/MM/yyyy';
@@ -96,7 +95,11 @@ export default function AppDatePicker({
   const [text, setText] = React.useState<string>(value ? format(value, activeFormat) : '');
   const [hoursDraft, setHoursDraft] = React.useState<string>(value ? format(value, 'HH') : '');
   const [minutesDraft, setMinutesDraft] = React.useState<string>(value ? format(value, 'mm') : '');
-  
+  // Date+time mode: the day tapped in the grid is held here (together with the
+  // hour/minute drafts) until the user presses Save — nothing is committed to the
+  // parent form while the popover is open.
+  const [draftDay, setDraftDay] = React.useState<Date | null>(null);
+
   // Safety Refs
   const isSelectingRef = React.useRef(false);
   const isMountedRef = React.useRef(false); 
@@ -112,6 +115,7 @@ export default function AppDatePicker({
 
   React.useEffect(() => {
     const distinctDate = valueTimestamp ? new Date(valueTimestamp) : null;
+    setDraftDay(null);
 
     if (distinctDate) {
       const formatted = format(distinctDate, activeFormat);
@@ -178,62 +182,72 @@ export default function AppDatePicker({
     
     if (!isMountedRef.current) return;
 
+    // Date+time mode: just remember the day; hours/minutes + Save commit it.
+    if (includeTime) {
+        setDraftDay(startOfDayLocal(d));
+        return;
+    }
+
     isSelectingRef.current = true;
-    
-    // Create new date: The selected Day + The current Time (or 00:00)
-    let picked = new Date(
-        d.getFullYear(), 
-        d.getMonth(), 
-        d.getDate(), 
-        value ? value.getHours() : 0, 
+
+    // Date-only mode: selected day + the value's existing time (or 00:00)
+    const picked = new Date(
+        d.getFullYear(),
+        d.getMonth(),
+        d.getDate(),
+        value ? value.getHours() : 0,
         value ? value.getMinutes() : 0
     );
 
     setText(format(picked, activeFormat));
     onChange(picked);
-    
-    // Only close if we are NOT using time, otherwise user might want to set time next
-    if (!includeTime) {
-        setOpen(false);
-    }
-    
-    setTimeout(() => { 
-        if(isMountedRef.current) isSelectingRef.current = false; 
+    setOpen(false);
+
+    setTimeout(() => {
+        if(isMountedRef.current) isSelectingRef.current = false;
     }, 200);
   };
 
-  const updateTime = (type: 'hours' | 'minutes', num: number | null) => {
-      if (num == null || Number.isNaN(num)) return;
-      
-      const current = value || new Date(); // Fallback to now if null
-      let next = new Date(current);
-
-      if (type === 'hours') {
-          num = Math.max(0, Math.min(23, num));
-          next = setHours(next, num);
-      } else {
-          num = Math.max(0, Math.min(59, num));
-          next = setMinutes(next, num);
-      }
-      
-      // Clamp logic for time changes
-      if (minDate && next < minDate) next = minDate;
-      if (maxDate && next > maxDate) next = maxDate;
-
-      onChange(next);
-      setText(format(next, activeFormat));
-      // keep drafts in sync after commit
-      setHoursDraft(format(next, 'HH'));
-      setMinutesDraft(format(next, 'mm'));
+  const parseTimePart = (raw: string, fallback: number, max: number) => {
+      const trimmed = raw.trim();
+      if (!trimmed) return fallback;
+      const n = Number(trimmed);
+      if (!Number.isInteger(n)) return fallback;
+      return Math.max(0, Math.min(max, n));
   };
 
-  const commitTimeField = (type: 'hours' | 'minutes') => {
-      const raw = type === 'hours' ? hoursDraft : minutesDraft;
-      const trimmed = raw.trim();
-      if (!trimmed) return;
-      const n = Number(trimmed);
-      if (Number.isNaN(n)) return;
-      updateTime(type, n);
+  /** The date the Save button would commit: draft day (or current value / today) + drafted time. */
+  const buildDraftDate = React.useCallback((): Date => {
+      const day = draftDay ?? value ?? new Date();
+      const hh = parseTimePart(hoursDraft, value ? value.getHours() : 0, 23);
+      const mm = parseTimePart(minutesDraft, value ? value.getMinutes() : 0, 59);
+      let next = new Date(day.getFullYear(), day.getMonth(), day.getDate(), hh, mm);
+      if (minDate && next < minDate) next = minDate;
+      if (maxDate && next > maxDate) next = maxDate;
+      return next;
+  }, [draftDay, value, hoursDraft, minutesDraft, minDate, maxDate]);
+
+  const draftDirty =
+      draftDay !== null ||
+      hoursDraft !== (value ? format(value, 'HH') : '') ||
+      minutesDraft !== (value ? format(value, 'mm') : '');
+
+  /** Commit day + time from the popover drafts (Save button / Enter / closing with pending edits). */
+  const commitDraft = () => {
+      if (!isMountedRef.current) return;
+      const next = buildDraftDate();
+      setText(format(next, activeFormat));
+      setHoursDraft(format(next, 'HH'));
+      setMinutesDraft(format(next, 'mm'));
+      setDraftDay(null);
+      if (!value || next.getTime() !== value.getTime()) {
+          onChange(next);
+      }
+  };
+
+  const handleSave = () => {
+      commitDraft();
+      setOpen(false);
   };
 
   const canGoNext = React.useMemo(() => {
@@ -246,7 +260,16 @@ export default function AppDatePicker({
     <div className={clsx('w-full', className)}>
       <Popover modal={true} open={open} onOpenChange={(o) => {
         setOpen(o);
-        if (!o && !isSelectingRef.current && isMountedRef.current) {
+        if (o) {
+            setDraftDay(null);
+            return;
+        }
+        if (isSelectingRef.current || !isMountedRef.current) return;
+        // Closed by tapping outside / Escape: keep whatever the user already
+        // picked in the popover instead of silently dropping it.
+        if (includeTime && draftDirty) {
+            commitDraft();
+        } else {
             commitText();
         }
       }}>
@@ -281,8 +304,12 @@ export default function AppDatePicker({
 
         <PopoverContent
           align="start"
+          collisionPadding={8}
           onCloseAutoFocus={(e) => e.preventDefault()}
-          className="glass-strong w-[300px] overflow-hidden rounded-[16px] border-white/10 bg-popover p-0 text-popover-foreground"
+          // Cap to the space Radix reports so the calendar + time + Save footer
+          // scroll inside the popover instead of sliding under the top bar or the
+          // on-screen keyboard on small phones.
+          className="glass-strong w-[300px] max-h-[var(--radix-popover-available-height)] overflow-x-hidden overflow-y-auto rounded-[16px] border-white/10 bg-popover p-0 text-popover-foreground"
         >
           {/* Calendar Header */}
           <div className="flex items-center gap-2 border-b border-white/[.07] px-3 py-2.5">
@@ -318,7 +345,8 @@ export default function AppDatePicker({
                  <div key={day} className="py-1 text-center text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">{day}</div>
             ))}
             {days.map((d) => {
-                const isSelected = !!value && isSameDay(d, value);
+                const selectedDay = draftDay ?? value;
+                const isSelected = !!selectedDay && isSameDay(d, selectedDay);
                 const isCurrentMonth = isSameMonth(d, view);
                 const isTodayDay = isToday(d);
 
@@ -371,11 +399,10 @@ export default function AppDatePicker({
                           value={hoursDraft}
                           placeholder={value ? format(value, 'HH') : '00'}
                           onChange={(e) => setHoursDraft(e.target.value)}
-                          onBlur={() => commitTimeField('hours')}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              commitTimeField('hours');
+                              handleSave();
                             }
                           }}
                         />
@@ -392,15 +419,28 @@ export default function AppDatePicker({
                           value={minutesDraft}
                           placeholder={value ? format(value, 'mm') : '00'}
                           onChange={(e) => setMinutesDraft(e.target.value)}
-                          onBlur={() => commitTimeField('minutes')}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') {
                               e.preventDefault();
-                              commitTimeField('minutes');
+                              handleSave();
                             }
                           }}
                         />
                     </div>
+                </div>
+
+                {/* Footer: what will be committed + explicit Save */}
+                <div className="mt-3 flex items-center justify-between gap-3 border-t border-white/[.07] pt-3">
+                    <div className="min-w-0">
+                        <div className="text-[10px] font-bold uppercase tracking-[.14em] text-muted-foreground">Selected</div>
+                        <div className="truncate font-mono text-[13px] font-semibold tabular-nums">
+                            {format(buildDraftDate(), FULL_FORMAT)}
+                        </div>
+                    </div>
+                    <Button type="button" size="sm" className="h-10 shrink-0 px-4" onClick={handleSave}>
+                        <Check size={16} />
+                        Save
+                    </Button>
                 </div>
             </div>
           )}

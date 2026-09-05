@@ -272,7 +272,7 @@ export default function InvestmentListView({
         performancePct: m.performancePct,
         purchaseValue: m.purchaseValue,
         percentPortfolio: 0,
-        economicValue: m.marketValue + m.realizedPLDisplay,
+        economicValue: m.marketValue + m.realizedProceedsDisplay,
 
         currentRatePct: isIA ? getCurrentRate(rateSchedulesMap?.[inv.id]) : null,
       };

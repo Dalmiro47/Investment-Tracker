@@ -5,7 +5,7 @@ import { cn } from "@/lib/utils";
 export type Section = "summary" | "investments";
 
 const TABS: { id: Section; label: string; Icon: typeof PieChart }[] = [
-  { id: "summary", label: "Summary", Icon: PieChart },
+  { id: "summary", label: "Dashboard", Icon: PieChart },
   { id: "investments", label: "Investments", Icon: Wallet },
 ];
 

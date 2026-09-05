@@ -3,13 +3,15 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { LayoutGrid, LogOut, User, Settings, ReceiptText } from 'lucide-react';
+import { LayoutGrid, LogOut, User, Settings, ReceiptText, PieChart, Wallet } from 'lucide-react';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import type { Section } from '@/components/shell/BottomTabs';
 import { useAuth } from '@/hooks/use-auth';
 import {
   Tooltip,
@@ -22,6 +24,9 @@ import type { YearFilter } from '@/lib/types';
 
 
 interface DashboardHeaderProps {
+  /** Which page is shown: the portfolio dashboard or the investments list (mirrors the mobile tabs). */
+  section: Section;
+  onSectionChange: (section: Section) => void;
   isTaxView: boolean;
   onTaxViewChange: (checked: boolean) => void;
   onTaxSettingsClick: () => void;
@@ -33,6 +38,8 @@ interface DashboardHeaderProps {
 }
 
 export default function DashboardHeader({
+  section,
+  onSectionChange,
   isTaxView,
   onTaxViewChange,
   onTaxSettingsClick,
@@ -76,6 +83,22 @@ export default function DashboardHeader({
             EUR
           </span>
         </Link>
+
+        {/* Section switch — same two destinations as the mobile bottom tabs */}
+        <Tabs
+          value={section}
+          onValueChange={(v) => onSectionChange(v as Section)}
+          className="shrink-0"
+        >
+          <TabsList aria-label="Section">
+            <TabsTrigger value="summary" className="px-4">
+              <PieChart size={16} /> Dashboard
+            </TabsTrigger>
+            <TabsTrigger value="investments" className="px-4">
+              <Wallet size={16} /> Investments
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
 
         <div className="flex items-center gap-2">
           <Select
@@ -165,7 +188,7 @@ export default function DashboardHeader({
                   <User className="mr-2 h-4 w-4" />
                   <span>Profile</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
+                <DropdownMenuItem onClick={() => onSectionChange('summary')}>
                   <LayoutGrid className="mr-2 h-4 w-4" />
                   <span>Dashboard</span>
                 </DropdownMenuItem>

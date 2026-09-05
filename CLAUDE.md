@@ -68,6 +68,7 @@ npx shadcn-ui@latest add [component-name]  # Add Shadcn components
 - **Precision:** Use `big.js` for financial arithmetic
 - **Data migrations:** Flag any schema change that requires a Firestore backfill script
 - **Styling gotchas (learned the hard way):** `overflow-x: hidden` on the shell wrappers (`MobileAppShell`, `MobileOrientationShell`, desktop root) turns them into scroll containers and silently disables every `position: sticky` descendant — use `overflow-x: clip`. Classes declared in `@layer components` in `globals.css` (`.glass`, `.eyebrow`, …) are tree-shaken unless listed in `tailwind.config.ts` `safelist`. `html { color-scheme: dark }` is what makes native scrollbars/form controls dark — without it dialogs get light scrollbars. `--accent` is a neutral hover token, never a brand colour.
+- **Radix versions must move together (learned the hard way, 2026-09-05):** if `@radix-ui/*` packages resolve to different versions of the internal `react-dismissable-layer` / `react-focus-scope`, npm nests a second copy and each copy keeps its own body `pointer-events` bookkeeping and focus-trap stack. Symptoms: the whole app "freezes" (body stuck at `pointer-events: none`) after overlapping overlays, and inputs inside a Popover within a Dialog lose focus instantly. After touching any Radix package run `npm dedupe` and confirm `find node_modules/@radix-ui -path "*/react-dismissable-layer/package.json"` returns exactly one path.
 
 ## Destructive Operations
 
