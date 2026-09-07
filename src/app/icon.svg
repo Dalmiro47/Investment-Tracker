@@ -1,5 +1,4 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-label="DDS Investment Tracker">
-  <!-- Full-bleed app icon. Mark stays inside the 80% maskable safe zone; OS applies its own corner mask. -->
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#161B21"/>
@@ -14,8 +13,11 @@
       <stop offset="0" stop-color="#3FAE8B"/>
       <stop offset="1" stop-color="#57C7A2"/>
     </linearGradient>
+    <clipPath id="tile"><rect width="512" height="512" rx="112"/></clipPath>
   </defs>
-  <rect width="512" height="512" fill="url(#bg)"/>
-  <rect width="512" height="512" fill="url(#glow)"/>
+  <g clip-path="url(#tile)">
+    <rect width="512" height="512" fill="url(#bg)"/>
+    <rect width="512" height="512" fill="url(#glow)"/>
+  </g>
   <path d="M124 336 L239 236 L300 285 L388 176" fill="none" stroke="url(#line)" stroke-width="46" stroke-linecap="round" stroke-linejoin="round"/>
 </svg>

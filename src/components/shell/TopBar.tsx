@@ -8,6 +8,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Menu, Settings, Scale, ReceiptText } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 import { Button } from "../ui/button";
 import { Switch } from "../ui/switch";
 import type { YearFilter } from "@/lib/types";
@@ -46,10 +47,7 @@ export default function TopBar({
     >
       <div className="mx-auto flex h-14 w-full items-center justify-between px-4">
         <div className="flex min-w-0 items-center gap-[9px]">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
-            <path d="M12 2 22 12 12 22 2 12Z" stroke="hsl(var(--primary))" strokeWidth="1.6" />
-            <path d="M12 7 17 12 12 17 7 12Z" fill="hsl(var(--primary))" />
-          </svg>
+          <BrandMark size={26} className="shrink-0" />
           <span className="truncate font-headline text-[16px] font-bold tracking-tight">
             DDS Investment
           </span>

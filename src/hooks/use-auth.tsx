@@ -15,7 +15,7 @@ import {
   type User,
 } from "firebase/auth";
 import { auth } from "@/lib/firebase";
-import { ShieldCheck } from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
 
 interface AuthContextType {
   user: User | null;
@@ -145,8 +145,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   if (loading || (!user && pathname !== "/login")) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-background p-4">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10 animate-pulse">
-          <ShieldCheck className="h-8 w-8 text-primary" />
+        <div className="mx-auto mb-4 animate-pulse">
+          <BrandMark variant="tile" size={64} />
         </div>
         <p className="text-muted-foreground">Loading user session...</p>
       </div>

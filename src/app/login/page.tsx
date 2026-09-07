@@ -2,21 +2,16 @@
 
 import { Button } from '@/components/ui/button';
 import { GoogleIcon } from '@/components/icons';
+import { BrandMark } from '@/components/brand-mark';
 import { useAuth } from '@/hooks/use-auth';
 
 function LogoMark({ size = 64 }: { size?: number }) {
   return (
-    <svg
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden
+    <BrandMark
+      variant="tile"
+      size={size}
       className="drop-shadow-[0_0_28px_hsl(var(--primary)/.35)]"
-    >
-      <path d="M12 2 22 12 12 22 2 12Z" stroke="hsl(var(--primary))" strokeWidth="1.2" />
-      <path d="M12 7 17 12 12 17 7 12Z" fill="hsl(var(--primary))" />
-    </svg>
+    />
   );
 }
 

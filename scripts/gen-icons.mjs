@@ -23,7 +23,7 @@ if (!fs.existsSync(OUT)) {
   fs.mkdirSync(OUT, { recursive: true });
 }
 
-const bg = '#0B1220'; // theme background for canvas and iOS flatten
+const bg = '#0c0f12'; // theme background (matches --background / manifest theme_color)
 const sizes = [
   { name: 'icon-192.png', size: 192, flatten: false },
   { name: 'icon-512.png', size: 512, flatten: false },
