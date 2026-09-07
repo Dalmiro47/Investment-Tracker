@@ -4,6 +4,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { LayoutGrid, LogOut, User, Settings, ReceiptText, PieChart, Wallet } from 'lucide-react';
+import { BrandMark } from '@/components/brand-mark';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuGroup, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -74,10 +75,7 @@ export default function DashboardHeader({
     <header className="sticky-bar sticky top-0 z-40 w-full">
       <div className="mx-auto flex h-16 max-w-[1376px] items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link href="/" className="flex min-w-0 items-center gap-2.5">
-          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" aria-hidden className="shrink-0">
-            <path d="M12 2 22 12 12 22 2 12Z" stroke="hsl(var(--primary))" strokeWidth="1.6" />
-            <path d="M12 7 17 12 12 17 7 12Z" fill="hsl(var(--primary))" />
-          </svg>
+          <BrandMark size={26} className="shrink-0" />
           <span className="truncate font-headline text-[17px] font-bold tracking-tight">DDS Investment</span>
           <span className="ml-1 shrink-0 rounded-[5px] border border-border px-1.5 py-0.5 font-mono text-[11px] text-muted-foreground">
             EUR

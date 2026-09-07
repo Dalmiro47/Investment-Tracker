@@ -1,5 +1,5 @@
 /* DDS Investment Tracker SW - minimal offline support (stable) */
-const CACHE_VERSION = 'v5';
+const CACHE_VERSION = 'v6';
 const SHELL_CACHE = `shell-${CACHE_VERSION}`;
 const STATIC_CACHE = `static-${CACHE_VERSION}`;
 
