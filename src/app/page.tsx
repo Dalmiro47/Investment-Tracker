@@ -632,6 +632,11 @@ function DashboardPageContent() {
   };
   
   const canToggleTaxReport = yearFilter.kind === 'year' && (isMobile ? viewMode === 'grid' : true);
+
+  // The estimate dialog needs a per-year tax summary; without one there is nothing to show.
+  const canViewTaxEstimate = Boolean(
+    isTaxView && yearFilter.kind === 'year' && summaryData?.taxSummary,
+  );
   
   const ensureTaxPreconditions = React.useCallback(() => {
     const defaultYear = sellYears[0] ?? new Date().getFullYear();
@@ -648,7 +653,9 @@ function DashboardPageContent() {
     ensureTaxPreconditions();
     setIsTaxView(true);
     setSection("summary");
-    setTimeout(() => summaryRef.current?.openEstimate(), 0);
+    // The summary (and its ref) only exists on the Dashboard section, so defer
+    // opening until it has mounted instead of racing it with a timeout.
+    setPendingOpenEstimate(true);
   }, [ensureTaxPreconditions]);
 
   const handleToggleTaxView = React.useCallback(() => {
@@ -665,7 +672,7 @@ function DashboardPageContent() {
       summaryRef.current.openEstimate();
       setPendingOpenEstimate(false);
     }
-  }, [pendingOpenEstimate, section]);
+  }, [pendingOpenEstimate, section, summaryData]);
 
   const selectedYear = yearFilter.kind === 'year' ? yearFilter.year : null;
   const toggleDisabledReason =
@@ -1068,6 +1075,8 @@ function DashboardPageContent() {
                 yearFilter={yearFilter}
                 onYearFilterChange={setYearFilterHoldingsSafe}
                 userId={user?.uid}
+                investments={investments}
+                transactionsMap={transactionsMap}
               />
             </div>
           ) : (
@@ -1085,6 +1094,8 @@ function DashboardPageContent() {
             isTaxView={isTaxView}
             onTaxViewChange={setIsTaxView}
             onTaxSettingsClick={() => setIsTaxSettingsOpen(true)}
+            onViewTaxEstimate={handleOpenTaxEstimate}
+            canViewTaxEstimate={canViewTaxEstimate}
             canToggleTaxReport={canToggleTaxReport}
             toggleDisabledReason={toggleDisabledReason}
             sellYears={sellYears}
@@ -1103,6 +1114,8 @@ function DashboardPageContent() {
             yearFilter={yearFilter}
             onYearFilterChange={setYearFilterHoldingsSafe}
             userId={user?.uid}
+            investments={investments}
+            transactionsMap={transactionsMap}
           />
           ) : (
           <>

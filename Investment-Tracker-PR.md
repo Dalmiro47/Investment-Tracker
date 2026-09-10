@@ -2,14 +2,14 @@
 claude --dangerously-skip-permissions 
 
 ## Pull Request to Github 
-git switch -c fix/frozen-bug
+git switch -c ref/icon
 
 ## Do ALL THE CHANGES 
 
 ## Pull Request to Github 
 git add -A 
-git commit -m "fix: app getting frozen" 
-git push -u origin fix/frozen-bug
+git commit -m "ref: app's icon" 
+git push -u origin ref/icon
 
 ## Make local main match GitHub
 
@@ -24,7 +24,7 @@ git rev-parse HEAD
 git rev-parse origin/main 
  
 ## After merge, delete the branch
-git branch -D fix/frozen-bug
+git branch -D ref/icon
  
 
  

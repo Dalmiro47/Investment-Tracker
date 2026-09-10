@@ -48,6 +48,8 @@ npx shadcn-ui@latest add [component-name]  # Add Shadcn components
 
 **Firestore helpers:** Client reads use `src/lib/firestore.ts` / `src/lib/firestore.etf.ts`; server writes use `src/lib/firestore.etf.server.ts`. Always include `createdAt`/`updatedAt` with `serverTimestamp()` on writes.
 
+**Admin-script gotcha (learned the hard way, 2026-09-10):** `users/{uid}` documents hold only subcollections and carry no fields, so `adminDb.collection('users').get()` returns **0 docs** — they are Firestore "phantom" documents. Use `adminDb.collection('users').listDocuments()` to enumerate users in any script.
+
 **External data sources:**
 - Kraken API (`src/lib/kraken-api.ts`) for crypto futures positions
 - Yahoo Finance + ECB FX rates for ETF price refreshes (`src/lib/providers/`)

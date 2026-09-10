@@ -375,12 +375,92 @@ export function aggregateBySymbol(
 }
 
 
+/**
+ * The raw per-year figures the German tax buckets are built from. Kept on the
+ * summary so a caller (e.g. the sell simulator) can add hypothetical gains and
+ * recompute without having to reverse-engineer them out of the results.
+ */
+export interface YearTaxInputs {
+  /** §20 EStG: realized gains on stocks/ETFs/bonds + dividends + interest. */
+  capitalIncome: number;
+  /** §23 EStG: crypto gains on lots held under one year. */
+  shortTermCryptoGains: number;
+  /** §20 Abs. 6: profitable futures trades. */
+  futuresGains: number;
+  /** §20 Abs. 6: losing futures trades, as a positive amount. */
+  futuresLosses: number;
+}
+
 export interface YearTaxSummary {
   capitalTaxResult: CapitalTaxResult;
   cryptoTaxResult: CryptoTaxResult;
   futuresTaxResult: FuturesTaxResult;
   grandTotal: number;
   totalShortTermGains: number;
+  inputs: YearTaxInputs;
+}
+
+/** Reads the church tax rate, tolerating documents written with the older `churchRate` key. */
+function readChurchRate(taxSettings: TaxSettings): number {
+  const legacy = (taxSettings as { churchRate?: number }).churchRate;
+  return taxSettings.churchTaxRate ?? legacy ?? 0;
+}
+
+/**
+ * Single source of truth for a year's German tax estimate: capital income (§20),
+ * private crypto sales (§23) and futures (§20 Abs. 6), including the way the
+ * Sparer-Pauschbetrag is shared between the capital and futures buckets.
+ *
+ * Both the real estimate and the sell simulator run through here, so a scenario
+ * can never be scored by different rules than the numbers it is compared against.
+ */
+export function computeYearTaxSummary(
+  year: number,
+  taxSettings: TaxSettings,
+  inputs: YearTaxInputs,
+): YearTaxSummary {
+  const churchRate = readChurchRate(taxSettings);
+
+  const capitalTaxResult = calcCapitalTax({
+    year,
+    filing: taxSettings.filingStatus,
+    churchRate,
+    capitalIncome: inputs.capitalIncome,
+  });
+
+  // Compute leftover allowance to apply to futures bucket
+  const allowanceLeft = Math.max(0, (capitalTaxResult.allowance ?? 0) - (capitalTaxResult.allowanceUsed ?? 0));
+
+  const cryptoTaxResult = calcCryptoTax({
+    year,
+    marginalRate: taxSettings.cryptoMarginalRate,
+    churchRate,
+    shortTermGains: inputs.shortTermCryptoGains,
+  });
+
+  const futuresTaxResult = calcFuturesTax({
+    year,
+    filing: taxSettings.filingStatus,
+    churchRate,
+    totalGains: inputs.futuresGains,
+    totalLosses: inputs.futuresLosses,
+    remainingAllowance: allowanceLeft,
+  });
+
+  // Sync shared allowance usage: reduce remaining capital allowance by what futures consumed
+  if (typeof capitalTaxResult.allowance === 'number' && typeof capitalTaxResult.allowanceUsed === 'number') {
+    const combinedUsed = (capitalTaxResult.allowanceUsed ?? 0) + (futuresTaxResult.allowanceUsed ?? 0);
+    capitalTaxResult.allowanceUsed = Math.min(capitalTaxResult.allowance, combinedUsed);
+  }
+
+  return {
+    capitalTaxResult,
+    cryptoTaxResult,
+    futuresTaxResult,
+    grandTotal: capitalTaxResult.total + cryptoTaxResult.total + futuresTaxResult.total,
+    totalShortTermGains: inputs.shortTermCryptoGains,
+    inputs,
+  };
 }
 
 
@@ -654,8 +734,6 @@ export function aggregateByType(
       )
     );
 
-    const churchRate = (taxSettings as any).churchTaxRate ?? (taxSettings as any).churchRate ?? 0;
-
     const capitalIncome = metricsForTax.reduce(
       (sum, p) => sum + p.capitalGainsYear + p.dividendsYear + p.interestYear,
       0
@@ -666,49 +744,17 @@ export function aggregateByType(
       0
     );
 
-    const capitalTaxResult = calcCapitalTax({
-      year: yearFilter.year,
-      filing: taxSettings.filingStatus,
-      churchRate,
-      capitalIncome,
-    });
-    // Compute leftover allowance to apply to futures bucket
-    const allowanceLeft = Math.max(0, (capitalTaxResult.allowance ?? 0) - (capitalTaxResult.allowanceUsed ?? 0));
-
-    const cryptoTaxResult = calcCryptoTax({
-      year: yearFilter.year,
-      marginalRate: taxSettings.cryptoMarginalRate,
-      churchRate,
-      shortTermGains: shortTermCryptoGains,
-    });
-
     // FIX: Use the aggregated values from futures_positions (via krakenSummary hook)
     // Each closed position already has netRealizedPnlEur = Realized PnL - Fees + Funding
     // This ensures profitable positions count as gains and unprofitable ones as losses
-    const futuresTaxResult = calcFuturesTax({
-      year: yearFilter.year,
-      filing: taxSettings.filingStatus,
-      churchRate,
+    taxSummary = computeYearTaxSummary(yearFilter.year, taxSettings, {
+      capitalIncome,
+      shortTermCryptoGains,
       // Use gross gains from the hook (or 0 if null)
-      totalGains: krakenSummary?.grossGainsEur || 0,
+      futuresGains: krakenSummary?.grossGainsEur || 0,
       // Use gross losses from the hook (already stored as positive absolute value)
-      totalLosses: krakenSummary?.grossLossesEur || 0, 
-      remainingAllowance: allowanceLeft,
+      futuresLosses: krakenSummary?.grossLossesEur || 0,
     });
-
-    // Sync shared allowance usage: reduce remaining capital allowance by what futures consumed
-    if (typeof capitalTaxResult.allowance === 'number' && typeof capitalTaxResult.allowanceUsed === 'number') {
-      const combinedUsed = (capitalTaxResult.allowanceUsed ?? 0) + (futuresTaxResult.allowanceUsed ?? 0);
-      capitalTaxResult.allowanceUsed = Math.min(capitalTaxResult.allowance, combinedUsed);
-    }
-
-    taxSummary = {
-      capitalTaxResult,
-      cryptoTaxResult,
-      futuresTaxResult,
-      grandTotal: capitalTaxResult.total + cryptoTaxResult.total + futuresTaxResult.total,
-      totalShortTermGains: shortTermCryptoGains,
-    };
   }
 
   let futuresTransactionsForAudit: Transaction[] = [];
