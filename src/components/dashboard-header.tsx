@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { LayoutGrid, LogOut, User, Settings, ReceiptText, PieChart, Wallet } from 'lucide-react';
+import { LayoutGrid, LogOut, User, Settings, ReceiptText, PieChart, Wallet, Scale } from 'lucide-react';
 import { BrandMark } from '@/components/brand-mark';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -31,6 +31,10 @@ interface DashboardHeaderProps {
   isTaxView: boolean;
   onTaxViewChange: (checked: boolean) => void;
   onTaxSettingsClick: () => void;
+  /** Opens the tax estimate dialog. Surfaced in the top bar while the tax report is on. */
+  onViewTaxEstimate: () => void;
+  /** False while the current year/filters produce no tax summary to show. */
+  canViewTaxEstimate?: boolean;
   canToggleTaxReport?: boolean;
   toggleDisabledReason?: string;
   sellYears: number[];
@@ -44,6 +48,8 @@ export default function DashboardHeader({
   isTaxView,
   onTaxViewChange,
   onTaxSettingsClick,
+  onViewTaxEstimate,
+  canViewTaxEstimate = false,
   canToggleTaxReport = false,
   toggleDisabledReason,
   sellYears,
@@ -150,10 +156,18 @@ export default function DashboardHeader({
             </Tooltip>
           </TooltipProvider>
 
-          <Button variant="ghost" size="sm" className="h-9" onClick={onTaxSettingsClick}>
-            <Settings size={18} />
-            Tax settings
-          </Button>
+          {isTaxView && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-9 text-warning hover:text-warning"
+              onClick={onViewTaxEstimate}
+              disabled={!canViewTaxEstimate}
+            >
+              <Scale size={18} />
+              View tax estimate
+            </Button>
+          )}
 
           {/* a11y announcement for screen readers */}
           <span id="tax-report-disabled" className="sr-only">
@@ -189,6 +203,10 @@ export default function DashboardHeader({
                 <DropdownMenuItem onClick={() => onSectionChange('summary')}>
                   <LayoutGrid className="mr-2 h-4 w-4" />
                   <span>Dashboard</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={onTaxSettingsClick}>
+                  <Settings className="mr-2 h-4 w-4" />
+                  <span>Tax settings</span>
                 </DropdownMenuItem>
               </DropdownMenuGroup>
               <DropdownMenuSeparator />

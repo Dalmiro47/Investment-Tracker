@@ -54,6 +54,20 @@ export default function TopBar({
         </div>
 
         <div className="flex shrink-0 items-center gap-1.5">
+          {/* Quick access to the estimate while the tax report is on; the sheet
+              entry below is what turns the report on in the first place. */}
+          {isTaxView && (
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-9 w-9 text-warning hover:text-warning"
+              onClick={onViewTaxEstimate}
+              aria-label="View Tax Estimate"
+            >
+              <Scale size={20} />
+            </Button>
+          )}
+
           <Select
             value={yearFilter.kind === "year" ? String(yearFilter.year) : "all"}
             onValueChange={handleYearChange}

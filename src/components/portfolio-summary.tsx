@@ -32,6 +32,8 @@ import { TAX, defaultCapitalAllowance, defaultCryptoThreshold } from '@/lib/tax'
 import { Separator } from './ui/separator';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { AuditExportButton } from './tax/AuditExportButton';
+import { TaxSimulator } from './tax/TaxSimulator';
+import { buildSimulatorAssets } from '@/lib/tax-simulator';
 
 
 const CHART_COLORS = [
@@ -101,13 +103,21 @@ interface TaxEstimateDialogProps {
     taxSettings: TaxSettings | null;
     futuresTransactions?: Transaction[];
     userId: string | null | undefined;
+    /** Open positions the sell simulator can draw on. */
+    investments: Investment[];
+    transactionsMap: Record<string, Transaction[]>;
 }
 
-function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings, futuresTransactions = [], userId }: TaxEstimateDialogProps) {
-  const [view, setView] = useState<'estimate' | 'law'>('estimate');
+function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings, futuresTransactions = [], userId, investments, transactionsMap }: TaxEstimateDialogProps) {
+  const [view, setView] = useState<'estimate' | 'law' | 'simulate'>('estimate');
   
   // Fetch closed positions for the year
   const { positions: closedPositions } = useClosedPositionsForYear(userId, year);
+
+  const simulatorAssets = useMemo(
+    () => buildSimulatorAssets(investments, transactionsMap),
+    [investments, transactionsMap],
+  );
 
   // Reset to main view on open
   useEffect(() => {
@@ -137,14 +147,20 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
         {view === 'estimate' && (
           <>
             <DialogHeader className="px-6 pt-6 pb-2">
-              <div className="flex items-center justify-between">
-                <DialogTitle className="flex items-center gap-2">
-                  <Scale className="h-5 w-5" /> Estimated Taxes for {year}
+              <div className="flex items-center justify-between gap-2">
+                <DialogTitle className="flex min-w-0 items-center gap-2">
+                  <Scale className="h-5 w-5 shrink-0" />
+                  <span className="truncate">Estimated Taxes for {year}</span>
                 </DialogTitle>
                 {/* Added mr-8 to prevent overlap with the Dialog's absolute close button */}
-                <Button size="sm" variant="outline" onClick={() => setView('law')} className="mr-8">
-                  Law Info
-                </Button>
+                <div className="mr-8 flex shrink-0 items-center gap-2">
+                  <Button size="sm" variant="outline" onClick={() => setView('simulate')}>
+                    Simulate
+                  </Button>
+                  <Button size="sm" variant="outline" onClick={() => setView('law')}>
+                    Law Info
+                  </Button>
+                </div>
               </div>
               <DialogDescription>
                 This is an estimate for informational purposes only and not professional tax advice.
@@ -334,7 +350,32 @@ function TaxEstimateDialog({ isOpen, onOpenChange, taxSummary, year, taxSettings
           </>
         )}
 
-        {/* VIEW 2: LAW INFO */}
+        {/* VIEW 2: SELL SIMULATOR */}
+        {view === 'simulate' && (
+          <>
+            <DialogHeader className="px-6 pt-6 pb-2">
+              <div className="flex items-center gap-2">
+                <Button variant="ghost" size="icon" onClick={() => setView('estimate')} className="-ml-2 h-8 w-8">
+                  <ArrowLeft className="h-4 w-4" />
+                </Button>
+                <DialogTitle className="min-w-0 truncate">What if I sell? — {year}</DialogTitle>
+              </div>
+              <DialogDescription>
+                Pick positions and see what the sale would add to your {year} tax bill.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="px-6 pb-6 etf-dialog-scroll max-h-[70vh] overflow-y-auto">
+              <TaxSimulator
+                baseline={taxSummary}
+                assets={simulatorAssets}
+                taxSettings={taxSettings}
+                year={year}
+              />
+            </div>
+          </>
+        )}
+
+        {/* VIEW 3: LAW INFO */}
         {view === 'law' && (
           <>
              <DialogHeader className="px-6 pt-6 pb-2">
@@ -478,6 +519,9 @@ interface PortfolioSummaryProps {
     yearFilter: YearFilter;
     onYearFilterChange: (filter: YearFilter) => void;
     userId: string | null | undefined;
+    /** Open positions + ledger, for the tax estimate's sell simulator. */
+    investments?: Investment[];
+    transactionsMap?: Record<string, Transaction[]>;
 }
 
 function PortfolioSummaryImpl({
@@ -487,6 +531,8 @@ function PortfolioSummaryImpl({
     yearFilter,
     onYearFilterChange,
     userId,
+    investments = [],
+    transactionsMap = {},
 }: PortfolioSummaryProps, ref: React.Ref<PortfolioSummaryHandle>) {
     
     // Allocation basis follows the view mode: Holdings → market value,
@@ -557,7 +603,6 @@ function PortfolioSummaryImpl({
         : totals;
 
     const totalPortfolioValue = donutMode === 'market' ? totals.marketValue : totals.economicValue;
-    const showTaxEstimatorButton = Boolean(isTaxView && taxSummary && yearFilter.kind === 'year');
 
     const { title, description } = getSummaryContext(yearFilter);
     const isYearView = yearFilter.kind === 'year';
@@ -651,17 +696,6 @@ function PortfolioSummaryImpl({
                         </div>
 
                         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-2">
-                            {showTaxEstimatorButton && (
-                                <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="justify-center text-warning hover:text-warning"
-                                    onClick={openEstimate}
-                                >
-                                    <Scale className="h-4 w-4" />
-                                    View tax estimate
-                                </Button>
-                            )}
                             {(isYearView || isAllView) && (
                                 <Tabs
                                     value={yearFilter.mode ?? 'combined'}
@@ -1128,6 +1162,8 @@ function PortfolioSummaryImpl({
             taxSettings={taxSettings}
             futuresTransactions={summaryData?.futuresTransactions}
             userId={userId}
+            investments={investments}
+            transactionsMap={transactionsMap}
           />
         )}
         </TooltipProvider>
