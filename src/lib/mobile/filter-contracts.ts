@@ -14,9 +14,9 @@ export const TypeFilterEnum = [
   "Crypto",
   "ETF",
   "Interest Account",
+  "Futures",
   "Bond",
   "Real Estate",
-  "Futures",
 ] as const;
 
 export const StatusFilterEnum = ["All", "Active", "Sold"] as const;

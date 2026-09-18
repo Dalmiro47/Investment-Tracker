@@ -322,6 +322,40 @@ function DashboardPageContent() {
   const { positions: futuresPositions } = useFuturesPositions({ userId: user?.uid });
   const { positions: closedPositions } = useClosedPositions(user?.uid);
 
+  // Futures count = POSITIONS as the futures table shows them, not documents.
+  // The sync writes one 'Future' investment wrapper per closing FILL, and one closing
+  // order can fill in several pieces (1 position : many fills). The table groups those
+  // by closing order, so we count distinct closing order IDs here. Wrappers come from
+  // the full investments list, so this is not limited by the closed-positions page size.
+  // Open positions have no wrapper and are added from the live OPEN docs.
+  const futuresCounts = React.useMemo(() => {
+    const closedKeys = new Set<string>();
+    investmentsYearScoped.forEach(inv => {
+      if (inv.type !== 'Future') return;
+      if (!isTaxView && statusFilter !== 'All' && inv.status !== statusFilter) return;
+      if (isTaxView && inv.status !== 'Sold') return;
+      const closingTx = (transactionsMap[inv.id] ?? []).find(tx => tx.metadata?.isClosingFill);
+      closedKeys.add(closingTx?.metadata?.orderId ?? inv.id);
+    });
+    const includeOpen = !isTaxView && (statusFilter === 'All' || statusFilter === 'Active');
+    const open = includeOpen
+      ? futuresPositions.filter(p => p.status?.trim().toUpperCase() === 'OPEN').length
+      : 0;
+    return { open, closed: closedKeys.size, total: open + closedKeys.size };
+  }, [investmentsYearScoped, transactionsMap, futuresPositions, isTaxView, statusFilter]);
+
+  // "All" must equal the sum of the pills: swap the per-fill wrapper count for the
+  // per-position futures count.
+  const displayTypeCounts = React.useMemo(
+    () => ({
+      ...typeCounts,
+      Future: futuresCounts.total,
+      Futures: futuresCounts.total, // key used by the mobile filter rail (TypeFilterValue)
+      All: typeCounts.All - typeCounts.Future + futuresCounts.total,
+    }),
+    [typeCounts, futuresCounts.total]
+  );
+
   // Calculate realized P&L from closed positions (sum of all netRealizedPnlEur)
   const closedPositionsRealizedPL = React.useMemo(() => {
     if (!closedPositions || closedPositions.length === 0) return 0;
@@ -735,14 +769,14 @@ function DashboardPageContent() {
   };
 
   const typePills: { value: TypeFilterValue; label: string; count?: number }[] = [
-    { value: 'All', label: 'All', count: typeCounts.All },
+    { value: 'All', label: 'All', count: displayTypeCounts.All },
     { value: 'Stock', label: 'Stocks', count: typeCounts.Stock },
     { value: 'Crypto', label: 'Crypto', count: typeCounts.Crypto },
     { value: 'ETF', label: 'ETFs', count: typeCounts.ETF },
     { value: 'Interest Account', label: 'Interest', count: typeCounts['Interest Account'] },
+    { value: 'Futures', label: 'Futures', count: displayTypeCounts.Future },
     { value: 'Bond', label: 'Bonds', count: typeCounts.Bond },
     { value: 'Real Estate', label: 'Real Estate', count: typeCounts['Real Estate'] },
-    { value: 'Futures', label: 'Futures', count: typeCounts.Future },
   ];
 
   const listDisabledReason = isTaxView
@@ -938,7 +972,7 @@ function DashboardPageContent() {
           setListMode(applied.listMode);
           setFuturesStatusFilter(applied.futuresStatusFilter as 'All' | 'OPEN' | 'CLOSED' | 'LIQUIDATED');
         }}
-        typeCounts={typeCounts}
+        typeCounts={displayTypeCounts}
         resultCount={filteredAndSortedInvestments.length}
       />
 
@@ -1125,7 +1159,14 @@ function DashboardPageContent() {
               <h2 className="font-headline text-[22px] font-bold tracking-tight">
                 Investments
                 <span className="ml-1.5 font-mono text-[13px] font-medium text-muted-foreground">
-                  {filteredAndSortedInvestments.length} positions
+                  {typeFilter === 'Futures'
+                    ? (futuresStatusFilter === 'OPEN' ? futuresCounts.open
+                      : futuresStatusFilter === 'CLOSED' ? futuresCounts.closed
+                      : futuresStatusFilter === 'LIQUIDATED' ? 0
+                      : futuresCounts.total)
+                    : typeFilter === 'All' && investmentNameFilter === 'All'
+                      ? displayTypeCounts.All
+                      : filteredAndSortedInvestments.length} positions
                 </span>
               </h2>
               <div className="flex items-center gap-2">

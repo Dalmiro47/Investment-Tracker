@@ -1,42 +1,49 @@
 import { NextResponse } from 'next/server';
+import { krakenPerpSymbol } from '@/lib/futures-pnl';
 
-const krakenSymbolMap: Record<string, string> = {
-  ETH: 'PF_ETHUSD',  // Perpetual Futures contract for exact mark price
-  BTC: 'PF_XBTUSD',  // Perpetual Futures contract for exact mark price
-  ADA: 'PF_ADAUSD', // Added ADA support
-  SOL: 'PF_SOLUSD', // Added SOL for your future trades
-  DOT: 'PF_DOTUSD', // Added DOT for your future trades
-};
+type KrakenTicker = { symbol?: string; markPrice?: number | string };
+
+// A missing price is reported as `price: null` (HTTP 200 so the UI does not crash).
+// It must never be reported as 0: callers would compute a -100% unrealized loss.
+const unavailable = (error: string) =>
+  NextResponse.json({ price: null, error }, { status: 200 });
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
-  const asset = searchParams.get('asset')?.toUpperCase(); // Ensure uppercase
+  // Accepts app labels such as "XBT", "BTC", "ETH", "ADA" and maps them to PF_<ASSET>USD.
+  const symbol = krakenPerpSymbol(searchParams.get('asset'));
 
-  if (!asset || !krakenSymbolMap[asset]) {
-    return NextResponse.json({ price: 0, error: 'Unsupported asset' }, { status: 200 }); // Return 0 instead of 400 to prevent front-end crashes
+  if (!symbol) {
+    return unavailable('Unsupported asset');
   }
 
   try {
     const response = await fetch(`https://futures.kraken.com/derivatives/api/v3/tickers`, {
       next: { revalidate: 30 } // Cache for 30 seconds
     });
-    
+
     if (!response.ok) {
       console.error('❌ Kraken API returned non-OK status:', response.status);
-      return NextResponse.json({ price: 0 }, { status: 200 });
+      return unavailable('Kraken tickers request failed');
     }
 
-    const data = await response.json();
-    const ticker = data.tickers.find((t: any) => t.symbol === krakenSymbolMap[asset]);
+    const data: { tickers?: KrakenTicker[] } = await response.json();
+    const ticker = (data.tickers ?? []).find((t) => t.symbol?.toUpperCase() === symbol);
 
     if (!ticker) {
-      console.warn(`⚠️ Ticker not found for ${asset}`);
-      return NextResponse.json({ price: 0 }, { status: 200 });
+      console.warn(`⚠️ Ticker not found for ${symbol}`);
+      return unavailable(`Ticker not found for ${symbol}`);
     }
 
-    return NextResponse.json({ price: parseFloat(ticker.markPrice) });
+    // Unrealized PnL on Kraken is computed against the MARK price (not index / last).
+    const markPrice = Number(ticker.markPrice);
+    if (!Number.isFinite(markPrice) || markPrice <= 0) {
+      return unavailable(`Invalid mark price for ${symbol}`);
+    }
+
+    return NextResponse.json({ price: markPrice, symbol });
   } catch (error) {
     console.error('❌ Kraken API Error:', error);
-    return NextResponse.json({ price: 0 }, { status: 200 });
+    return unavailable('Kraken tickers request threw');
   }
 }
