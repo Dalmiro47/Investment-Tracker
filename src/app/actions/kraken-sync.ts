@@ -4,6 +4,7 @@ import { adminDb } from '@/lib/firebase-admin';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { getDailyEurRate } from '@/lib/providers/frankfurter';
 import { fetchKrakenAccountLog, fetchKrakenFills, fetchKrakenOpenPositions } from '@/lib/kraken-api';
+import { parseFuturesSide } from '@/lib/futures-pnl';
 
 // --- TYPES ---
 type KrakenLog = {
@@ -95,7 +96,9 @@ function findOpenDateForActivePosition(
     if (fill.side === 'buy') netPosition -= fillSize; 
     else netPosition += fillSize; 
 
-    if (Math.abs(netPosition) < 0.0001) return new Date(fill.fillTime);
+    // Tolerance must stay far below the smallest lot. BTC perps trade in 0.0001
+    // lots, so the old 0.0001 threshold could mistake a one-lot remainder for flat.
+    if (Math.abs(netPosition) < 0.00000001) return new Date(fill.fillTime);
     
     const isLong = side === 'LONG';
     if ((isLong && netPosition < 0) || (!isLong && netPosition > 0)) {
@@ -706,10 +709,20 @@ export async function syncKrakenFutures(userId: string) {
         const docId = `OPEN-${symbol}`;
         livePositionIds.add(docId);
         
-        const side = pos.side === 'long' ? 'LONG' : 'SHORT';
+        // STRICT side parsing: never default an unknown side to SHORT (or LONG).
+        // A wrong side flips the sign of unrealized PnL and of the open-date walk.
+        const side = parseFuturesSide(pos.side);
+        if (!side) {
+            console.error(`   ❌ Open position ${symbol} has unrecognised side "${pos.side}". Skipped, existing doc left untouched.`);
+            continue;
+        }
         const size = Number(pos.size);
-        const entryPrice = Number(pos.price);
-        const unrealizedFunding = Number(pos.unrealizedFunding || 0); 
+        const entryPrice = Number(pos.price); // Kraken's running weighted average entry (includes add-ons)
+        const unrealizedFunding = Number(pos.unrealizedFunding || 0);
+        // Isolated positions report the selected leverage as maxFixedLeverage.
+        // Needed for Return on Margin (PnL / initial margin). Omitted when Kraken does not send it.
+        const leverage = Number(pos.maxFixedLeverage);
+        const hasLeverage = Number.isFinite(leverage) && leverage > 0;
         
         // A. Calculate correct Open Date by walking history
         const trueOpenedAt = findOpenDateForActivePosition(recentFills, symbol, size, side);
@@ -735,7 +748,8 @@ export async function syncKrakenFutures(userId: string) {
             size: size,
             entryPrice: entryPrice,
             exchangeRate: currentRate,
-            
+            ...(hasLeverage ? { leverage } : {}),
+
             // This now includes BOTH realized history + current session
             fundingEur: totalFundingEur, 
             

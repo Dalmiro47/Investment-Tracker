@@ -50,6 +50,8 @@ npx shadcn-ui@latest add [component-name]  # Add Shadcn components
 
 **Admin-script gotcha (learned the hard way, 2026-09-10):** `users/{uid}` documents hold only subcollections and carry no fields, so `adminDb.collection('users').get()` returns **0 docs** — they are Firestore "phantom" documents. Use `adminDb.collection('users').listDocuments()` to enumerate users in any script.
 
+**Futures "0 is not a price / not a rate" gotcha (learned the hard way, 2026-09-18):** Kraken names Bitcoin `XBT` (`PF_XBTUSD`), and the sync stores that as the asset. The price route used to answer unknown assets with `price: 0` + HTTP 200, so the first BTC long rendered as a −100% loss (unrealized = −notional). A missing price is `null`, never 0; all futures PnL math goes through `src/lib/futures-pnl.ts` (linear contracts, null on bad input; tests: `npx tsx --test src/lib/futures-pnl.test.ts`). Same family, still unfixed: `getDailyEurRate(...).catch(() => 0.85)` only covers throws — the provider can RETURN 0, which stored 79 `kraken_logs` (23–26 Mar 2026) with `eurRate: 0` and EUR amounts of 0. Guard `> 0` before trusting any rate or price. Also: `futures_positions` and `investments` of type `Future` hold one doc per closing FILL; a position = distinct `closingOrderId` (1 position : many fills) — count and group accordingly.
+
 **External data sources:**
 - Kraken API (`src/lib/kraken-api.ts`) for crypto futures positions
 - Yahoo Finance + ECB FX rates for ETF price refreshes (`src/lib/providers/`)

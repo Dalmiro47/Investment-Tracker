@@ -2,14 +2,14 @@
 claude --dangerously-skip-permissions 
 
 ## Pull Request to Github 
-git switch -c ref/icon
+git switch -c fix/futures
 
 ## Do ALL THE CHANGES 
 
 ## Pull Request to Github 
 git add -A 
-git commit -m "ref: app's icon" 
-git push -u origin ref/icon
+git commit -m "fix: bug in future investments for P&L calculation" 
+git push -u origin fix/futures
 
 ## Make local main match GitHub
 
@@ -24,7 +24,7 @@ git rev-parse HEAD
 git rev-parse origin/main 
  
 ## After merge, delete the branch
-git branch -D ref/icon
+git branch -D fix/futures
  
 
  

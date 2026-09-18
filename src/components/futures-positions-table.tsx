@@ -5,6 +5,7 @@ import { useState, useTransition, useEffect, useMemo } from "react";
 import { format, differenceInCalendarDays } from "date-fns";
 import type { FuturePosition } from "@/lib/types";
 import { groupPositionsByClosingOrder } from "@/lib/futures-grouping";
+import { linearPnlUsd, parseFuturesSide, returnOnMargin, usdToEur } from "@/lib/futures-pnl";
 import { useFuturesPositions } from "@/hooks/useFuturesPositions";
 import { useClosedPositions } from "@/hooks/useClosedPositions";
 import { useKrakenTaxData } from "@/hooks/useKrakenTaxData";
@@ -135,8 +136,10 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
       </div>
 
       <div className="overflow-x-auto">
-        {/* Increased min-width to accommodate new Funding column */}
-        <Table className="min-w-[1450px]">
+        {/* No fixed min-width: 16 columns fit the 1376px page shell with compact cell
+            padding (~1225px needed). The wrapper only scrolls when the viewport is
+            genuinely narrower than the table's content. Outer cells keep card gutters. */}
+        <Table className="[&_th]:px-1.5 [&_td]:px-1.5 [&_th:first-child]:pl-4 [&_td:first-child]:pl-4 [&_th:last-child]:pr-4 [&_td:last-child]:pr-4">
           <TableHeader className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/70">
             <TableRow className="hover:bg-transparent">
               <TableHead>Asset</TableHead>
@@ -153,6 +156,7 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
               <TableHead className="text-right">Notional (EUR)</TableHead>
               <TableHead className="text-right">Realized P&L</TableHead>
               <TableHead className="text-right">Unrealized P&L</TableHead>
+              <TableHead className="text-right">Return on Margin</TableHead>
               <TableHead className="text-right">Fee</TableHead>
               <TableHead className="text-right">Funding</TableHead>
               <TableHead className="text-right">
@@ -163,7 +167,7 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
           </TableHeader>
           <TableBody>
             {rows.length === 0 ? (
-              <TableRow><TableCell colSpan={15} className="h-24 text-center font-body text-muted-foreground">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={16} className="h-24 text-center font-body text-muted-foreground">No positions found. Sync with Kraken to populate.</TableCell></TableRow>
             ) : rows.map((pos, index) => (
               <FuturesRowWithTaxData key={`${pos.id}-${index}`} position={pos} userId={currentUserId} />
             ))}
@@ -228,6 +232,10 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
                 <li><span className="font-semibold text-foreground">LONG:</span> <code className="text-xs">(Current Price - Entry Price) × Size × Exchange Rate</code></li>
                 <li><span className="font-semibold text-foreground">SHORT:</span> <code className="text-xs">(Entry Price - Current Price) × Size × Exchange Rate</code></li>
               </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold">Return on Margin</h4>
+              <p className="text-muted-foreground">Kraken&apos;s &quot;Return on Equity&quot; for open positions: unrealized P&L divided by the initial margin, not by the notional. With 5x leverage a 1% price move is a 5% return. Leverage is read from Kraken on sync.<br/><code className="text-xs">Formula: Unrealized P&L (USD) ÷ (Size × Entry Price ÷ Leverage)</code></p>
             </div>
             <div>
               <h4 className="font-semibold">Funding (Net)</h4>
@@ -344,8 +352,11 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
         }
 
         const data = await response.json();
+        // A missing price arrives as null. Never accept 0/NaN as a mark price:
+        // it would render the position as a -100% loss.
+        const parsedPrice = Number(data.price);
         if (isMounted) {
-          setCurrentPrice(parseFloat(data.price));
+          setCurrentPrice(Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : null);
           retryCount = 0; // Reset on success
         }
       } catch (error) {
@@ -367,21 +378,31 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
     };
   }, [position.asset, isOpenPosition]);
 
-  const unrealizedPnL = useMemo(() => {
-    if (!isOpenPosition) return 0;
-    if (currentPrice === null) return null;
+  // Linear (USD-quoted) perp math lives in @/lib/futures-pnl and is unit tested.
+  // null = "not available" (no mark price yet, unknown side, bad inputs).
+  const unrealizedPnlUsd = useMemo(() => {
+    if (!isOpenPosition) return null;
+    return linearPnlUsd({
+      side: parseFuturesSide(position.side),
+      size: position.size,
+      entryPrice: position.entryPrice,
+      price: currentPrice,
+    });
+  }, [currentPrice, position.entryPrice, position.size, position.side, isOpenPosition]);
 
-    const entryPrice = position.entryPrice;
-    const size = position.size;
-    const exchangeRate = position.exchangeRate;
+  const unrealizedPnL = usdToEur(unrealizedPnlUsd, exchangeRate);
 
-    // Standard PnL calc
-    const diff = position.side === 'SHORT' 
-      ? (entryPrice! - currentPrice) 
-      : (currentPrice - entryPrice!);
-      
-    return diff * size! * exchangeRate;
-  }, [currentPrice, position.entryPrice, position.size, position.exchangeRate, position.side, isOpenPosition]);
+  // Kraken "Return on Equity": PnL / INITIAL MARGIN (entry notional / leverage).
+  // Leverage comes from Kraken via sync; without it we show nothing rather than guess.
+  const returnOnMarginPct = useMemo(() => {
+    const r = returnOnMargin({
+      pnlUsd: unrealizedPnlUsd,
+      size: position.size,
+      entryPrice: position.entryPrice,
+      leverage: position.leverage,
+    });
+    return r === null ? null : r * 100;
+  }, [unrealizedPnlUsd, position.size, position.entryPrice, position.leverage]);
 
   // 1. Define what to display
   const displayRealized = isClosed ? (position.realizedPnlEur || 0) : taxData.realizedPnlEur;
@@ -488,6 +509,29 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
       {/* UNREALIZED P&L: Show if Open (Existing logic is good) */}
       <TableCell className={cn("text-right", !isOpenPosition ? "text-muted-foreground" : (unrealizedPnL ?? 0) < 0 ? "loss" : "gain")}>
         {!isOpenPosition ? "—" : unrealizedPnL === null ? "—" : formatEuro(unrealizedPnL)}
+      </TableCell>
+
+      {/* RETURN ON MARGIN (Kraken "Return on Equity"): open positions only */}
+      <TableCell className={cn("text-right font-mono", !isOpenPosition || returnOnMarginPct === null ? "text-muted-foreground" : returnOnMarginPct < 0 ? "loss" : "gain")}>
+        {!isOpenPosition || returnOnMarginPct === null ? "—" : (
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="cursor-help underline decoration-dotted">
+                  {returnOnMarginPct > 0 ? '+' : ''}{returnOnMarginPct.toFixed(2)} %
+                </span>
+              </TooltipTrigger>
+              <TooltipContent side="top" className="max-w-xs">
+                <div className="space-y-1 text-xs">
+                  <div>Mark price: <span className="font-semibold">{formatUsdPrice(currentPrice ?? undefined)}</span></div>
+                  <div>Unrealized: <span className="font-semibold">{unrealizedPnlUsd === null ? '—' : `$${unrealizedPnlUsd.toFixed(2)}`}</span></div>
+                  <div>Leverage: <span className="font-semibold">{position.leverage}x</span></div>
+                  <div className="text-muted-foreground">P&L ÷ initial margin (entry notional ÷ leverage)</div>
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        )}
       </TableCell>
 
       {/* FEE: Hide if Open */}
