@@ -34,6 +34,7 @@ import {
 import { TransactionHistoryDialog } from '@/components/transaction-history-dialog';
 import { performancePct } from '@/lib/types';
 import { calculatePositionMetrics, aggregateByType } from '@/lib/portfolio';
+import { fetchKrakenMarkPrice } from '@/lib/kraken-mark-price';
 import InvestmentListView from '@/components/investment-list';
 import type { SavingsRateChange } from '@/lib/types-savings';
 import RateScheduleDialog from "@/components/rate-schedule-dialog";
@@ -418,20 +419,14 @@ function DashboardPageContent() {
         hasOpen = true;
         if (!pos.asset) continue;
         
-        const cleanAsset = pos.asset.split('/')[0].split(' ')[0].split('-')[0].toUpperCase();
-
         try {
-          const res = await fetch(`/api/kraken/prices?asset=${cleanAsset}`, {
-            signal: AbortSignal.timeout(5000) // 5 second timeout
-          });
-          
-          if (!res.ok) {
+          // Shared with the futures table rows: one request per asset per poll cycle.
+          const markPrice = await fetchKrakenMarkPrice(pos.asset);
+
+          if (markPrice === null) {
             failedFetches++;
             continue;
           }
-          
-          const data = await res.json();
-          const markPrice = Number(data.price);
 
           if (markPrice > 0) {
             const entryPrice = Number(pos.entryPrice || 0);

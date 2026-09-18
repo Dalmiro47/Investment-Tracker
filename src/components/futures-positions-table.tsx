@@ -18,6 +18,7 @@ import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/comp
 import { cn } from "@/lib/utils";
 import { formatCurrency } from "@/lib/money";
 import { useAuth } from "@/hooks/use-auth";
+import { fetchKrakenMarkPrice } from "@/lib/kraken-mark-price";
 import { RefreshCw, Info } from "lucide-react";
 
 // Helper for dynamic price formatting (used in the component)
@@ -279,7 +280,6 @@ export default function FuturesPositionsTable({ positions, userId, statusFilter 
 // Separate component to handle tax data fetching per row
 function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition; userId?: string | null }) {
   const assetName = position.asset || position.ticker || 'Unknown';
-  const taxData = useKrakenTaxData(userId || undefined, assetName);
   const [currentPrice, setCurrentPrice] = useState<number | null>(null);
 
   const isOpenPosition = position.status === 'OPEN';
@@ -308,6 +308,10 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
   const openDate = parseDate(position.openedAt);
   const closedDate = parseDate(position.closedAt);
 
+  // Log totals are only displayed for OPEN rows (closed rows read them off the position doc).
+  // Passing no date for closed rows keeps them from subscribing to kraken_logs at all.
+  const taxData = useKrakenTaxData(userId || undefined, assetName, isOpenPosition ? openDate : null);
+
   // HEAVY LIFTING: Holding Time Calculation
   // Calculates days between open and close (or 'today' if still open)
   const holdingDays = useMemo(() => {
@@ -323,50 +327,27 @@ function FuturesRowWithTaxData({ position, userId }: { position: FuturePosition;
     if (!isOpenPosition) return;
     
     let isMounted = true;
-    let retryCount = 0;
-    const MAX_RETRIES = 3;
+    let missCount = 0;
+    const MAX_MISSES = 3;
 
     const fetchPrice = async () => {
-      try {
-        if (!position.asset) {
-          setCurrentPrice(null);
-          return;
-        }
-        
-        const cleanAsset = position.asset.split('/')[0].split(' ')[0].split('-')[0].toUpperCase();
-        const response = await fetch(`/api/kraken/prices?asset=${cleanAsset}`, {
-          signal: AbortSignal.timeout(5000) // 5 second timeout
-        });
+      // Shared with the portfolio summary poller: one request per asset per poll cycle.
+      // Resolves to null when the price is missing; never 0/NaN, which would render
+      // the position as a -100% loss.
+      const price = await fetchKrakenMarkPrice(position.asset);
+      if (!isMounted) return;
 
-        if (!response.ok) {
-          if (retryCount < MAX_RETRIES) {
-            retryCount++;
-            return; // Skip error logging on retries
-          }
-          throw new Error(`Failed to fetch price: ${response.statusText}`);
-        }
+      if (price !== null) {
+        missCount = 0;
+        setCurrentPrice(price);
+        return;
+      }
 
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('Invalid response format');
-        }
-
-        const data = await response.json();
-        // A missing price arrives as null. Never accept 0/NaN as a mark price:
-        // it would render the position as a -100% loss.
-        const parsedPrice = Number(data.price);
-        if (isMounted) {
-          setCurrentPrice(Number.isFinite(parsedPrice) && parsedPrice > 0 ? parsedPrice : null);
-          retryCount = 0; // Reset on success
-        }
-      } catch (error) {
-        // Only log errors after retries exhausted
-        if (retryCount >= MAX_RETRIES && isMounted) {
-          console.warn(`Unable to fetch price for ${position.asset}`);
-        }
-        if (isMounted) {
-          setCurrentPrice(null);
-        }
+      // Keep the last known price through a few transient misses, then blank it.
+      missCount++;
+      if (!position.asset || missCount >= MAX_MISSES) {
+        if (missCount === MAX_MISSES) console.warn(`Unable to fetch price for ${position.asset}`);
+        setCurrentPrice(null);
       }
     };
 

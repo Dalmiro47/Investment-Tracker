@@ -10,6 +10,7 @@ import type { SavingsRateChange } from '@/lib/types-savings';
 import { getInvestments, getAllTransactions } from '@/features/portfolio/actions';
 import { getTaxSettings, getAllRateSchedules } from '@/lib/firestore';
 import { useFuturesPositions } from '@/hooks/useFuturesPositions';
+import { fetchKrakenMarkPrice } from '@/lib/kraken-mark-price';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -70,11 +71,9 @@ export default function DashboardPage() {
         const cleanAsset = pos.asset.split('/')[0].split(' ')[0].split('-')[0].toUpperCase();
         
         try {
-          const res = await fetch(`/api/kraken/prices?asset=${cleanAsset}`);
-          const data = await res.json();
-          const markPrice = Number(data.price);
+          const markPrice = await fetchKrakenMarkPrice(pos.asset);
 
-          if (markPrice > 0) {
+          if (markPrice !== null && markPrice > 0) {
             const entryPrice = Number(pos.entryPrice || 0);
             const qty = Number(pos.size || 0); // Cantidad de monedas (e.g., 550 ADA)
             const rate = Number(pos.exchangeRate || 1);
