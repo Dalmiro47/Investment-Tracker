@@ -1,28 +1,44 @@
 import { useState, useEffect } from 'react';
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Timestamp } from 'firebase/firestore';
+
+const EMPTY_TOTALS = {
+  fundingNetEur: 0,
+  realizedPnlEur: 0,
+  feeTotalEur: 0,
+  count: 0
+};
 
 /**
  * HEAVY LIFTING: Real-time Tax Data Aggregator
- * This hook sums up all funding and P&L logs for a specific asset.
+ * This hook sums up funding and P&L logs for a specific asset, from `since` onwards.
+ *
+ * QUOTA GUARD: `kraken_logs` holds one doc per hourly funding event, so it grows by
+ * thousands of docs per year. An unbounded listener here re-reads the whole collection
+ * on every page load and burned the Firestore daily read quota (RESOURCE_EXHAUSTED).
+ * Without a `since` date the hook does not subscribe at all.
  */
-export function useKrakenTaxData(userId: string | undefined, asset: string) {
-  const [totals, setTotals] = useState({
-    fundingNetEur: 0,
-    realizedPnlEur: 0,
-    feeTotalEur: 0,
-    count: 0
-  });
+export function useKrakenTaxData(
+  userId: string | undefined,
+  asset: string,
+  since: Date | null | undefined
+) {
+  const [totals, setTotals] = useState(EMPTY_TOTALS);
+
+  const sinceMs = since ? since.getTime() : null;
 
   useEffect(() => {
-    if (!userId || !asset) return;
+    if (!userId || !asset || sinceMs === null || Number.isNaN(sinceMs)) {
+      setTotals(EMPTY_TOTALS);
+      return;
+    }
 
     // We query the kraken_logs collection we just built
     const logsRef = collection(db, 'users', userId, 'kraken_logs');
-    
-    // Fetch all logs and filter in the reducer since Kraken uses 'contract' field
-    // (e.g., 'pf_ethusd') instead of just 'asset' (which is often 'usd' or 'eur')
-    const q = query(logsRef);
+
+    // Bound by date only and filter the asset in the reducer, since Kraken uses the
+    // 'contract' field (e.g., 'pf_ethusd') instead of just 'asset' (often 'usd' or 'eur')
+    const q = query(logsRef, where('date', '>=', Timestamp.fromMillis(sinceMs)));
 
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const newTotals = snapshot.docs.reduce((acc, doc) => {
@@ -43,13 +59,13 @@ export function useKrakenTaxData(userId: string | undefined, asset: string) {
           };
         }
         return acc;
-      }, { fundingNetEur: 0, realizedPnlEur: 0, feeTotalEur: 0, count: 0 });
+      }, { ...EMPTY_TOTALS });
 
       setTotals(newTotals);
     });
 
     return () => unsubscribe();
-  }, [userId, asset]);
+  }, [userId, asset, sinceMs]);
 
   return totals;
 }
